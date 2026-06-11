@@ -387,6 +387,7 @@ Build errors, PR rejections, or refusal-to-write-the-code situations. **Not styl
 - **No force-pushing to `master`** under any circumstance.
 - **No committing secrets**, even temporarily.
 - **No machine-local absolute paths in documents** (hard law, 2026-06-11). Specs, plans, and findings use repo- or workspace-relative paths, with environment variables for unavoidable machine locations — the record must replay anywhere.
+- **No stale README/CLAUDE.md pairs — boy-scout law (2026-06-11).** Every repo that carries a CLAUDE.md carries a README.md; they tell one story at two altitudes — README the public narrative, CLAUDE.md the session law. The same change that alters what either describes updates both. Touching one while leaving the other stale is leaving the campsite dirty.
 
 ---
 
