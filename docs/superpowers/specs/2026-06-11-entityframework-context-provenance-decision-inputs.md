@@ -35,12 +35,20 @@ The direction landing — not yet a verdict, but the shape the verdict is expect
 3. **The generated context is unreferenceable — `file`-scoped.** Emit `file sealed class {Context}DbContext : NorseDbContext`: a file-local type no other file can name, even in the same assembly. The same generated file emits the DI wiring that closes Midgard's open-generic repository implementations over it, so the only consumer of the context is code generated beside it. Not policy — unreachability by construction.
 4. **A feature-complete, deliberately bounded repository surface** so the end developer never needs (and never gets) the things they shouldn't: per call — a **filter predicate**, a **projection expression**, and for list shapes a **limit** and a **starting point**.
 
-## Repository-surface rulings to make in the design session
+## Repository-surface law
 
-1. **Projection mandatory on the query path?** If every query call must supply a projection, tracked entities are never materialized for reads — no accidental tracking, no `SELECT *`. Tracked aggregates then come from exactly one place: the command repository, by identity. (Leaning yes.)
-2. **Starting point = keyset, not offset.** After-key seek pagination, never `Skip(n)` — offset is the deep-page performance trap. Corollary that must be settled with it: **list shapes require declared ordering** or limit/starting-point are non-deterministic (same filter, different pages per call).
-3. **Limit required for list shapes** — no unbounded enumeration; absence fails loudly. (The BDX-volume corollary of "no silent fallbacks.")
-4. **Return shapes** — materialized `IReadOnlyList<TProjection>` with required limit vs `IAsyncEnumerable` streaming (streaming likely deferred to Warehouse-shaped work).
+**Ruled 2026-06-11:**
+
+- **Single-entity shape:** filter predicate **required**; projection **optional**.
+- **List shape:** filter predicate **optional** — the whole-table sweep is a legitimate first-class case (e.g. a reference table whose values change across the board); **limit and starting point required**.
+- **Projection is optional everywhere — encouraged, never forbidden.** The odds are high you really don't want `SELECT *`, and the docs say so loudly, but the opportunity to materialize full entities stays open (the sweep case requires it). Guidance, not law.
+
+**Still open for the design session:**
+
+1. **Starting-point mechanics** — keyset (after-key seek) vs offset; corollary settled with it: list shapes need **declared ordering** or limit/starting-point are non-deterministic (same filter, different pages per call).
+2. **Limit-exceeded semantics on sweeps.** A required limit that silently truncates an "update the whole table" pass turns a full-table update into a partial one with no signal — a silent fallback wearing a seatbelt. Rule it: page-to-completion vs fail-loudly-when-exceeded. Silent truncation is not a candidate.
+3. **Tracking defaults split by contract.** The sweep mutates, so it wants tracked entities — command-repository territory; read contracts default no-tracking. Draw the line per Asgard contract (`ICommandRepository` vs `ICachedRepository` / `ITemporalRepository`), not globally.
+4. **Return shapes** — materialized `IReadOnlyList<T>` with required limit vs `IAsyncEnumerable` streaming (streaming likely deferred to Warehouse-shaped work).
 5. **Count / exists** — first-class members or projection tricks; decide once.
 
 ## To pressure-test before ruling "Asgard interfaces suffice"
