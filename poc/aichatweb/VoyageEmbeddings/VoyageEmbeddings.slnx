@@ -1,0 +1,9 @@
+<Solution>
+  <Project Path="Voyage.Extensions.AI.Tests/Voyage.Extensions.AI.Tests.csproj" />
+  <Project Path="Voyage.Extensions.AI/Voyage.Extensions.AI.csproj" />
+  <Project Path="VoyageEmbeddings.AppHost/VoyageEmbeddings.AppHost.csproj" />
+  <Project Path="VoyageEmbeddings.Backend/VoyageEmbeddings.Backend.csproj" />
+  <Project Path="VoyageEmbeddings.Ingestion/VoyageEmbeddings.Ingestion.csproj" />
+  <Project Path="VoyageEmbeddings.ServiceDefaults/VoyageEmbeddings.ServiceDefaults.csproj" />
+  <Project Path="VoyageEmbeddings.Web/VoyageEmbeddings.Web.csproj" />
+</Solution>

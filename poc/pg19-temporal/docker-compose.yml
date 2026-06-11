@@ -1,0 +1,20 @@
+services:
+  pg19:
+    # trixie (glibc) deliberately, not alpine (musl) — and the bare 19beta1 tag is
+    # the same digest anyway. Explicit so a future default-base change can't move us.
+    image: postgres:19beta1-trixie
+    container_name: pg19-poc
+    environment:
+      POSTGRES_PASSWORD: poc
+      POSTGRES_DB: norse_poc
+    ports:
+      - "5455:5432"
+    volumes:
+      - ./scripts:/scripts:ro
+    healthcheck:
+      # TCP on purpose: the official entrypoint's temporary initdb server listens on the
+      # unix socket only, so a 127.0.0.1 probe can never read ready before init finishes.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d norse_poc"]
+      interval: 2s
+      timeout: 3s
+      retries: 15

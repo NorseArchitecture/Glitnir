@@ -1,0 +1,111 @@
+{
+  "version": 1,
+  "isRoot": true,
+  "tools": {
+    "fantomas": {
+      "version": "7.0.5",
+      "commands": [
+        "fantomas"
+      ],
+      "rollForward": false
+    },
+    "dotnet-ef": {
+      "version": "11.0.0-preview.4.26230.115",
+      "commands": [
+        "dotnet-ef"
+      ],
+      "rollForward": false
+    },
+    "dotnet-format": {
+      "version": "5.1.250801",
+      "commands": [
+        "dotnet-format"
+      ],
+      "rollForward": false
+    },
+    "dotnet-dump": {
+      "version": "9.0.661903",
+      "commands": [
+        "dotnet-dump"
+      ],
+      "rollForward": false
+    },
+    "dotnet-trace": {
+      "version": "9.0.661903",
+      "commands": [
+        "dotnet-trace"
+      ],
+      "rollForward": false
+    },
+    "dotnet-counters": {
+      "version": "9.0.661903",
+      "commands": [
+        "dotnet-counters"
+      ],
+      "rollForward": false
+    },
+    "dotnet-coverage": {
+      "version": "18.7.0",
+      "commands": [
+        "dotnet-coverage"
+      ],
+      "rollForward": false
+    },
+    "dotnet-debug": {
+      "version": "0.0.721602",
+      "commands": [
+        "dotnet-debug"
+      ],
+      "rollForward": false
+    },
+    "dotnet-gcdump": {
+      "version": "9.0.661903",
+      "commands": [
+        "dotnet-gcdump"
+      ],
+      "rollForward": false
+    },
+    "dotnet-monitor": {
+      "version": "10.0.2",
+      "commands": [
+        "dotnet-monitor"
+      ],
+      "rollForward": false
+    },
+    "dotnet-stack": {
+      "version": "9.0.661903",
+      "commands": [
+        "dotnet-stack"
+      ],
+      "rollForward": false
+    },
+    "dotnet-symbol": {
+      "version": "9.0.661903",
+      "commands": [
+        "dotnet-symbol"
+      ],
+      "rollForward": false
+    },
+    "dotnet-sos": {
+      "version": "9.0.661903",
+      "commands": [
+        "dotnet-sos"
+      ],
+      "rollForward": false
+    },
+    "dotnet-dsrouter": {
+      "version": "9.0.661903",
+      "commands": [
+        "dotnet-dsrouter"
+      ],
+      "rollForward": false
+    },
+    "dotnet-debugger-extensions": {
+      "version": "10.0.721602",
+      "commands": [
+        "dotnet-debugger-extensions"
+      ],
+      "rollForward": false
+    }
+  }
+}

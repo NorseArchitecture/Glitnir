@@ -1,0 +1,8 @@
+<Project>
+	<!--
+		Replica of the future Glitnir-root Directory.Build.targets: deliberately empty.
+		The real-tree file is reserved for the UseProjectReferences cross-repo switching
+		session. This file also isolates the replica from any future real-root targets
+		file — MSBuild auto-imports the nearest Directory.Build.targets only.
+	-->
+</Project>

@@ -1,0 +1,122 @@
+@page "/"
+@using System.ComponentModel
+@inject IChatClient ChatClient
+@inject SemanticSearch Search
+@implements IDisposable
+
+<PageTitle>Chat</PageTitle>
+
+<ChatHeader OnNewChat="@ResetConversationAsync" />
+
+<ChatMessageList Messages="@_messages" InProgressMessage="@_currentResponseMessage">
+    <NoMessagesContent>
+        <div>To get started, try asking about these example documents. You can replace these with your own data and replace this message.</div>
+        <ChatCitation File="Example_Emergency_Survival_Kit.pdf" />
+        <ChatCitation File="Example_GPS_Watch.md" />
+    </NoMessagesContent>
+</ChatMessageList>
+
+<div class="chat-container">
+    <ChatSuggestions OnSelected="@AddUserMessageAsync" @ref="@_chatSuggestions" />
+    <ChatInput OnSend="@AddUserMessageAsync" @ref="@_chatInput" />
+</div>
+
+@code {
+    const string SystemPrompt = """
+        You are an assistant who answers questions about information you retrieve.
+        Do not answer questions about anything else.
+        Use only simple markdown to format your responses.
+
+        Use the Search tool to find relevant information. When you do this, end your
+        reply with citations in the special XML format:
+
+        <citation filename='string'>exact quote here</citation>
+
+        Always include the citation in your response if there are results.
+
+        The quote must be max 5 words, taken word-for-word from the search result, and is the basis for why the citation is relevant.
+        Don't refer to the presence of citations; just emit these tags right at the end, with no surrounding text.
+    """;
+
+    int _statefulMessageCount;
+    readonly ChatOptions _chatOptions = new();
+    readonly List<ChatMessage> _messages = [];
+    CancellationTokenSource? _currentResponseCancellation;
+    ChatMessage? _currentResponseMessage;
+    ChatInput? _chatInput;
+    ChatSuggestions? _chatSuggestions;
+
+    protected override void OnInitialized()
+    {
+        _statefulMessageCount = 0;
+        _messages.Add(new(ChatRole.System, SystemPrompt));
+        _chatOptions.Tools = [
+            AIFunctionFactory.Create(SearchAsync)
+        ];
+    }
+
+    async Task AddUserMessageAsync(ChatMessage userMessage)
+    {
+        CancelAnyCurrentResponse();
+
+        // Add the user message to the conversation
+        _messages.Add(userMessage);
+        _chatSuggestions?.Clear();
+        await _chatInput!.FocusAsync();
+
+        // Stream and display a new response from the IChatClient
+        TextContent responseText = new("");
+        _currentResponseMessage = new(ChatRole.Assistant, [responseText]);
+        _currentResponseCancellation = new();
+        await foreach (var update in ChatClient.GetStreamingResponseAsync(_messages.Skip(_statefulMessageCount), _chatOptions, _currentResponseCancellation.Token))
+        {
+            _messages.AddMessages(update, filter: c => c is not TextContent);
+            responseText.Text += update.Text;
+            _chatOptions.ConversationId = update.ConversationId;
+            ChatMessageItem.NotifyChanged(_currentResponseMessage);
+        }
+
+        // Store the final response in the conversation, and begin getting suggestions
+        _messages.Add(_currentResponseMessage!);
+        _statefulMessageCount = _chatOptions.ConversationId is not null ? _messages.Count : 0;
+        _currentResponseMessage = null;
+        _chatSuggestions?.Update(_messages);
+    }
+
+    void CancelAnyCurrentResponse()
+    {
+        // If a response was cancelled while streaming, include it in the conversation so it's not lost
+        if (_currentResponseMessage is not null)
+        {
+            _messages.Add(_currentResponseMessage);
+        }
+
+        _currentResponseCancellation?.Cancel();
+        _currentResponseMessage = null;
+    }
+
+    async Task ResetConversationAsync()
+    {
+        CancelAnyCurrentResponse();
+        _messages.Clear();
+        _messages.Add(new(ChatRole.System, SystemPrompt));
+        _chatOptions.ConversationId = null;
+        _statefulMessageCount = 0;
+        _chatSuggestions?.Clear();
+        await _chatInput!.FocusAsync();
+    }
+
+    [Description("Searches for information using a phrase or keyword.")]
+    async Task<IEnumerable<string>> SearchAsync(
+        [Description("The phrase to search for.")] string searchPhrase,
+        [Description("If possible, specify the filename to search that file only. If not provided or empty, the search includes all files.")] string? filenameFilter = null)
+    {
+        await InvokeAsync(StateHasChanged);
+        var results = await Search.SearchAsync(searchPhrase, filenameFilter, maxResults: 5);
+        return results.Select(result =>
+            $"<result filename=\"{result.DocumentId}\">{result.Text}</result>");
+    }
+
+    public void Dispose() =>
+        _currentResponseCancellation?.Cancel();
+}

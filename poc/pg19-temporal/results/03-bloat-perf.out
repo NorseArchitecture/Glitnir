@@ -1,0 +1,142 @@
+Timing is on.
+── setup + load (synthetic history) ──
+psql:/scripts/03-bloat-perf.sql:14: NOTICE:  table "bench_st" does not exist, skipping
+psql:/scripts/03-bloat-perf.sql:14: NOTICE:  table "bench_mb" does not exist, skipping
+psql:/scripts/03-bloat-perf.sql:14: NOTICE:  table "bench_mb_history" does not exist, skipping
+DROP TABLE
+Time: 0.361 ms
+CREATE TABLE
+Time: 5.088 ms
+CREATE TABLE
+Time: 1.658 ms
+CREATE TABLE
+Time: 2.927 ms
+INSERT 0 500000
+Time: 11956.197 ms (00:11.956)
+INSERT 0 10000
+Time: 232.292 ms
+INSERT 0 500000
+Time: 11065.217 ms (00:11.065)
+INSERT 0 10000
+Time: 50.680 ms
+CREATE INDEX
+Time: 37.707 ms
+VACUUM
+Time: 51.976 ms
+VACUUM
+Time: 4.783 ms
+VACUUM
+Time: 68.418 ms
+
+── physical sizes ──
+       model       |  total  
+-------------------+---------
+ bench_st (single) | 87 MB
+ bench_mb (main)   | 1256 kB
+ bench_mb_history  | 86 MB
+(3 rows)
+
+Time: 0.903 ms
+
+── TEST 3a: point lookup of ONE current row ──
+   single-table via partial index:
+                                                            QUERY PLAN                                                            
+----------------------------------------------------------------------------------------------------------------------------------
+ Index Scan using ix_bench_st_current on bench_st  (cost=0.29..8.30 rows=1 width=45) (actual time=0.017..0.017 rows=1.00 loops=1)
+   Index Cond: (id = 'a35fe7f7-fe82-17b4-369a-0af4244d1fca'::uuid)
+   Index Searches: 1
+   Buffers: shared hit=1 read=2 written=2
+ Planning:
+   Buffers: shared hit=26 read=1 written=1
+ Planning Time: 0.149 ms
+ Execution Time: 0.023 ms
+(8 rows)
+
+Time: 0.403 ms
+   Model B lean main table:
+                                                         QUERY PLAN                                                         
+----------------------------------------------------------------------------------------------------------------------------
+ Index Scan using bench_mb_pkey on bench_mb  (cost=0.29..8.30 rows=1 width=50) (actual time=0.009..0.009 rows=1.00 loops=1)
+   Index Cond: (id = 'a35fe7f7-fe82-17b4-369a-0af4244d1fca'::uuid)
+   Index Searches: 1
+   Buffers: shared hit=3
+ Planning:
+   Buffers: shared hit=15
+ Planning Time: 0.129 ms
+ Execution Time: 0.018 ms
+(8 rows)
+
+Time: 0.375 ms
+
+── TEST 3b: scan-shaped read — count current rows by predicate ──
+   single-table:
+                                                                 QUERY PLAN                                                                  
+---------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=4233.18..4233.19 rows=1 width=8) (actual time=1.609..1.609 rows=1.00 loops=1)
+   Buffers: shared hit=106 read=38 written=38
+   ->  Bitmap Heap Scan on bench_st  (cost=57.05..4233.05 rows=50 width=0) (actual time=0.654..1.402 rows=10000.00 loops=1)
+         Recheck Cond: (upper(system_period) = 'infinity'::timestamp with time zone)
+         Filter: (version_no = 51)
+         Heap Blocks: exact=104
+         Buffers: shared hit=106 read=38 written=38
+         ->  Bitmap Index Scan on ix_bench_st_current  (cost=0.00..57.03 rows=2550 width=0) (actual time=0.628..0.628 rows=10000.00 loops=1)
+               Index Searches: 1
+               Buffers: shared hit=2 read=38 written=38
+ Planning:
+   Buffers: shared hit=10 read=2 written=2
+ Planning Time: 0.116 ms
+ Execution Time: 1.628 ms
+(14 rows)
+
+Time: 2.433 ms
+   Model B:
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=254.00..254.01 rows=1 width=8) (actual time=0.559..0.559 rows=1.00 loops=1)
+   Buffers: shared hit=104
+   ->  Seq Scan on bench_mb  (cost=0.00..229.00 rows=10000 width=0) (actual time=0.006..0.336 rows=10000.00 loops=1)
+         Filter: (version_no = 51)
+         Buffers: shared hit=104
+ Planning Time: 0.036 ms
+ Execution Time: 0.568 ms
+(7 rows)
+
+Time: 0.859 ms
+
+── TEST 3c: as-of point query (where single-table should SHINE — no UNION) ──
+   single-table:
+                                                                  QUERY PLAN                                                                   
+-----------------------------------------------------------------------------------------------------------------------------------------------
+ Index Scan using bench_st_pkey on bench_st  (cost=0.29..8.30 rows=1 width=45) (actual time=0.049..0.049 rows=1.00 loops=1)
+   Index Cond: ((id = 'a35fe7f7-fe82-17b4-369a-0af4244d1fca'::uuid) AND (system_period @> '2025-06-15 00:00:00+00'::timestamp with time zone))
+   Index Searches: 1
+   Buffers: shared hit=2 read=3 written=3
+ Planning:
+   Buffers: shared hit=2 read=1 written=1
+ Planning Time: 0.114 ms
+ Execution Time: 0.056 ms
+(8 rows)
+
+Time: 0.520 ms
+   Model B (current UNION ALL history — the timeline-view shape):
+                                                                     QUERY PLAN                                                                      
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+ Append  (cost=0.29..16.62 rows=2 width=48) (actual time=0.033..0.033 rows=1.00 loops=1)
+   Buffers: shared hit=8
+   ->  Index Scan using bench_mb_pkey on bench_mb  (cost=0.29..8.30 rows=1 width=50) (actual time=0.007..0.007 rows=0.00 loops=1)
+         Index Cond: (id = 'a35fe7f7-fe82-17b4-369a-0af4244d1fca'::uuid)
+         Filter: (system_period @> '2025-06-15 00:00:00+00'::timestamp with time zone)
+         Rows Removed by Filter: 1
+         Index Searches: 1
+         Buffers: shared hit=3
+   ->  Index Scan using bench_mb_history_pkey on bench_mb_history  (cost=0.29..8.30 rows=1 width=45) (actual time=0.025..0.025 rows=1.00 loops=1)
+         Index Cond: ((id = 'a35fe7f7-fe82-17b4-369a-0af4244d1fca'::uuid) AND (system_period @> '2025-06-15 00:00:00+00'::timestamp with time zone))
+         Index Searches: 1
+         Buffers: shared hit=5
+ Planning:
+   Buffers: shared hit=14
+ Planning Time: 0.125 ms
+ Execution Time: 0.041 ms
+(16 rows)
+
+Time: 0.422 ms

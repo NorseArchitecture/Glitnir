@@ -1,0 +1,18 @@
+<Solution>
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/Glitnir.Probe.Benchmarks/Glitnir.Probe.Benchmarks.csproj" />
+  </Folder>
+  <Folder Name="/poc/">
+    <Project Path="poc/Glitnir.Probe.Severed/Glitnir.Probe.Severed.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Glitnir.Probe.Components/Glitnir.Probe.Components.csproj" />
+    <Project Path="src/Glitnir.Probe/Glitnir.Probe.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Glitnir.Probe.Tests/Glitnir.Probe.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tests/smoke/">
+    <Project Path="tests/smoke/Glitnir.Probe.Smoke/Glitnir.Probe.Smoke.csproj" />
+  </Folder>
+</Solution>

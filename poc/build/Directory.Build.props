@@ -1,0 +1,35 @@
+<Project>
+	<PropertyGroup Label="Platform">
+		<TargetFramework>net11.0</TargetFramework>
+		<LangVersion>preview</LangVersion>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+	</PropertyGroup>
+
+	<PropertyGroup Label="Output">
+		<UseArtifactsOutput>true</UseArtifactsOutput>
+		<ArtifactsPath>$(MSBuildThisFileDirectory)artifacts</ArtifactsPath>
+	</PropertyGroup>
+
+	<PropertyGroup Label="Enforcement">
+		<AnalysisLevel>latest-Recommended</AnalysisLevel>
+		<AnalysisLevelSecurity>latest-All</AnalysisLevelSecurity>
+		<AnalysisLevelPerformance>latest-All</AnalysisLevelPerformance>
+		<AnalysisLevelReliability>latest-All</AnalysisLevelReliability>
+		<AnalysisLevelUsage>latest-All</AnalysisLevelUsage>
+		<EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+		<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+		<MSBuildTreatWarningsAsErrors>true</MSBuildTreatWarningsAsErrors>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+	</PropertyGroup>
+
+	<PropertyGroup Label="Restore">
+		<NuGetAudit>true</NuGetAudit>
+		<NuGetAuditMode>all</NuGetAuditMode>
+		<NuGetAuditLevel>low</NuGetAuditLevel>
+	</PropertyGroup>
+
+	<PropertyGroup Label="CI" Condition="('$(GITHUB_ACTIONS)' == 'true') or ('$(TF_BUILD)' == 'true')">
+		<ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+	</PropertyGroup>
+</Project>

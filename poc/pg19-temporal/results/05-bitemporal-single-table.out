@@ -1,0 +1,53 @@
+Timing is on.
+── TEST 5a: two WITHOUT OVERLAPS ranges in one PK (expect: ERROR — one allowed) ──
+psql:/scripts/05-bitemporal-single-table.sql:16: NOTICE:  table "bitemporal" does not exist, skipping
+DROP TABLE
+Time: 0.352 ms
+Time: 0.187 ms
+
+── TEST 5b: one temporal PK + gist EXCLUDE for the second dimension ──
+psql:/scripts/05-bitemporal-single-table.sql:23: ERROR:  syntax error at or near ","
+LINE 6: ...ARY KEY (class_code, valid_period WITHOUT OVERLAPS, system_p...
+                                                             ^
+CREATE TABLE
+Time: 5.295 ms
+   (if created: note there is NO temporal PK at all now — FOR PORTION OF requirements?)
+INSERT 0 1
+Time: 1.337 ms
+
+── TEST 5c: FOR PORTION OF the BUSINESS period — what happens to system_period on flanks? ──
+ pg_sleep 
+----------
+ 
+(1 row)
+
+Time: 50.502 ms
+UPDATE 1
+Time: 1.838 ms
+   (if flanks copied system_period verbatim, the new flank rows carry the ORIGINAL
+    system lower bound — i.e., system time is silently wrong on engine-made rows)
+ class_code |      valid_period       |               system_period                | factor 
+------------+-------------------------+--------------------------------------------+--------
+ 8810       | [2026-01-01,2026-07-01) | ["2026-06-07 11:17:50.913181+00",infinity) | 1.0000
+ 8810       | [2026-07-01,2026-10-01) | ["2026-06-07 11:17:50.913181+00",infinity) | 1.4200
+ 8810       | [2026-10-01,2027-01-01) | ["2026-06-07 11:17:50.913181+00",infinity) | 1.0000
+(3 rows)
+
+Time: 0.427 ms
+
+── TEST 5d: now version the Q3 row in SYSTEM time too (the bitemporal update) ──
+UPDATE 1
+Time: 1.320 ms
+ class_code |      valid_period       |                           system_period                           | factor 
+------------+-------------------------+-------------------------------------------------------------------+--------
+ 8810       | [2026-01-01,2026-07-01) | ["2026-06-07 11:17:50.913181+00",infinity)                        | 1.0000
+ 8810       | [2026-07-01,2026-10-01) | ["2026-06-07 11:17:50.913181+00","2026-06-07 11:17:50.967544+00") | 1.4200
+ 8810       | [2026-07-01,2026-10-01) | ["2026-06-07 11:17:50.967544+00",infinity)                        | 1.4500
+ 8810       | [2026-10-01,2027-01-01) | ["2026-06-07 11:17:50.913181+00",infinity)                        | 1.0000
+(4 rows)
+
+Time: 0.281 ms
+
+   VERDICT INPUT: count the conceptual hoops above vs. the spec's two-table
+   composition (Model A business table + Model B system history). If this
+   section reads as a puzzle, the spec's split stands for dual-flavor entities.

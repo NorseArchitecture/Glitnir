@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<DefineConstants Condition="'$(EnableCanaries)' == 'true'">$(DefineConstants);CANARY</DefineConstants>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\src\Glitnir.Probe\Glitnir.Probe.csproj" UndefineProperties="EnableCanaries;EnableDocCanaries" />
+	</ItemGroup>
+
+</Project>

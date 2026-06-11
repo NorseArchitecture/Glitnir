@@ -1,0 +1,128 @@
+psql:/scripts/04-portion-semantics.sql:14: NOTICE:  table "class_factors" does not exist, skipping
+psql:/scripts/04-portion-semantics.sql:14: NOTICE:  table "trigger_log" does not exist, skipping
+Timing is on.
+── setup: business-effective table (Model A) + trigger observatory ──
+DROP TABLE
+Time: 0.381 ms
+CREATE TABLE
+Time: 11.654 ms
+CREATE TABLE
+Time: 2.038 ms
+CREATE FUNCTION
+Time: 1.674 ms
+CREATE TRIGGER
+Time: 1.102 ms
+INSERT 0 1
+Time: 1.369 ms
+TRUNCATE TABLE
+Time: 2.063 ms
+
+── TEST 4a: UPDATE FOR PORTION OF — Q3 correction (expect 3-way split) ──
+UPDATE 1
+Time: 3.269 ms
+ class_code |      valid_period       | loss_cost_factor 
+------------+-------------------------+------------------
+ 8810       | [2026-01-01,2026-07-01) |           1.0000
+ 8810       | [2026-07-01,2026-10-01) |           1.4200
+ 8810       | [2026-10-01,2027-01-01) |           1.0000
+(3 rows)
+
+Time: 0.326 ms
+   trigger firing (Neon doc claims: 1 UPDATE + 2 INSERTs):
+ seq |   op   |        old_range        |        new_range        | old_factor | new_factor 
+-----+--------+-------------------------+-------------------------+------------+------------
+   2 | INSERT |                         | [2026-01-01,2026-07-01) |            |     1.0000
+   3 | INSERT |                         | [2026-10-01,2027-01-01) |            |     1.0000
+   4 | UPDATE | [2026-01-01,2027-01-01) | [2026-07-01,2026-10-01) |     1.0000 |     1.4200
+(3 rows)
+
+Time: 0.247 ms
+
+── TEST 4b: RETURNING + rowcount exclude leftovers? ──
+TRUNCATE TABLE
+Time: 1.315 ms
+psql:/scripts/04-portion-semantics.sql:78: NOTICE:  ROW_COUNT reported: 1 (doc claim: excludes leftover flanks)
+DO
+Time: 1.546 ms
+ class_code |      valid_period       | loss_cost_factor 
+------------+-------------------------+------------------
+ 8810       | [2026-09-01,2026-09-15) |           1.5500
+(1 row)
+
+UPDATE 1
+Time: 0.933 ms
+   (RETURNING rows above should show only the directly-modified portion)
+
+── TEST 4c: DELETE FOR PORTION OF — carve a hole (expect gap, flanks preserved) ──
+TRUNCATE TABLE
+Time: 1.073 ms
+DELETE 1
+Time: 0.958 ms
+ class_code |      valid_period       | loss_cost_factor 
+------------+-------------------------+------------------
+ 8810       | [2026-01-01,2026-03-01) |           1.0000
+ 8810       | [2026-04-01,2026-07-01) |           1.0000
+ 8810       | [2026-07-01,2026-08-01) |           1.4200
+ 8810       | [2026-08-01,2026-09-01) |           1.5000
+ 8810       | [2026-09-01,2026-09-15) |           1.5500
+ 8810       | [2026-09-15,2026-10-01) |           1.4200
+ 8810       | [2026-10-01,2027-01-01) |           1.0000
+(7 rows)
+
+Time: 0.181 ms
+ seq |   op   |        old_range        |        new_range        
+-----+--------+-------------------------+-------------------------
+  10 | INSERT |                         | [2026-01-01,2026-03-01)
+  11 | INSERT |                         | [2026-04-01,2026-07-01)
+  12 | DELETE | [2026-01-01,2026-07-01) | 
+(3 rows)
+
+Time: 0.129 ms
+
+── TEST 4d: unbounded bound syntax (open item: NULL vs. keyword) ──
+   FROM <date> TO NULL:
+UPDATE 1
+Time: 0.787 ms
+   FROM NULL TO <date>:
+UPDATE 1
+Time: 1.114 ms
+ class_code |      valid_period       | loss_cost_factor 
+------------+-------------------------+------------------
+ 8810       | [2026-01-01,2026-02-01) |           0.9500
+ 8810       | [2026-02-01,2026-03-01) |           1.0000
+ 8810       | [2026-04-01,2026-07-01) |           1.0000
+ 8810       | [2026-07-01,2026-08-01) |           1.4200
+ 8810       | [2026-08-01,2026-09-01) |           1.5000
+ 8810       | [2026-09-01,2026-09-15) |           1.5500
+ 8810       | [2026-09-15,2026-10-01) |           1.4200
+ 8810       | [2026-10-01,2026-11-01) |           1.0000
+ 8810       | [2026-11-01,2027-01-01) |           1.6000
+(9 rows)
+
+Time: 0.107 ms
+
+── TEST 4e: system-time idiom — single-statement versioned update ──
+   (the Model B trigger-killer IF single-table were viable: FROM now() TO NULL)
+DROP TABLE
+Time: 0.100 ms
+psql:/scripts/04-portion-semantics.sql:118: NOTICE:  table "sys_demo" does not exist, skipping
+CREATE TABLE
+Time: 1.785 ms
+INSERT 0 1
+Time: 0.832 ms
+ pg_sleep 
+----------
+ 
+(1 row)
+
+Time: 50.407 ms
+UPDATE 1
+Time: 1.612 ms
+   (expect: closed flank with 'original', current row with 'corrected')
+    val    |                           system_period                           
+-----------+-------------------------------------------------------------------
+ original  | ["2026-06-07 11:17:50.551299+00","2026-06-07 11:17:50.602628+00")
+ corrected | ["2026-06-07 11:17:50.602628+00",infinity)
+(2 rows)
+
+Time: 0.438 ms

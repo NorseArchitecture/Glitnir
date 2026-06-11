@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<UserSecretsId>6f97c77c-69e2-4fef-97c8-9d1f825eb81f</UserSecretsId>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Anthropic" Version="12.27.0" />
+		<PackageReference Include="Aspire.MongoDB.Driver" Version="13.4.2" />
+		<PackageReference Include="Microsoft.Extensions.AI" Version="10.6.0" />
+		<PackageReference Include="Microsoft.SemanticKernel.Connectors.MongoDB" Version="1.74.0-preview" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\VoyageEmbeddings.Backend\VoyageEmbeddings.Backend.csproj" />
+		<ProjectReference Include="..\VoyageEmbeddings.ServiceDefaults\VoyageEmbeddings.ServiceDefaults.csproj" />
+		<ProjectReference Include="..\Voyage.Extensions.AI\Voyage.Extensions.AI.csproj" />
+	</ItemGroup>
+
+</Project>

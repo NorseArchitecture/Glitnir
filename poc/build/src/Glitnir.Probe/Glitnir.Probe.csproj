@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<DefineConstants Condition="'$(EnableCanaries)' == 'true'">$(DefineConstants);CANARY</DefineConstants>
+		<DefineConstants Condition="'$(EnableDocCanaries)' == 'true'">$(DefineConstants);DOC_CANARY</DefineConstants>
+	</PropertyGroup>
+
+	<ItemGroup Condition="'$(EnableCanaries)' != 'true'">
+		<!-- Style canaries can't hide behind #if: formatting/style analysis of disabled
+		     text is unreliable. The file leaves the compilation entirely instead. -->
+		<Compile Remove="StyleCanaries.cs" />
+	</ItemGroup>
+
+</Project>
