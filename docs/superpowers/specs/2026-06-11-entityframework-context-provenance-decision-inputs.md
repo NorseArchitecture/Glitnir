@@ -1,7 +1,7 @@
 # `Norse.EntityFramework` — Concrete DbContext Provenance (Decision Inputs)
 
 **Date:** 2026-06-11
-**Status:** Open — inputs for a future design session, not a verdict
+**Status:** Converging — direction recorded same-day (see §Convergence); formal verdict pending a design session
 **Owner:** Buvy
 
 ## Ruled now (2026-06-11)
@@ -26,11 +26,28 @@ Does a consuming service ever declare a concrete `DbContext` that inherits the b
 - **B. Source-generated concrete context** — the `.Worker` declares one assembly-level marker (e.g. `[NorseDbContext]`) plus its `IEntityTypeConfiguration<T>` set; a generator in Urdarbrunnr emits the sealed context. Zero authored context code; EF's per-type machinery fully satisfied; analyzer-enforceable. *(Leading candidate.)*
 - **C. Runtime-generic context** — Midgard registers `NorseDbContext` instances per service with `IModelCacheKeyFactory` discrimination. No types anywhere, but migrations and pooling need bespoke care, and enforcement moves from compile time to runtime — against the grain of §2.7.
 
+## Convergence (recorded 2026-06-11, same session)
+
+The direction landing — not yet a verdict, but the shape the verdict is expected to take:
+
+1. **The entity interface forces the persistence declaration.** Declaring an entity (Asgard's entity markers) creates a build-time obligation to declare its persistence configuration — entity without configuration is a build error, configuration without entity likewise (`YGG` rule). Conformance is not reviewable behavior; it is compilability.
+2. **The concrete DbContext is source-generated** (shape B) from the declared entity/configuration pairs — all configuration applied, AOT-clean. Nothing enters the database's universe that didn't conform its way in: the analyzer gates declaration, the generator only admits conforming pairs into the model, and the base context's model-finalize validation backstops both.
+3. **The generated context is unreferenceable — `file`-scoped.** Emit `file sealed class {Context}DbContext : NorseDbContext`: a file-local type no other file can name, even in the same assembly. The same generated file emits the DI wiring that closes Midgard's open-generic repository implementations over it, so the only consumer of the context is code generated beside it. Not policy — unreachability by construction.
+4. **A feature-complete, deliberately bounded repository surface** so the end developer never needs (and never gets) the things they shouldn't: per call — a **filter predicate**, a **projection expression**, and for list shapes a **limit** and a **starting point**.
+
+## Repository-surface rulings to make in the design session
+
+1. **Projection mandatory on the query path?** If every query call must supply a projection, tracked entities are never materialized for reads — no accidental tracking, no `SELECT *`. Tracked aggregates then come from exactly one place: the command repository, by identity. (Leaning yes.)
+2. **Starting point = keyset, not offset.** After-key seek pagination, never `Skip(n)` — offset is the deep-page performance trap. Corollary that must be settled with it: **list shapes require declared ordering** or limit/starting-point are non-deterministic (same filter, different pages per call).
+3. **Limit required for list shapes** — no unbounded enumeration; absence fails loudly. (The BDX-volume corollary of "no silent fallbacks.")
+4. **Return shapes** — materialized `IReadOnlyList<TProjection>` with required limit vs `IAsyncEnumerable` streaming (streaming likely deferred to Warehouse-shaped work).
+5. **Count / exists** — first-class members or projection tricks; decide once.
+
 ## To pressure-test before ruling "Asgard interfaces suffice"
 
 1. **Aggregate-graph loading** — the repository contract must express aggregate-root loading policy honestly; leaking `IQueryable` is refused (it reintroduces runtime guessing as API).
 2. **Bulk operations** — `ExecuteUpdate` / `ExecuteDelete` shapes, or an explicit decision that command handlers don't bulk-mutate.
-3. **Design-time authorship** — who runs `dotnet ef migrations add` against what, when the context is generated and the entities live in `.Worker`.
+3. **Design-time authorship** — who runs `dotnet ef migrations add` against what, when the context is generated, file-local, and the entities live in `.Worker`.
 
 ## Boundary restated (tables already in sync)
 
