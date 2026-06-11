@@ -50,6 +50,7 @@ One repository per platform realm, named for the myth; every project inside name
 | **Asgard** | `Norse.Abstractions.*` | Declared law — contracts, attribute model, plugin interfaces, mediator law |
 | **Midgard** | `Norse.Infrastructure.*` | Embodied law — persistence, API, the source-generated mediator runtime, UI composition |
 | **Svartalfheim** | `Norse.Primitives.*` | The forge — primitives (`Result<T>`, `Money`) and the analyzers that strike when law is broken |
+| **Urdarbrunnr** | `Norse.EntityFramework.*` | The Well of Urd — entity base types, DbContext foundations, conventions, value converters, and the migrations chassis: the record of all that has become |
 | **Yggdrasil** | `Norse.Hosting.*` | The world tree — hosting runtimes and deployables the cosmos hangs on |
 | **Glitnir** | *(docs only)* | This repo — the design court and court of record |
 
