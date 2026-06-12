@@ -269,6 +269,8 @@ This increment is complete when:
 
 ## 10. Deferred decisions (recorded so nobody re-litigates silently)
 
+> **Ledger update (2026-06-11, same day):** items 1, 3, and 4 are taken up by the second-increment spec, `2026-06-11-svartalfheim-pathway-proof-design.md` (gateway, combinators, evidence rigs). Item 2 remains with the architecture-analyzers spec.
+
 1. **Storage strategy revisit** — inline `Failure` vs boxed, pending benchmark evidence (§4.1).
 2. **`YGG` analyzer rule for `default(Result<T>)`** — belongs to the architecture-analyzers spec (§4.2).
 3. **Gateway routing for hot-path specialists** — `typeof(T)` branch recorded in §5.5; designed when the gateway increment begins.
