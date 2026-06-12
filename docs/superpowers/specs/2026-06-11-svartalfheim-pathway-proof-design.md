@@ -171,7 +171,7 @@ Benchmark evidence from the §4.1 rig. Environment: BenchmarkDotNet v0.15.8, Win
 
 ### 8.5 AOT smoke
 
-**Native gate OPEN — environment, not code.** `PublishAot` is blocked on this workstation: no VS C++ build tools (`vswhere` finds no `VC.Tools` workload), so the platform linker is unavailable. The managed compile portion completed with zero warnings, and the smoke runs green as a managed binary (six checks, exit 0). Code-side reviewed: no reflection, no dynamic code, no trim-analysis surface; `CultureInfo.GetCultureInfo("de-DE")` is safe under default Windows AOT (do not add `InvariantGlobalization` to this project — the de-DE probe is a deliberate canary). **Action: install the Desktop development with C++ workload, rerun `dotnet publish tests/smoke/Primitives.Aot.Smoke -c Release` and the native exe, then close this slot with the result.**
+**Native gate CLOSED (2026-06-11, same day).** The gate was briefly open on environment, not code: no VS C++ build tools on the workstation, so the platform linker was unavailable (the managed compile and a managed run of all six checks were already green). With the Desktop development with C++ workload installed, `dotnet publish tests/smoke/Primitives.Aot.Smoke -c Release` (win-x64) completed with **zero AOT/trim warnings** and the native `Norse.Primitives.Aot.Smoke.exe` ran **six `ok` checks, exit 0** — the pathway survives native compilation. Standing notes from the code-side review remain law: no reflection, no dynamic code, no trim-analysis surface; `CultureInfo.GetCultureInfo("de-DE")` is safe under default Windows AOT, and `InvariantGlobalization` must never be added to this project — the de-DE probe is a deliberate canary.
 
 ### 8.6 Gate results
 
