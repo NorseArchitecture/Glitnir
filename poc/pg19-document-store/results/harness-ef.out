@@ -1,0 +1,33 @@
+info: 6/16/2026 15:12:34.161 RelationalEventId.CommandExecuted[20101] (Microsoft.EntityFrameworkCore.Database.Command) 
+      Executed DbCommand (85ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      SELECT p.id
+      FROM policy_view AS p
+      LIMIT 1
+target id = fb26ddfd-51cc-43b3-9680-f8a1885ca500
+
+=== single-member projection: Where(p => p.Id == id).Select(p => p.Body.Premium.Amount) ===
+info: 6/16/2026 15:12:34.757 RelationalEventId.CommandExecuted[20101] (Microsoft.EntityFrameworkCore.Database.Command) 
+      Executed DbCommand (48ms) [Parameters=[@__id_0='fb26ddfd-51cc-43b3-9680-f8a1885ca500'], CommandType='Text', CommandTimeout='30']
+      SELECT CAST(p.doc #>> '{premium,amount}' AS numeric)
+      FROM policy_view AS p
+      WHERE p.id = @__id_0
+      LIMIT 2
+-> premium = 4200.00
+
+=== record projection: Select(p => new PocViewModel(p.Id, p.Body.Premium.Amount, p.Body.ProductCode)) ===
+info: 6/16/2026 15:12:34.865 RelationalEventId.CommandExecuted[20101] (Microsoft.EntityFrameworkCore.Database.Command) 
+      Executed DbCommand (3ms) [Parameters=[@__id_0='fb26ddfd-51cc-43b3-9680-f8a1885ca500'], CommandType='Text', CommandTimeout='30']
+      SELECT p.id, CAST(p.doc #>> '{premium,amount}' AS numeric), p.doc ->> 'productCode'
+      FROM policy_view AS p
+      WHERE p.id = @__id_0
+      LIMIT 2
+-> PocViewModel { Id = fb26ddfd-51cc-43b3-9680-f8a1885ca500, Premium = 4200.00, ProductCode = WC }
+
+=== predicate over a jsonb member: Where(p => p.Body.ProductCode == "WC") count ===
+info: 6/16/2026 15:12:35.024 RelationalEventId.CommandExecuted[20101] (Microsoft.EntityFrameworkCore.Database.Command) 
+      Executed DbCommand (7ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      SELECT count(*)::int
+      FROM policy_view AS p
+      WHERE (p.doc ->> 'productCode') = 'WC'
+-> 5003 WC rows
+

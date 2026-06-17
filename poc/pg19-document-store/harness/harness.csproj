@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<!--
+		Deliberately standalone: NOT part of any realm solution, no Directory.Build.props
+		inheritance, no brand injection. Recon tooling. The whole point is the dependency
+		list below — Npgsql and nothing else. No EF. If EntityFrameworkCore appears here,
+		the POC has stopped proving what it exists to prove (decision record §4.2).
+		Npgsql version is free to bump; it does not gate the PG19 server behavior under test.
+	-->
+
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<RootNamespace>Pg19DocumentStorePoc</RootNamespace>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Npgsql" Version="9.0.2" />
+	</ItemGroup>
+
+</Project>

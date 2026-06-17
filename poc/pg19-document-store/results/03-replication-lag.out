@@ -1,0 +1,22 @@
+=== is a standby connected? (expect one row, state=streaming) ===
+ client_addr |   state   | sync_state |    write_lag    |    flush_lag    |   replay_lag   |  sent_lsn  | write_lsn  | flush_lsn  | replay_lsn 
+-------------+-----------+------------+-----------------+-----------------+----------------+------------+------------+------------+------------
+ 172.19.0.3  | streaming | async      | 00:00:00.000217 | 00:00:00.001067 | 00:00:00.00115 | 0/031AF718 | 0/031AF718 | 0/031AF718 | 0/031AF718
+(1 row)
+
+=== current WAL position on the primary ===
+ primary_lsn 
+-------------
+ 0/031AF718
+(1 row)
+
+=== write a marker the harness/replica can look for ===
+INSERT 0 1
+ primary_lsn_after_marker 
+--------------------------
+ 0/031AF910
+(1 row)
+
+sh: 1: Syntax error: "(" unexpected
+=== NOTE: run  against the replica (port 5456) ===
+=== to confirm it has caught up to primary_lsn_after_marker. ===

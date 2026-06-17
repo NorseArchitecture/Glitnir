@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<!--
+		The AOT-clean translator spike. Proves the symmetric lambda surface (§4.10) survives WITHOUT
+		EF and WITHOUT defeating NativeAOT: an expression-tree WALKER (reads node types/members/values)
+		emits jsonb SQL, and System.Text.Json SOURCE-GEN materializes the result. No Expression.Compile,
+		no Reflection.Emit anywhere — that absence is the whole proof.
+
+		IsAotCompatible=true turns on the trim + AOT analyzers at BUILD time (no native toolchain needed)
+		so any reflection/trim hazard surfaces as a warning. A full `dotnet publish /p:PublishAot=true`
+		is the confirmation step when the C++ toolchain is present.
+	-->
+
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<RootNamespace>Pg19DocumentStorePoc.Aot</RootNamespace>
+		<IsAotCompatible>true</IsAotCompatible>
+		<InvariantGlobalization>true</InvariantGlobalization>
+		<TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Npgsql" Version="9.0.2" />
+	</ItemGroup>
+
+</Project>

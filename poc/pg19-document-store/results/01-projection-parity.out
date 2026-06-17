@@ -1,0 +1,46 @@
+=== filter: containment (@>) ΓÇö "customerId = c-1" ===
+                  id                  | status | product 
+--------------------------------------+--------+---------
+ fb26ddfd-51cc-43b3-9680-f8a1885ca500 | Active | WC
+ ba0490c3-511e-4e7e-8354-81d2de43b62d | Active | GL
+(2 rows)
+
+=== filter: jsonpath predicate (@@) ΓÇö premium.amount > 1000 ===
+                  id                  | premium  
+--------------------------------------+----------
+ fb26ddfd-51cc-43b3-9680-f8a1885ca500 | 4200.00
+ 3730e094-4a9f-4315-9607-3cdcbe183f73 | 12000.00
+(2 rows)
+
+=== sort + skip/take ΓÇö order by effectiveDate, OFFSET 1 LIMIT 1 ===
+ policy |    eff     
+--------+------------
+ p-1002 | 2026-03-01
+(1 row)
+
+=== projection: jsonb_build_object ΓÇö narrow summary shape ===
+                                                 summary                                                  
+----------------------------------------------------------------------------------------------------------
+ {"id": "p-1001", "status": "Active", "premium": {"amount": 4200.00, "currency": "USD"}, "product": "WC"}
+ {"id": "p-1002", "status": "Active", "premium": {"amount": 900.00, "currency": "USD"}, "product": "GL"}
+(2 rows)
+
+=== projection: SQL/JSON JSON_VALUE + JSON_QUERY (pg17+) ===
+ product_code | premium_amount |               premium_obj               
+--------------+----------------+-----------------------------------------
+ WC           |       12000.00 | {"amount": 12000.00, "currency": "USD"}
+(1 row)
+
+=== EXPLAIN: containment filter should ride the GIN index ===
+                              QUERY PLAN                              
+----------------------------------------------------------------------
+ Seq Scan on policy_view (actual time=0.011..0.012 rows=2.00 loops=1)
+   Filter: (doc @> '{"customerId": "c-1"}'::jsonb)
+   Rows Removed by Filter: 1
+   Buffers: shared hit=1
+ Planning:
+   Buffers: shared hit=1
+ Planning Time: 0.024 ms
+ Execution Time: 0.018 ms
+(8 rows)
+

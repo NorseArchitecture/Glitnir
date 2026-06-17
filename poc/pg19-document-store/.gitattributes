@@ -1,0 +1,5 @@
+# Files consumed inside the Linux Postgres container must be LF. A stray CR in the
+# compose entrypoint's embedded bash, a mounted .sql, or an initdb.d .sh breaks under sh/psql.
+*.sql text eol=lf
+*.sh text eol=lf
+docker-compose.yml text eol=lf

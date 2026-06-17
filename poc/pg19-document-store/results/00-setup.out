@@ -1,0 +1,16 @@
+CREATE EXTENSION
+                                                          version                                                          
+---------------------------------------------------------------------------------------------------------------------------
+ PostgreSQL 19beta1 (Debian 19~beta1-1.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+(1 row)
+
+DROP TABLE
+psql:/scripts/00-setup.sql:16: NOTICE:  table "policy_view" does not exist, skipping
+CREATE TABLE
+CREATE INDEX
+INSERT 0 3
+ seeded_rows 
+-------------
+           3
+(1 row)
+

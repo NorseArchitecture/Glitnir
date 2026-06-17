@@ -1,0 +1,36 @@
+=== (a) row filter: any update with amount > 1000 ΓÇö jsonpath exists (@?) ===
+                  id                  | policy 
+--------------------------------------+--------
+ fb26ddfd-51cc-43b3-9680-f8a1885ca500 | p-1001
+ 3730e094-4a9f-4315-9607-3cdcbe183f73 | p-1003
+(2 rows)
+
+=== (b) subset projection: ONLY the matching array elements ΓÇö jsonb_path_query_array ===
+ policy |                                                                              big_updates                                                                               
+--------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ p-1001 | [{"at": "2026-02-15T10:00:00Z", "seq": 2, "amount": 2500.00, "reason": "audit"}]
+ p-1003 | [{"at": "2026-04-02T10:00:00Z", "seq": 1, "amount": 8000.00, "reason": "audit"}, {"at": "2026-04-20T10:00:00Z", "seq": 2, "amount": 1500.00, "reason": "endorsement"}]
+(2 rows)
+
+===
+psql:/scripts/02-array-subset-projection.sql:22: error: unterminated quoted string
+ policy | seq | amount  |   reason    
+--------+-----+---------+-------------
+ p-1001 |   2 | 2500.00 | audit
+ p-1003 |   1 | 8000.00 | audit
+ p-1003 |   2 | 1500.00 | endorsement
+(3 rows)
+
+=== GIN check: does the @? row filter ride the jsonb_path_ops index? ===
+                              QUERY PLAN                              
+----------------------------------------------------------------------
+ Seq Scan on policy_view (actual time=0.009..0.010 rows=2.00 loops=1)
+   Filter: (doc @? '$."updates"[*]?(@."amount" > 1000)'::jsonpath)
+   Rows Removed by Filter: 1
+   Buffers: shared hit=1
+ Planning:
+   Buffers: shared hit=1
+ Planning Time: 0.038 ms
+ Execution Time: 0.018 ms
+(8 rows)
+

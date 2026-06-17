@@ -1,0 +1,34 @@
+DROP TABLE
+psql:/scripts/04-temporal-jsonb-coexistence.sql:12: NOTICE:  table "policy_sot" does not exist, skipping
+CREATE TABLE
+=== insert a current row, then version it (close old period, open new) ===
+INSERT 0 1
+UPDATE 1
+INSERT 0 1
+=== current row (unbounded upper) ===
+                  id                  | premium_amount |           system_period            
+--------------------------------------+----------------+------------------------------------
+ 00000000-0000-0000-0000-000000000001 |        4500.00 | ["2026-06-16 18:47:57.705832+00",)
+(1 row)
+
+=== full timeline for the id ===
+                  id                  | premium_amount |                           system_period                           
+--------------------------------------+----------------+-------------------------------------------------------------------
+ 00000000-0000-0000-0000-000000000001 |        4200.00 | ["2026-06-16 18:47:57.702425+00","2026-06-16 18:47:57.703752+00")
+ 00000000-0000-0000-0000-000000000001 |        4500.00 | ["2026-06-16 18:47:57.705832+00",)
+(2 rows)
+
+=== coexistence: jsonb document table is untouched and still queryable ===
+ policy_view_rows 
+------------------
+                4
+(1 row)
+
+=== both object kinds present in the same database ===
+      relname       | relkind 
+--------------------+---------
+ ix_policy_view_doc | i
+ policy_sot         | r
+ policy_view        | r
+(3 rows)
+

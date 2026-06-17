@@ -1,0 +1,73 @@
+INSERT 0 20000
+ANALYZE
+ total_rows 
+------------
+      27321
+(1 row)
+
+=== @> containment at volume (planner choice) ===
+                                         QUERY PLAN                                          
+---------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on policy_view (actual time=0.087..0.110 rows=23.00 loops=1)
+   Recheck Cond: (doc @> '{"customerId": "c-1"}'::jsonb)
+   Heap Blocks: exact=21
+   Buffers: shared hit=35
+   ->  Bitmap Index Scan on ix_policy_view_doc (actual time=0.074..0.074 rows=23.00 loops=1)
+         Index Cond: (doc @> '{"customerId": "c-1"}'::jsonb)
+         Index Searches: 1
+         Buffers: shared hit=14
+ Planning:
+   Buffers: shared hit=12
+ Planning Time: 0.102 ms
+ Execution Time: 0.124 ms
+(12 rows)
+
+=== @? array-subset filter at volume (planner choice) ===
+                               QUERY PLAN                               
+------------------------------------------------------------------------
+ Seq Scan on policy_view (actual time=3.231..7.129 rows=998.00 loops=1)
+   Filter: (doc @? '$."updates"[*]?(@."amount" > 8500)'::jsonpath)
+   Rows Removed by Filter: 26323
+   Buffers: shared hit=1073
+ Planning:
+   Buffers: shared hit=4
+ Planning Time: 0.057 ms
+ Execution Time: 7.157 ms
+(8 rows)
+
+=== capability proof: same two predicates with enable_seqscan = off ===
+SET
+                                         QUERY PLAN                                          
+---------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on policy_view (actual time=0.048..0.062 rows=23.00 loops=1)
+   Recheck Cond: (doc @> '{"customerId": "c-1"}'::jsonb)
+   Heap Blocks: exact=21
+   Buffers: shared hit=35
+   ->  Bitmap Index Scan on ix_policy_view_doc (actual time=0.041..0.041 rows=23.00 loops=1)
+         Index Cond: (doc @> '{"customerId": "c-1"}'::jsonb)
+         Index Searches: 1
+         Buffers: shared hit=14
+ Planning:
+   Buffers: shared hit=1
+ Planning Time: 0.054 ms
+ Execution Time: 0.072 ms
+(12 rows)
+
+                                           QUERY PLAN                                           
+------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on policy_view (actual time=7.475..11.495 rows=998.00 loops=1)
+   Recheck Cond: (doc @? '$."updates"[*]?(@."amount" > 8500)'::jsonpath)
+   Rows Removed by Index Recheck: 26323
+   Heap Blocks: exact=1073
+   Buffers: shared hit=1402
+   ->  Bitmap Index Scan on ix_policy_view_doc (actual time=3.838..3.838 rows=27321.00 loops=1)
+         Index Cond: (doc @? '$."updates"[*]?(@."amount" > 8500)'::jsonpath)
+         Index Searches: 1
+         Buffers: shared hit=329
+ Planning:
+   Buffers: shared hit=1
+ Planning Time: 0.060 ms
+ Execution Time: 11.527 ms
+(13 rows)
+
+RESET

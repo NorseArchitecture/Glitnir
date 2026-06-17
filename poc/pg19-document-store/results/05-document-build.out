@@ -1,0 +1,39 @@
+DROP TABLE
+psql:/scripts/05-document-build.sql:10: NOTICE:  table "policy_update" does not exist, skipping
+DROP TABLE
+psql:/scripts/05-document-build.sql:11: NOTICE:  table "policy" does not exist, skipping
+CREATE TABLE
+CREATE TABLE
+INSERT 0 1
+INSERT 0 2
+=== in-DB build: assemble the document from the relational source of truth ===
+                                                                                                                                                                             built_document                                                                                                                                                                             
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"id": "00000000-0000-0000-0000-000000000010", "premium": {"amount": 4200.00, "currency": "USD"}, "updates": [{"at": "2026-01-02T10:00:00+00:00", "seq": 1, "amount": 100.00, "reason": "endorsement"}, {"at": "2026-02-15T10:00:00+00:00", "seq": 2, "amount": 2500.00, "reason": "audit"}], "customerId": "c-1", "productCode": "WC", "effectiveDate": "2026-01-01"}
+(1 row)
+
+=== and the build can populate the document table directly (the in-DB Replace) ===
+INSERT 0 1
+                  id                  | status |                   jsonb_pretty                    
+--------------------------------------+--------+---------------------------------------------------
+ 00000000-0000-0000-0000-000000000010 | Active | {                                                +
+                                      |        |     "id": "00000000-0000-0000-0000-000000000010",+
+                                      |        |     "premium": {                                 +
+                                      |        |         "amount": 4200.00,                       +
+                                      |        |         "currency": "USD"                        +
+                                      |        |     },                                           +
+                                      |        |     "updates": [                                 +
+                                      |        |         {                                        +
+                                      |        |             "seq": 1,                            +
+                                      |        |             "amount": 100.00                     +
+                                      |        |         },                                       +
+                                      |        |         {                                        +
+                                      |        |             "seq": 2,                            +
+                                      |        |             "amount": 2500.00                    +
+                                      |        |         }                                        +
+                                      |        |     ],                                           +
+                                      |        |     "customerId": "c-1",                         +
+                                      |        |     "productCode": "WC"                          +
+                                      |        | }
+(1 row)
+

@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<!--
+		The OTHER side of the wall question: this harness DOES use EF (Npgsql provider) — that is
+		the point. It proves a read-only, NoTracking, jsonb-mapped EF context translates an engineer's
+		Expression<Func<TDoc,bool>> predicate + Expression<Func<TDoc,TProj>> projection into server-side
+		jsonb SQL, with no hand-written jsonb_build_object. Versions are bumpable to the EF10 line; EF8+
+		is all that's needed for JSON-column projection. AOT-cleanliness is a SEPARATE question this does
+		not answer — EF's query pipeline is not AOT-clean; that caveat rides into the verdict explicitly.
+	-->
+
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<RootNamespace>Pg19DocumentStorePoc.Ef</RootNamespace>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4" />
+	</ItemGroup>
+
+</Project>

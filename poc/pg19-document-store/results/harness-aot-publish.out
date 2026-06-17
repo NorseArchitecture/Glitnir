@@ -1,0 +1,9 @@
+  Determining projects to restore...
+  Restored C:\code\NorseArchitecture\Bifrost\Glitnir\poc\pg19-document-store\harness-aot\harness-aot.csproj (in 230 ms).
+C:\Program Files\dotnet\sdk\11.0.100-preview.5.26302.115\Sdks\Microsoft.NET.Sdk\targets\Microsoft.NET.RuntimeIdentifierInference.targets(383,5): message NETSDK1057: You are using a preview version of .NET. See: https://aka.ms/dotnet-support-policy [C:\code\NorseArchitecture\Bifrost\Glitnir\poc\pg19-document-store\harness-aot\harness-aot.csproj]
+  harness-aot -> C:\code\NorseArchitecture\Bifrost\Glitnir\poc\pg19-document-store\harness-aot\bin\Release\net10.0\win-x64\Norse.harness-aot.dll
+  'vswhere.exe' is not recognized as an internal or external command,
+  operable program or batch file.
+  Generating native code
+  The filename, directory name, or volume label syntax is incorrect.
+C:\Users\BuvyBuvinghausen\.nuget\packages\microsoft.dotnet.ilcompiler\10.0.8\build\Microsoft.NETCore.Native.targets(396,5): error MSB3073: The command ""'vswhere.exe' is not recognized as an internal or external command,;operable program or batch file.;C:\Program Files\Microsoft Visual Studio\18\Insiders\VC\Tools\MSVC\14.51.36231\bin\Hostx64\x64\link.exe" @"obj\Release\net10.0\win-x64\native\link.rsp"" exited with code 123. [C:\code\NorseArchitecture\Bifrost\Glitnir\poc\pg19-document-store\harness-aot\harness-aot.csproj]

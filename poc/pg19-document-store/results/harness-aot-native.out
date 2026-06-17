@@ -1,0 +1,15 @@
+target id = edcdbb9d-2651-4e98-b09e-5eed99655657
+
+=== single-member projection ===
+   SELECT (doc->>'premium')::numeric FROM aot_probe WHERE (doc->>'id')::uuid = $1 LIMIT 1
+-> premium = 4200.00
+
+=== record projection ===
+   SELECT jsonb_build_object('Id', (doc->>'id')::uuid, 'Premium', (doc->>'premium')::numeric, 'ProductCode', doc->>'productCode') FROM aot_probe WHERE (doc->>'id')::uuid = $1 LIMIT 1
+-> PocViewModel { Id = edcdbb9d-2651-4e98-b09e-5eed99655657, Premium = 4200.00, ProductCode = WC }
+
+=== member predicate ===
+   WHERE doc->>'productCode' = $1
+-> 1 WC rows
+
+translator used no Expression.Compile and no Reflection.Emit - see JsonbTranslator.

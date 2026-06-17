@@ -1,0 +1,68 @@
+services:
+  primary:
+    image: postgres:19beta1-trixie
+    container_name: pg19doc-primary
+    environment:
+      # trust on purpose — throwaway local recon. It makes the official entrypoint write a
+      # `host replication all all trust` line, so the replica's pg_basebackup connects with no
+      # auth friction. Loudly insecure; never a pattern for anything but this POC container.
+      POSTGRES_HOST_AUTH_METHOD: trust
+      POSTGRES_DB: norse_poc
+    command:
+      - postgres
+      - -c
+      - wal_level=replica
+      - -c
+      - max_wal_senders=10
+      - -c
+      - max_replication_slots=10
+      - -c
+      - hot_standby=on
+      # synchronous_commit stays at the default (local) for the W1 baseline. Q3/W3 flips it to
+      # remote_apply on the shim path explicitly; we do not bake that into the cluster default.
+    ports:
+      - "5455:5432"
+    volumes:
+      - ./scripts:/scripts:ro
+      # adds the `host replication all all trust` line trust-mode omits (see the script)
+      - ./primary-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # TCP probe: the entrypoint's temporary initdb server is unix-socket only, so a 127.0.0.1
+      # check can't read ready before init finishes.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d norse_poc"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  replica:
+    image: postgres:19beta1-trixie
+    container_name: pg19doc-replica
+    depends_on:
+      primary:
+        condition: service_healthy
+    ports:
+      - "5456:5432"
+    # Bypass the normal initdb entrypoint: a standby is cloned from the primary, not initialized.
+    # On first start (empty PGDATA / no standby.signal) clone via pg_basebackup with -R (writes
+    # standby.signal + primary_conninfo), then exec postgres as the postgres user via gosu.
+    entrypoint:
+      - bash
+      - -c
+      - |
+        set -e
+        export PGDATA=/var/lib/postgresql/data
+        if [ ! -s "$$PGDATA/standby.signal" ]; then
+          echo "replica: cloning from primary via pg_basebackup..."
+          rm -rf "$$PGDATA"/*
+          until pg_basebackup -h primary -p 5432 -U postgres -D "$$PGDATA" -Fp -Xs -R -w -P; do
+            echo "replica: primary not ready for base backup, retrying..."; sleep 2
+          done
+          chown -R postgres:postgres "$$PGDATA"
+          chmod 700 "$$PGDATA"
+        fi
+        exec gosu postgres postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d norse_poc"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
