@@ -1709,3 +1709,18 @@ Expected: build clean at WarningLevel 9999; entire suite green. Report the test 
 **2. Placeholder scan:** No TBD/TODO; every code step shows complete code; every test step shows real assertions. ✓
 
 **3. Type consistency:** `ParseRequired`/`ParseOptional`/`ParseExactRequired`/`ParseExactOptional`/`ParseUnix`/`ParseUnixOptional`, `IsSentinel`, `GuardPrecision`, `InRange`, `TryParseIso8601Duration`, `UnixPrecision { Unspecified, Seconds, Milliseconds }` are spelled identically across the producing and consuming tasks and the gateway. Return types (`Result<T>` / `Result<T>?`) match the `Unsafe.As` reinterprets in Task 6. ✓
+
+---
+
+## Post-Implementation Amendment (2026-06-17, final whole-branch review)
+
+The increment was implemented subagent-driven and is fully staged (not committed). All seven tasks landed verbatim from the literal code above **except** the `TimeSpanParser` ISO-8601 duration scanner, where the final whole-branch review caught two real defects in the scanner as written in Task 5:
+
+- **C1 (Critical):** `(long)(seconds * TimeSpan.TicksPerSecond)` threw `OverflowException` on an 18-digit seconds component (e.g. `PT999999999999999999S`) — the exception escaped the parser, violating the spec's "never raises on bad input" contract.
+- **I1 (Important):** the raw `long` accumulations (`ticks += weeks * 7 * TimeSpan.TicksPerDay;` and the D/H/M cases) wrapped silently on large components and returned a wrong `Success` — a silent fallback (§2.7/§8 violation).
+
+**Fix (exception-free, overflow-safe):** a private `TryAddTicks(ref long ticks, long quantity, long ticksPerUnit)` bounds-checks `quantity > (long.MaxValue - ticks) / ticksPerUnit` before each W/D/H/M multiply-add (all quantities are non-negative; the sign is applied once at the end), and the seconds case bounds-checks `secondTicks > long.MaxValue - ticks` before the decimal→long cast. Overflow now returns `false` ⇒ `Malformed`. `MaxDigits = 18` was kept and re-commented as a digit-run sanity bound, explicitly **not** the overflow guard.
+
+**Tests added (M3 + regression):** `TimeSpan.MinValue`/`MaxValue` round-trip strings ⇒ `Malformed` (the §11-mandated sentinel cases), and the three overflow inputs above ⇒ `Malformed`.
+
+**Final state:** `dotnet build Svartalfheim.slnx` clean at WarningLevel 9999; `dotnet test Svartalfheim.slnx` = **368 passed / 0 failed / 0 skipped**; Native AOT smoke publishes with 0 warnings and the native exe passes all 16 checks, exit 0. The corrected scanner is the authoritative code; this amendment is the record of the divergence.
