@@ -177,3 +177,47 @@ Benchmark evidence from the §4.1 rig. Environment: BenchmarkDotNet v0.15.8, Win
 
 - FsCheck integration gate (§3.4): `FsCheck.Xunit.v3` **exists** (3.3.3) — recorded for future use; the portable `Prop.ForAll` style was adopted regardless, so the laws run attribute-free on any framework.
 - FsCheck restored: 3.3.3 via the `3.*` float. Zero API adaptations — the spec's generator/property code compiled as written.
+
+## 9. Findings amendment (2026-06-17) — parser allocation sweep, post numeric/char/Guid + temporal increments
+
+The §4.1 rig grew a fourth benchmark family, `ParserAllocationBenchmarks`, after the numeric/`char`/`Guid` (2026-06-17) and temporal (2026-06-17) increments landed parsers the original three families never measured. Its single job is the `Allocated` column: every value-returning door of the new specialists must read **0 B** (the inline union's standing claim, §8.2), with one deliberate failure probe to keep the rig honest. Same environment as §8: BenchmarkDotNet v0.15.8, .NET 11.0.0 (11.0.0-preview.5.26302.115), X64 RyuJIT x86-64-v3, `InProcessEmitToolchain` (§8.1). No `NoInlining` factories are needed here — `Result<T>` is the inline zero-boxing union, so a success-path 0 B is real, not an escape-analysis artifact (contrast §8.1's boxed twin).
+
+### 9.1 Success-path sweep — all doors 0 B
+
+Each row is a single representative success input through one door (ISO/direct, exact-format, or Unix-epoch). Means are reference points, not the verdict; the `Allocated` column is.
+
+| Door (input) | Mean | Allocated |
+|---|---:|---:|
+| `IntegerParser.ParseRequired<int>` (`"1742"`) | 30.09 ns | – |
+| `RealParser.ParseRequired<decimal>` (`"1234.5678"`) | 52.51 ns | – |
+| `GuidParser.ParseRequired` (D-format) | 26.55 ns | – |
+| `CharParser.ParseRequired` (`"U+0041"`, code-point branch) | 13.53 ns | – |
+| `DateOnlyParser` ISO (`"2026-06-17"`) | 99.85 ns | – |
+| `DateOnlyParser` exact (`"MM/dd/yyyy"`) | 86.49 ns | – |
+| `TimeOnlyParser` ISO (`"13:45:30"`) | 126.93 ns | – |
+| `TimeOnlyParser` exact (`"h:mm:ss tt"`) | 182.74 ns | – |
+| `DateTimeParser` ISO (`"…T12:30:00Z"`) | 208.44 ns | – |
+| `DateTimeParser` exact | 194.13 ns | – |
+| `DateTimeParser` Unix (seconds) | 20.33 ns | – |
+| `DateTimeOffsetParser` ISO (`"…+00:00"`) | 582.37 ns | – |
+| `DateTimeOffsetParser` exact | 188.01 ns | – |
+| `DateTimeOffsetParser` Unix (seconds) | 16.04 ns | – |
+| `TimeSpanParser` colon (`"1.02:03:04"`) | 101.56 ns | – |
+| `TimeSpanParser` exact (`"c"`) | 25.27 ns | – |
+| `TimeSpanParser` ISO duration (`"P3DT4H30M"`) | *see §9.2* | *see §9.2* |
+
+**Reading:** sixteen of seventeen success doors allocate nothing — the inline-union claim holds across the full scalar surface, not just the bool/`int` pathway §8 proved. The lone `DateTimeOffsetParser` ISO latency outlier (582 ns, ~2.8× the `DateTime` twin) is real but allocation-free; it is not crooked and is left as an observation, not a work item.
+
+### 9.2 The crooked path made straight — `TimeSpanParser` ISO duration
+
+The ISO-8601 duration door allocated **424 B** on its *success* path — the only non-zero success row in the sweep, and exactly the kind of thing this rig exists to catch. The hand-rolled `TryParseIso8601Duration` is pure span/value work; the tell was in the neighbors (colon and exact doors both 0 B). Root cause: `ParseDuration` speculatively ran the BCL colon parser (`TimeSpan.TryParse`) **first**, and the colon parser allocates 424 B on its reject path when fed a `P…` input it was never going to accept.
+
+Fix (a `ParseDuration` ordering change, not a grammar change): sniff the leading `P` (optionally signed) — the clean discriminator between the two grammars, since colon form never carries one — and route ISO inputs straight to the hand-rolled parser, skipping the doomed colon attempt. Behavior is byte-for-byte preserved (the 28 `TimeSpanParser` tests stay green; the grammars partition disjointly on the `P` prefix). Re-measured after the fix: **0 B**, and mean fell from 293.53 ns to ~59 ns — the speculative reject was most of the cost. The bend stays in the record per the crooked-path ethos: the door allocated, here is why, here is the straightening.
+
+### 9.3 Failure probe — the rig is live
+
+| Door (input) | Mean | Allocated |
+|---|---:|---:|
+| `IntegerParser.ParseRequired<int>` (`"not-a-number"`) | 42.82 ns | 48 B |
+
+One `Malformed` probe, expected non-zero: the `Failure` span ctor bounds to `MaxInputLength` and then allocates the captured-input string. This is by design (truncation knowledge lives in `Failure`, first-increment law) and doubles as proof the `MemoryDiagnoser` is measuring — the 0 B rows above are real, not a dead benchmark.
