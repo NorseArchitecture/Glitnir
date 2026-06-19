@@ -1,6 +1,6 @@
 # Auth Foundation Implementation Plan (Plan A of 5)
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **This plan halts at the plan stage during the spec-first phase; do not execute without explicit user greenlight.**
+> **For agentic workers:** REQUIRED SUB-SKILL: superpowers:subagent-driven-development is the default — use it to implement this plan task-by-task; superpowers:executing-plans is the narrow fallback, only when the work specifically needs a separate session with human review checkpoints, never an interchangeable alternative. Pair either with superpowers:test-driven-development for every implementation task — orchestration sequences tasks, TDD governs how each one is coded. Steps use checkbox (`- [ ]`) syntax for tracking. **This plan halts at the plan stage during the spec-first phase; do not execute without explicit user greenlight.**
 
 **Goal:** Stand up the `norse-auth` submodule and the foundational assemblies (`Norse.Auth.Contracts`, `Norse.Auth.Server` skeleton) that the rest of the auth-federation spec builds on. Deliver the `NorsePrincipal` envelope, the population/audience taxonomy, and the anonymous-bootstrap middleware that guarantees every Norse request carries a non-null principal.
 

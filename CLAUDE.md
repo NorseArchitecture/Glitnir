@@ -118,6 +118,14 @@ Preference order, strictly:
 
 Where two designs are otherwise equally simple, prefer the one that fails earlier. Where a design *lets* an error slip past a layer, that is a design problem to fix — not a runtime concern to handle.
 
+### 2.8 Subagent-Orchestrated, Test-Driven Implementation
+
+> Orchestration sequences tasks. TDD governs how each one is coded. Neither substitutes for the other.
+
+`superpowers:subagent-driven-development` is the **default** orchestration skill for every implementation plan — not a recommendation among equals. `superpowers:executing-plans` is the narrow exception, reached for only when the work specifically needs a separate session with human review checkpoints; it is never an interchangeable alternative chosen by preference. Every plan's REQUIRED SUB-SKILL line names the orchestration default **and** `superpowers:test-driven-development` together — never one without the other. Subagent orchestration without TDD ships code nobody watched fail first; TDD without orchestration loses the plan-as-source-of-truth discipline that keeps a multi-task implementation coherent across context windows. Both, every time, platform-wide — realm CLAUDE.md files state this locally; this is the rule they all point back to.
+
+This is retroactive only in spirit, not in the record: a plan already executed and preserved verbatim (§5 → Repositories) is not rewritten to add this line after the fact — the lesson lands on the next plan, not a rewritten history.
+
 ---
 
 ## 3. Bounded Context Map
@@ -381,6 +389,7 @@ Build errors, PR rejections, or refusal-to-write-the-code situations. **Not styl
 
 ### Testing and Tooling
 
+- **No code without a failing test first, no plan without subagent orchestration — both, every time (§2.8).**
 - **Shouldly only** (not FluentAssertions). **NSubstitute only** (not Moq).
 - **No mocking what we don't own** beyond a thin port. Wrap and mock the wrapper.
 - **No mocked-DB tests for behavior that depends on database semantics.** Integration tests hit real Postgres (testcontainers or shared dev).

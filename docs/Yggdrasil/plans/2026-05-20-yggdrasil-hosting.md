@@ -1,6 +1,6 @@
 # Yggdrasil Hosting Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **This plan halts at the plan stage during the spec-first phase; do not execute without explicit user greenlight.**
+> **For agentic workers:** REQUIRED SUB-SKILL: superpowers:subagent-driven-development is the default — use it to implement this plan task-by-task; superpowers:executing-plans is the narrow fallback, only when the work specifically needs a separate session with human review checkpoints, never an interchangeable alternative. Pair either with superpowers:test-driven-development for every implementation task — orchestration sequences tasks, TDD governs how each one is coded. Steps use checkbox (`- [ ]`) syntax for tracking. **This plan halts at the plan stage during the spec-first phase; do not execute without explicit user greenlight.**
 
 **Goal:** Stand up the Norse hosting layer — four library packages (`Norse.Abstractions.Hosting`, `Norse.Hosting.Web`, `Norse.Hosting.Worker`, `Norse.Hosting.Migrations.Service`), the cross-cutting `Norse.Hosting.ServiceDefaults`, three deployable host templates (`Norse.Hosting.Web.Server`, `Norse.Hosting.Worker`, `Norse.Hosting.Migrations.Service`), and the local-dev Aspire orchestrator (`Norse.Hosting.AppHost`). This is the foundation every future context plugin (Auth, Billing, Claims, …) builds on.
 

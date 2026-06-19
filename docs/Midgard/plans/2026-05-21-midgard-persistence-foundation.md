@@ -1,6 +1,6 @@
 # Norse.Infrastructure.Persistence Foundation Implementation Plan (Plan A of 4)
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **This plan halts at the plan stage during the spec-first phase; do not execute without explicit user greenlight.**
+> **For agentic workers:** REQUIRED SUB-SKILL: superpowers:subagent-driven-development is the default — use it to implement this plan task-by-task; superpowers:executing-plans is the narrow fallback, only when the work specifically needs a separate session with human review checkpoints, never an interchangeable alternative. Pair either with superpowers:test-driven-development for every implementation task — orchestration sequences tasks, TDD governs how each one is coded. Steps use checkbox (`- [ ]`) syntax for tracking. **This plan halts at the plan stage during the spec-first phase; do not execute without explicit user greenlight.**
 
 **Goal:** Stand up the `norse-abstractions-infrastructure` submodule with two .NET 10 class library projects — `Norse.Abstractions.Contracts` (Mongo-side wire-shape markers) and `Norse.Abstractions.Infrastructure` (repository contracts, EF-entity marker hierarchy, `TstzRange` value type). Pure compile-time types; concrete implementations come in Plan B (Postgres), Plan C (Mongo), and Plan D (reference data + worked example).
 
@@ -2307,9 +2307,4 @@ All type references match between declaration and use.
 
 Per the spec-first-phase memory: this plan halts at the plan stage. Do not execute without explicit greenlight from the user.
 
-When the user signals readiness to execute, the two execution options are:
-
-1. **Subagent-Driven (recommended for larger plans)** — fresh subagent per task, review between tasks, fast iteration with `superpowers:subagent-driven-development`.
-2. **Inline Execution** — execute tasks in-session using `superpowers:executing-plans`, batch execution with checkpoints.
-
-For this plan (32 tasks, all 🟢, mechanically straightforward), inline execution is likely the right pick — there's no exploration cost, each task's output is well-defined, and the review cadence per-task would be heavier than the work.
+When the user signals readiness to execute, `superpowers:subagent-driven-development` is the default — fresh subagent per task, review between tasks. `superpowers:executing-plans` (inline, in-session, batch checkpoints) is the narrow fallback, used only when the work specifically needs a separate session with human review checkpoints — not chosen for being mechanically straightforward or low-exploration. This plan's 32 tasks being 🟢 and well-defined is not, on its own, a reason to skip subagent orchestration.
