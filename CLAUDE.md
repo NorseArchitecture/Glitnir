@@ -1,5 +1,15 @@
 # CLAUDE.md — Glitnir (Enterprise .NET Platform — Design Court)
 
+## 0. Wrong Root — Halt
+
+If you are reading this because **Glitnir itself is the Claude Code session root** — someone ran `claude` from inside this directory instead of `../Bifrost` — stop here. Do not read further, do not propose changes, do not run anything.
+
+Tell the user: every Norse Architecture session starts from **Bifrost**. Org-wide settings (the `superpowers` plugin, permission rules) only apply when Bifrost is the actual session root — Claude Code never merges a submodule's own `.claude/settings.json` into a parent-launched session. Exit, `cd ../Bifrost`, and run `claude` there instead.
+
+This repo's own `.claude/settings.json` carries a `SessionStart` hook that should already have blocked this session before this file was ever read. If you're reading this anyway, hooks were bypassed, disabled, or failed — halt regardless; this rule does not depend on the hook to hold.
+
+---
+
 Authoritative cold-start context for any Claude Code session in this repo. Read top to bottom before proposing anything. Where a rule here conflicts with a default behavior, this file wins.
 
 ---
