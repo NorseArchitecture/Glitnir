@@ -422,8 +422,8 @@ This spec creates the following inbox items for downstream work, in the order th
 ## 12. References
 
 - CLAUDE.md §2.5 (simplicity over ceremony), §2.6 (hard-fail on ambiguity), §2.7 (push errors upstream), §3 (bounded contexts), §4 (hosting + plugin model), §5 (naming and project layout), §6 (codename registry), §7 #3 (auth federation open question).
-- `docs/superpowers/specs/2026-05-19-architecture-analyzers-design.md` — gains `YGG110` in a follow-up.
-- `docs/superpowers/specs/2026-05-20-svartalfheim-primitives-design.md` — `Result<T>` shape is the return type for auth flows that can fail (parser-style, not exception-style).
+- `docs/Platform/specs/2026-05-19-architecture-analyzers-design.md` — gains `YGG110` in a follow-up.
+- `docs/Svartalfheim/specs/2026-05-20-svartalfheim-primitives-design.md` — `Result<T>` shape is the return type for auth flows that can fail (parser-style, not exception-style).
 - OAuth 2.1 draft — `draft-ietf-oauth-v2-1`.
 - OpenID Connect Core 1.0.
 - RFC 7009 — OAuth 2.0 Token Revocation.

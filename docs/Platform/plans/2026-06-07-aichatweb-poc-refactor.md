@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Execute the three staged swaps in `poc/aichatweb/VoyageEmbeddings` — Ollama chat → Anthropic SDK, Ollama embeddings → new `Voyage.Extensions.AI` adapter, Qdrant → MongoDB atlas-local — per `docs/superpowers/specs/2026-06-07-aichatweb-poc-refactor-design.md`.
+**Goal:** Execute the three staged swaps in `poc/aichatweb/VoyageEmbeddings` — Ollama chat → Anthropic SDK, Ollama embeddings → new `Voyage.Extensions.AI` adapter, Qdrant → MongoDB atlas-local — per `docs/Platform/specs/2026-06-07-aichatweb-poc-refactor-design.md`.
 
 **Architecture:** All three swaps happen behind Microsoft.Extensions.AI / Microsoft.Extensions.VectorData abstractions already in the template. A new classlib `Voyage.Extensions.AI` (the OSS seed) implements `IEmbeddingGenerator<string, Embedding<float>>` over Voyage's REST API with constructor-pinned `input_type`. Three stage gates; the app runs after each.
 
@@ -1360,7 +1360,7 @@ Structure it per spec §9's docket — one section per item, written from what a
 ```markdown
 # aichatweb POC — Findings (2026-06-XX)
 
-Feeds back into docs/superpowers/specs/2026-06-07-vector-embeddings-decision-inputs.md §5.
+Feeds back into docs/Platform/specs/2026-06-07-vector-embeddings-decision-inputs.md §5.
 
 ## 1. Anthropic SDK MEAI adapter
 [streaming fidelity, function invocation behavior, ConversationId/statelessness, anything A2 would have been needed for]

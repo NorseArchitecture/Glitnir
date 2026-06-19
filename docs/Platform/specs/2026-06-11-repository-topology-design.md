@@ -32,7 +32,7 @@ Development and AI sessions start at the **Bifrost workspace root** (`git clone 
 
 - **Bifrost root `CLAUDE.md` is the constitution** — the cold-start law for any session in the workspace. The bulk of Glitnir's current CLAUDE.md (§1–§8: principles, decisions, naming, anti-patterns) graduates there when Bifrost's root context is authored.
 - **Glitnir's `CLAUDE.md` narrows to court procedure** — how to file a spec, directory layout, the reconciliation tracker, the crooked path.
-- **Each realm repo's `CLAUDE.md`** carries that realm's distilled binding rules plus relative pointers (`../Glitnir/docs/superpowers/specs/...`) valid from the workspace by construction. The contract travels with the code; the case law stays in the hall.
+- **Each realm repo's `CLAUDE.md`** carries that realm's distilled binding rules plus relative pointers (`../Glitnir/docs/{realm}/specs/...`) valid from the workspace by construction. The contract travels with the code; the case law stays in the hall.
 
 The rationale is mechanical, not aesthetic: session context is **push** (CLAUDE.md, loaded automatically) plus **pull** (specs, read on demand). Proximity of spec files to code buys nothing; correctness of each repo's CLAUDE.md buys everything. And the court's highest-value workflows — the spec-reconciliation ledger, supersession sweeps, codename sweeps — depend on grepping the entire body of law in one namespace. Distributing the specs would fork the ledger into N ledgers across N checkouts.
 

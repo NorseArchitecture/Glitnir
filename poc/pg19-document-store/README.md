@@ -2,7 +2,7 @@
 
 **Status:** Reconnaissance against PG19 **beta1** (`postgres:19beta1-trixie`). Findings are dated against beta1 and MUST be re-verified at RC1. Sibling to `pg19-temporal`; this POC proves the system-time temporal model (proven there) coexists with a jsonb document store on the same primary.
 
-**Spec context:** `docs/superpowers/specs/2026-06-16-postgres-document-store-decision-inputs.md`. The question this POC informs:
+**Spec context:** `docs/Platform/specs/2026-06-16-postgres-document-store-decision-inputs.md`. The question this POC informs:
 
 > Can PostgreSQL serve the operational read store directly — jsonb documents the HTTP tier fetches from a **streaming read replica** — well enough to cull MongoDB as a runtime dependency entirely, with the failure-domain isolation of the Mongo design preserved?
 

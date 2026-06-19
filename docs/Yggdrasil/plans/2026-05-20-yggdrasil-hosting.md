@@ -8,7 +8,7 @@
 
 **Tech Stack:** .NET 10 / C# 13, ASP.NET Core 10, Grpc.AspNetCore, EF Core 10, Aspire 9, OpenTelemetry, xUnit, Shouldly, NSubstitute.
 
-**Companion spec:** `docs/superpowers/specs/2026-05-20-norse-hosting-design.md`. Read §4 (lifecycle rule), §5 (plugin interface family), §7 (visibility model), §7.1 (webhook controller base class), and §10 (migrations service) before starting. Every design decision is justified in the spec.
+**Companion spec:** `docs/Yggdrasil/specs/2026-05-20-yggdrasil-hosting-design.md`. Read §4 (lifecycle rule), §5 (plugin interface family), §7 (visibility model), §7.1 (webhook controller base class), and §10 (migrations service) before starting. Every design decision is justified in the spec.
 
 ---
 
@@ -23,7 +23,7 @@ Every "Commit" step ends with `git add` ONLY. The human reviews the diff and run
 - **`InfrastructureDbContext` base** — defined in the future `norse-infrastructure-persistence` spec. Plugin code in this plan that calls `.UseSnakeCaseNamingConvention()` assumes it; the migrations test fixtures use a small local DbContext until persistence lands.
 - **`JsonControllerBase<TService>`** — defined in the future `midgard-api` spec. This plan creates the `IPublishedController` marker interface and the OpenAPI doc filter; `JsonControllerBase<TService>` will implement the marker when it ships.
 - **Webhook dispatch abstraction** — *(amended 2026-06-03: CLAUDE.md §7 #2 is RESOLVED — NServiceBus 10.2. `IWebhookDispatcher` is deleted from the design; webhook controllers dispatch via NServiceBus's `IMessageSession` directly, test seam `NServiceBus.Testing.TestableMessageSession`. See the messaging-amendment note below and hosting spec §7.1.)*
-- **Product-tier hosting-abstractions layer** — does NOT exist. Per-context plugins implement `Norse.Abstractions.Hosting.IWebHostPlugin` / `IWorkerHostPlugin` directly from their `{Company}.{Context}.Server` / `{Company}.{Context}.Worker` assemblies. MGA-specific cross-cutting (audit, `NorsePrincipal` flow) is shared middleware configured at the Norse host runtime, not interface extensions. *(Tenancy removed from this list 2026-06-03 — stamp-per-tenant, see `docs/superpowers/specs/2026-06-03-tenancy-model-design.md`.)*
+- **Product-tier hosting-abstractions layer** — does NOT exist. Per-context plugins implement `Norse.Abstractions.Hosting.IWebHostPlugin` / `IWorkerHostPlugin` directly from their `{Company}.{Context}.Server` / `{Company}.{Context}.Worker` assemblies. MGA-specific cross-cutting (audit, `NorsePrincipal` flow) is shared middleware configured at the Norse host runtime, not interface extensions. *(Tenancy removed from this list 2026-06-03 — stamp-per-tenant, see `docs/Platform/specs/2026-06-03-tenancy-model-design.md`.)*
 - **Per-context plugins** (`AuthPlugin`, `BillingPlugin`, …) — each has its own spec and plan; this one just makes the host able to load them.
 - **Production K8s manifests** — operations territory; this plan covers the binary's behavior, not deployment topology.
 
@@ -144,7 +144,7 @@ Norse.Hosting.AppHost/                             # NEW: Aspire orchestrator
 
 > **Restructure note:** the original draft of this plan placed `Norse.Abstractions.Hosting` (then `Norse.Hosting.Abstractions`) nested under `Norse.Hosting/`. Under the five-realm split landed in CLAUDE.md §5, the plugin contracts are Abstractions-tier declared law and live in their own submodule (`norse-abstractions-hosting`); the concrete runtimes stay Norse-tier (`norse-hosting`). Per-task commands further down still reference the legacy nested path in some places — when executing, paths like `Norse.Hosting/src/Norse.Abstractions.Hosting/...` should resolve to `Norse.Abstractions.Hosting/src/Norse.Abstractions.Hosting/...`, and the solution files split accordingly. The namespace inside each contract file is `Norse.Abstractions.Hosting` (or a nested sub-namespace like `Norse.Abstractions.Hosting.Migrations` / `Norse.Abstractions.Hosting.Webhooks`), not `Norse.Hosting`.
 
-> **Messaging amendment note (2026-06-03):** CLAUDE.md §7 #2 is RESOLVED — NServiceBus 10.2 (`docs/superpowers/specs/2026-06-03-messaging-foundation-design.md`). Consequences for this plan, to reconcile before executing the webhook tasks:
+> **Messaging amendment note (2026-06-03):** CLAUDE.md §7 #2 is RESOLVED — NServiceBus 10.2 (`docs/Platform/specs/2026-06-03-messaging-foundation-design.md`). Consequences for this plan, to reconcile before executing the webhook tasks:
 > 1. **`IWebhookDispatcher` does not exist.** Task 6's dispatcher step is void (marked inline). `WebhookControllerBase<TCommand>` takes NServiceBus's `IMessageSession` and calls `await session.Send(command, ct)`.
 > 2. **Tests use `NServiceBus.Testing.TestableMessageSession`**, not an NSubstitute dispatcher double. Mirror the amended worked example in hosting spec §7.1.
 > 3. **`WebhookControllerBase` lives in `Norse.Hosting.Web`** (concrete MVC infrastructure), not `Norse.Abstractions.Hosting` — Task 7's file paths must follow spec §7.1's placement (contracts in `Norse.Abstractions.Hosting`, base class in `Norse.Hosting.Web`).
@@ -350,7 +350,7 @@ The plugin runtime for the Norse platform. Four NuGet packages:
 - **Norse.Hosting.Worker** — concrete worker-host runtime: `AddNorseWorkerHost()`, background-service plugin lifecycle.
 - **Norse.Hosting.Migrations.Service** — migrations orchestrator with health-signal-gated readiness; never exits non-zero on failure.
 
-Spec: `docs/superpowers/specs/2026-05-20-norse-hosting-design.md` in the meta-repo.
+Spec: `docs/Yggdrasil/specs/2026-05-20-yggdrasil-hosting-design.md` in the meta-repo.
 ```
 
 - [ ] **Step 7: Create the Norse.Hosting solution**

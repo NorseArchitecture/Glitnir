@@ -1,8 +1,8 @@
 # aichatweb POC — Findings
 
-**Status:** Living document, opened 2026-06-07 mid-execution (at Buvy's request, while Stage ② ingestion was running). Sections marked ⏳ await live verification of the remaining stages. Feeds back into `docs/superpowers/specs/2026-06-07-vector-embeddings-decision-inputs.md` §5 and, downstream, the Mimir spec.
+**Status:** Living document, opened 2026-06-07 mid-execution (at Buvy's request, while Stage ② ingestion was running). Sections marked ⏳ await live verification of the remaining stages. Feeds back into `docs/Platform/specs/2026-06-07-vector-embeddings-decision-inputs.md` §5 and, downstream, the Mimir spec.
 
-Plan: `docs/superpowers/plans/2026-06-07-aichatweb-poc-refactor.md`. Spec: `docs/superpowers/specs/2026-06-07-aichatweb-poc-refactor-design.md`.
+Plan: `docs/Platform/plans/2026-06-07-aichatweb-poc-refactor.md`. Spec: `docs/Platform/specs/2026-06-07-aichatweb-poc-refactor-design.md`.
 
 ---
 

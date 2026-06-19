@@ -8,7 +8,7 @@
 
 **Tech Stack:** .NET 11 preview / C# 15 (native unions, runtime-async-V2), xUnit, Shouldly, NSubstitute, FsCheck, BenchmarkDotNet.
 
-**Companion spec:** `docs/superpowers/specs/2026-05-20-svartalfheim-primitives-design.md`. Read it before starting; every design decision is justified there.
+**Companion spec:** `docs/Svartalfheim/specs/2026-05-20-svartalfheim-primitives-design.md`. Read it before starting; every design decision is justified there.
 
 **Out of scope (separate plans / specs):**
 - `YGG201` diagnostic implementation in `norse-primitives-architecture` (this plan defines the attribute; the analyzer ships elsewhere).
@@ -159,7 +159,7 @@ No commit (throwaway).
 		Inherited by every submodule and subdirectory via MSBuild's implicit-import behavior.
 		Each project declares its tier via <NorseTier> in its csproj.
 		The tier translates to runtime-async on/off and AOT settings.
-		See: docs/superpowers/specs/2026-05-20-svartalfheim-primitives-design.md §9.
+		See: docs/Svartalfheim/specs/2026-05-20-svartalfheim-primitives-design.md §9.
 	-->
 
 	<PropertyGroup>
@@ -311,7 +311,7 @@ SOFTWARE.
 
 Foundational primitives for the Norse platform.
 
-See `docs/superpowers/specs/2026-05-20-svartalfheim-primitives-design.md` in the meta-repo for design rationale.
+See `docs/Svartalfheim/specs/2026-05-20-svartalfheim-primitives-design.md` in the meta-repo for design rationale.
 
 (README content is finalized in Task 35.)
 ```
@@ -2682,7 +2682,7 @@ Foundational primitives for the Norse platform: `Result<T>`, a canonical `Error`
 
 Every boundary the platform crosses — file ingestion, HTTP, third-party APIs, message deserialization — must return a value the caller cannot ignore and cannot mishandle silently. Norse.Primitives provides the type-level enforcement: `Result<T>` is a closed union (`Success<T>` or `Failure(Error)`), `[MustConsume]` rejects discarded results at compile time, and the parser gateway makes culture-mandatory parsing the only available shape.
 
-See `docs/superpowers/specs/2026-05-20-svartalfheim-primitives-design.md` in the meta-repo for the full design rationale.
+See `docs/Svartalfheim/specs/2026-05-20-svartalfheim-primitives-design.md` in the meta-repo for the full design rationale.
 
 ## Quick start
 
@@ -2791,7 +2791,7 @@ Report results to user. Do not commit the cumulative work — every task above a
 
 ## Self-Review Checklist (run before handing off)
 
-1. **Spec coverage** — every section of `docs/superpowers/specs/2026-05-20-svartalfheim-primitives-design.md` has at least one task implementing it:
+1. **Spec coverage** — every section of `docs/Svartalfheim/specs/2026-05-20-svartalfheim-primitives-design.md` has at least one task implementing it:
    - §4 Result + Error + ParseError → Tasks 7, 8, 9, 10
    - §5 Pattern matching → Task 10 (XML doc) + ResultTests in Task 7
    - §6 Parser gateway → Tasks 11, 12, 13

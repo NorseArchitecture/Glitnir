@@ -1,7 +1,7 @@
 # Build Enforcement POC
 
 Self-contained replica proving the MSBuild enforcement law before it seeds the
-real Glitnir root. Spec: `docs/superpowers/specs/2026-06-05-build-enforcement-design.md`.
+real Glitnir root. Spec: `docs/Platform/specs/2026-06-05-build-enforcement-design.md`.
 
 ## Layout
 

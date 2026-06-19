@@ -34,7 +34,7 @@ Nothing below `Norse.*` is shared between the three. That gap *is* the design.
 
 Three commitments separate this from how software usually gets made — and each is a selling point, not a slogan:
 
-1. **Spec-first, plan-second, code-last.** A deliberate inversion of vibe coding. Contradictions are surfaced and resolved in markdown, while they cost nothing — not discovered in production. (The case law lives in `docs/superpowers/specs/`.)
+1. **Spec-first, plan-second, code-last.** A deliberate inversion of vibe coding. Contradictions are surfaced and resolved in markdown, while they cost nothing — not discovered in production. (The case law lives in `docs/{realm}/specs/` — one folder per realm, plus `docs/Platform/specs/` for decisions with no single-realm owner.)
 2. **Pit of success.** The easy path is the only path that compiles. Wrong usage doesn't bind, doesn't build, doesn't run. Compile-time enforcement over runtime hope.
 3. **Fail loud, fail fast, fail upstream.** No silent fallbacks. A missing rate factor is a hard error, not a quiet `1.0`. Insurance — or energy billing — silently coerced toward "no effect" is software that mispriced something real.
 
@@ -63,7 +63,7 @@ Glitnir rides inside Bifrost at `./Glitnir`, so the entire record is on disk in 
 ## Finding Your Way
 
 - [`CLAUDE.md`](CLAUDE.md) — the session law: architecture principles, decision rules, anti-patterns, open questions
-- [`docs/superpowers/specs/`](docs/superpowers/specs/) — the case law itself (start with the multi-product platform design and the repository topology design)
+- `docs/{realm}/specs/` and `docs/{realm}/plans/` — the case law itself, one pair of folders per realm (`docs/Svartalfheim/`, `docs/Midgard/`, …); [`docs/Platform/specs/`](docs/Platform/specs/) holds decisions with no single-realm owner (start with the multi-product platform design and the repository topology design)
 - [`docs/codenames.md`](docs/codenames.md) — the ethos⇒function dictionary (Norse only; do not mix pantheons)
 - [`docs/the-crooked-path.md`](docs/the-crooked-path.md) — the reversal ledger; the part worth teaching
 - [`docs/decomposition.md`](docs/decomposition.md) — bounded-context map and repository map

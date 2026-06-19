@@ -6,7 +6,7 @@
 
 **Goal:** Stand up the Svartalfheim repository (`Norse.Primitives`) with the `Result<T>` custom native union, its case types, and `BooleanParser` — fully test-covered.
 
-**Architecture:** `Result<T>` is a hand-authored C# 15 custom union (`[Union]` readonly record struct with inline typed storage and the non-boxing access pattern) over two case types, `Success<T>` and `Failure`. `BooleanParser` is a static specialist parser returning `Result<bool>` / `Result<bool>?` with the full ten-pair Crucible vocabulary via `FrozenSet` alternate lookup. Spec: `docs/superpowers/specs/2026-06-11-svartalfheim-result-union-boolean-parser-design.md`.
+**Architecture:** `Result<T>` is a hand-authored C# 15 custom union (`[Union]` readonly record struct with inline typed storage and the non-boxing access pattern) over two case types, `Success<T>` and `Failure`. `BooleanParser` is a static specialist parser returning `Result<bool>` / `Result<bool>?` with the full ten-pair Crucible vocabulary via `FrozenSet` alternate lookup. Spec: `docs/Svartalfheim/specs/2026-06-11-svartalfheim-result-union-boolean-parser-design.md`.
 
 **Tech Stack:** .NET 11 preview 5 (SDK `11.0.100-preview.5.26302.115`), C# `LangVersion=preview`, xUnit v3 on Microsoft.Testing.Platform (`xunit.v3.mtp-v2`), Shouldly.
 

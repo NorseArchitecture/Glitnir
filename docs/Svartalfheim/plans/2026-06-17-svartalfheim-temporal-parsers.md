@@ -8,7 +8,7 @@
 
 **Tech Stack:** .NET 11 preview (SDK pinned by `global.json`, `LangVersion=preview`), C# 15 custom unions, xUnit v3 + Shouldly on Microsoft.Testing.Platform, Native AOT smoke.
 
-**Spec:** `../Glitnir/docs/superpowers/specs/2026-06-17-svartalfheim-temporal-parsers-design.md` (paths relative to the Svartalfheim repo root, where all work happens).
+**Spec:** `../Glitnir/docs/Svartalfheim/specs/2026-06-17-svartalfheim-temporal-parsers-design.md` (paths relative to the Svartalfheim repo root, where all work happens).
 
 ## Global Constraints
 

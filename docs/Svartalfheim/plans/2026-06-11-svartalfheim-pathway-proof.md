@@ -1080,7 +1080,7 @@ If any claim fails, that is a finding, not a defect to hide — record it and co
 ### Task 7: Court filings and boy-scout docs
 
 **Files:**
-- Modify: `../Glitnir/docs/superpowers/specs/2026-06-11-svartalfheim-pathway-proof-design.md` (append findings)
+- Modify: `../Glitnir/docs/Svartalfheim/specs/2026-06-11-svartalfheim-pathway-proof-design.md` (append findings)
 - Modify: `CLAUDE.md` (realm)
 - Modify: `README.md` (realm)
 
@@ -1128,7 +1128,7 @@ Three edits:
 1. In **Authoritative documents**, insert as the new item 1 (renumber the rest):
 
 ```markdown
-1. `../Glitnir/docs/superpowers/specs/2026-06-11-svartalfheim-pathway-proof-design.md` — the second-increment spec (gateway, combinators, evidence rigs), amended with benchmark findings. (Its execution plan sits beside it under `plans/`.)
+1. `../Glitnir/docs/Svartalfheim/specs/2026-06-11-svartalfheim-pathway-proof-design.md` — the second-increment spec (gateway, combinators, evidence rigs), amended with benchmark findings. (Its execution plan sits beside it under `plans/`.)
 ```
 
 2. In **Architecture Facts**, append:
@@ -1184,7 +1184,7 @@ git status
 In the court (`../Glitnir`):
 
 ```powershell
-git -C ../Glitnir add docs/superpowers/specs/2026-06-11-svartalfheim-pathway-proof-design.md docs/superpowers/plans/2026-06-11-svartalfheim-pathway-proof.md
+git -C ../Glitnir add docs/Svartalfheim/specs/2026-06-11-svartalfheim-pathway-proof-design.md docs/Svartalfheim/plans/2026-06-11-svartalfheim-pathway-proof.md
 git -C ../Glitnir status
 ```
 

@@ -2,7 +2,7 @@
 
 **Status:** Approved 2026-06-07. Greenlit through implementation (spec → plan → subagent execution) by Buvy in the same session.
 
-**Scope:** `poc/aichatweb/VoyageEmbeddings` only. This is POC-land — proving the stack before any verdict reaches the platform realms. Findings feed `docs/superpowers/specs/2026-06-07-vector-embeddings-decision-inputs.md` (§5 "findings return here for a ruling") and, downstream, the AI spec.
+**Scope:** `poc/aichatweb/VoyageEmbeddings` only. This is POC-land — proving the stack before any verdict reaches the platform realms. Findings feed `docs/Platform/specs/2026-06-07-vector-embeddings-decision-inputs.md` (§5 "findings return here for a ruling") and, downstream, the AI spec.
 
 ---
 

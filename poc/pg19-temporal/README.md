@@ -2,7 +2,7 @@
 
 **Status:** Reconnaissance against PG19 **beta1** (scheduled 2026-06-04). Findings are dated against beta1 and MUST be re-verified at RC1 — two of the five matrix rows correspond to known [PG19 open items](https://wiki.postgresql.org/wiki/PostgreSQL_19_Open_Items) and may change before GA.
 
-**Spec context:** `docs/superpowers/specs/2026-06-04-norns-design.md` §6.4 (storage-model split) and §14 open question #2 (PG19 adoption). The question this POC informs:
+**Spec context:** `docs/Platform/specs/2026-06-04-norns-design.md` §6.4 (storage-model split) and §14 open question #2 (PG19 adoption). The question this POC informs:
 
 > Does `FOR PORTION OF` change the history-table (Model B) vs. single-table (Model A) dynamic for **system-time** versioning?
 

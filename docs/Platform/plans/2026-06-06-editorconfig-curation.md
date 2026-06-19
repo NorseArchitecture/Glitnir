@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Land the full style law from `docs/superpowers/specs/2026-06-05-editorconfig-curation-design.md` in the `poc/build` replica, prove it with harness canaries, and produce a `.slnx` Buvy can open in Visual Studio for the muscle-memory test drive.
+**Goal:** Land the full style law from `docs/Platform/specs/2026-06-05-editorconfig-curation-design.md` in the `poc/build` replica, prove it with harness canaries, and produce a `.slnx` Buvy can open in Visual Studio for the muscle-memory test drive.
 
 **Architecture:** Same proven pattern as Phase 1 — everything lands in the `poc/build` replica first; real-tree seeding is a later, separate pass. The root `.editorconfig` replaces the three-line seed with the complete declared law. New style canaries ride the existing `EnableCanaries` toggle (via conditional `<Compile Remove>`, not `#if`, to dodge disabled-text ambiguity). A Razor class library probe joins `src/` for the Ctrl+K,D acceptance check. The harness grows IDE canaries, an inverse canary, and landing assertions.
 
@@ -29,7 +29,7 @@
 | `CLAUDE.md` §4, §8 | Amendments per spec §10 | 10 |
 | `docs/conventions.md` | Async elide law + tuple idiom | 10 |
 | `docs/spec-reconciliation-2026-06-04.md` | Check off 4.2 Phase 2 mechanics | 10 |
-| `docs/superpowers/specs/2026-06-05-build-enforcement-design.md` | §5 `src/` delta gains JSON switch | 10 |
+| `docs/Platform/specs/2026-06-05-build-enforcement-design.md` | §5 `src/` delta gains JSON switch | 10 |
 
 ---
 
@@ -49,7 +49,7 @@ The complete file. Tier convention: error tier is unmarked; every silent entry c
 
 ```ini
 # Root style law — Phase 2 of build enforcement.
-# Spec: docs/superpowers/specs/2026-06-05-editorconfig-curation-design.md
+# Spec: docs/Platform/specs/2026-06-05-editorconfig-curation-design.md
 # Tier convention: error tier is unmarked; silent tier carries "# judgment:" with its reason.
 # Frozen-at-stock: options with no session ruling are declared at Roslyn's stock value to freeze them.
 root = true
@@ -850,7 +850,7 @@ Suggested commit: `Add VS test-drive checklist and Phase 2 findings appendix`
 - Modify: `CLAUDE.md` (§4 Runtime and Language; §8 Type Safety)
 - Modify: `docs/conventions.md`
 - Modify: `docs/spec-reconciliation-2026-06-04.md` (item 4.2)
-- Modify: `docs/superpowers/specs/2026-06-05-build-enforcement-design.md` (§5)
+- Modify: `docs/Platform/specs/2026-06-05-build-enforcement-design.md` (§5)
 
 - [ ] **Step 1: CLAUDE.md §4 — tab width + the codified law**
 
@@ -883,7 +883,7 @@ Append to `docs/conventions.md`:
 
 ## Style Law
 
-The complete style, formatting, and naming law lives in the root `.editorconfig`, designed in `docs/superpowers/specs/2026-06-05-editorconfig-curation-design.md`. Headline rules: tabs (width 4); var everywhere except construction (type left, `new()` right); file-scoped namespaces; `omit_if_default` accessibility; `_camelCase` private fields; collection expressions (`[]` is the only legal empty); IDE0005 unnecessary-using as build error.
+The complete style, formatting, and naming law lives in the root `.editorconfig`, designed in `docs/Platform/specs/2026-06-05-editorconfig-curation-design.md`. Headline rules: tabs (width 4); var everywhere except construction (type left, `new()` right); file-scoped namespaces; `omit_if_default` accessibility; `_camelCase` private fields; collection expressions (`[]` is the only legal empty); IDE0005 unnecessary-using as build error.
 ```
 
 - [ ] **Step 4: Reconciliation punch list — close 4.2 Phase 2 mechanics**
@@ -891,12 +891,12 @@ The complete style, formatting, and naming law lives in the root `.editorconfig`
 In `docs/spec-reconciliation-2026-06-04.md` item 4.2, append after the absorbed-mechanics bullet list:
 
 ```markdown
-**Phase 2 executed (2026-06-06):** `.editorconfig` curated per `docs/superpowers/specs/2026-06-05-editorconfig-curation-design.md` — `omit_if_default` ✓, CA1848/CA2254 ✓ (category-knob reach, canary-proven), CA1727 ✓ (targeted severity), CA1852 ✓ (canary-proven), `JsonSerializerIsReflectionEnabledByDefault` ✓ (relocated to `src/`-only delta by ruling), root config files ✓ (committed 2026-06-05). Remaining from 4.2: real-tree seeding, `UseProjectReferences` session.
+**Phase 2 executed (2026-06-06):** `.editorconfig` curated per `docs/Platform/specs/2026-06-05-editorconfig-curation-design.md` — `omit_if_default` ✓, CA1848/CA2254 ✓ (category-knob reach, canary-proven), CA1727 ✓ (targeted severity), CA1852 ✓ (canary-proven), `JsonSerializerIsReflectionEnabledByDefault` ✓ (relocated to `src/`-only delta by ruling), root config files ✓ (committed 2026-06-05). Remaining from 4.2: real-tree seeding, `UseProjectReferences` session.
 ```
 
 - [ ] **Step 5: Build-enforcement spec §5 — the `src/` delta**
 
-In `docs/superpowers/specs/2026-06-05-build-enforcement-design.md` §5, the `src/Directory.Build.props` snippet becomes:
+In `docs/Platform/specs/2026-06-05-build-enforcement-design.md` §5, the `src/Directory.Build.props` snippet becomes:
 
 ```xml
 	<PropertyGroup>
@@ -913,7 +913,7 @@ with the sentence: "The JSON source-gen switch is a `src/`-only delta by ruling 
 - [ ] **Step 6: Checkpoint — stage and show diff**
 
 ```
-git add CLAUDE.md docs/conventions.md docs/spec-reconciliation-2026-06-04.md docs/superpowers/specs/2026-06-05-build-enforcement-design.md
+git add CLAUDE.md docs/conventions.md docs/spec-reconciliation-2026-06-04.md docs/Platform/specs/2026-06-05-build-enforcement-design.md
 ```
 Suggested commit: `Apply editorconfig spec amendments — tab width 4, null collections, async laws`
 

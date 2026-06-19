@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Prove the MSBuild enforcement law (spec: `docs/superpowers/specs/2026-06-05-build-enforcement-design.md`) end-to-end as a self-contained replica under `poc/build/`, producing a verdict (`FINDINGS.md`) that later seeds the real Glitnir root.
+**Goal:** Prove the MSBuild enforcement law (spec: `docs/Platform/specs/2026-06-05-build-enforcement-design.md`) end-to-end as a self-contained replica under `poc/build/`, producing a verdict (`FINDINGS.md`) that later seeds the real Glitnir root.
 
 **Architecture:** `poc/build/` replicates the full tree taxonomy — replica root law, governed layers (`src/`, `tests/`, `benchmarks/`) chained via `GetPathOfFileAbove`, severed floors (`poc/`, `tests/smoke/`) — plus probe projects with `#if CANARY` violations and a PowerShell harness asserting properties land and diagnostics fire **as errors**. Follows the `poc/pg19-temporal/` house pattern (self-contained folder, own script, `FINDINGS.md`).
 
@@ -50,7 +50,7 @@ artifacts/
 # Build Enforcement POC
 
 Self-contained replica proving the MSBuild enforcement law before it seeds the
-real Glitnir root. Spec: `docs/superpowers/specs/2026-06-05-build-enforcement-design.md`.
+real Glitnir root. Spec: `docs/Platform/specs/2026-06-05-build-enforcement-design.md`.
 
 ## Layout
 
@@ -655,7 +655,7 @@ Halt for human commit.
 <#
 .SYNOPSIS
 	Verifies the MSBuild enforcement law lands and behaves.
-	Spec: docs/superpowers/specs/2026-06-05-build-enforcement-design.md
+	Spec: docs/Platform/specs/2026-06-05-build-enforcement-design.md
 	Exit 0 = law verified. Exit 1 = at least one assertion failed.
 #>
 [CmdletBinding()]
@@ -800,7 +800,7 @@ Halt for human commit.
 
 **Files:**
 - Create: `poc/build/FINDINGS.md`
-- Modify: `docs/superpowers/specs/2026-06-05-build-enforcement-design.md` (§8 execution note)
+- Modify: `docs/Platform/specs/2026-06-05-build-enforcement-design.md` (§8 execution note)
 - Modify: `docs/spec-reconciliation-2026-06-04.md` (§4.2 status)
 
 - [ ] **Step 1: Write `poc/build/FINDINGS.md`** — the verdict, from observed reality
@@ -849,7 +849,7 @@ Skeleton below; every `(observed)` slot is filled from the actual harness run an
 
 - [ ] **Step 2: Amend the spec with the execution note**
 
-In `docs/superpowers/specs/2026-06-05-build-enforcement-design.md`, insert immediately after the `## 8. File Inventory` heading:
+In `docs/Platform/specs/2026-06-05-build-enforcement-design.md`, insert immediately after the `## 8. File Inventory` heading:
 
 ```markdown
 > **Execution note (2026-06-05):** Per directive, this design is proven first as a
@@ -863,7 +863,7 @@ In `docs/spec-reconciliation-2026-06-04.md`, locate section `### ☐ 4.2 Build-e
 
 ```markdown
 **Status (2026-06-05):** MSBuild-law phase designed
-(`docs/superpowers/specs/2026-06-05-build-enforcement-design.md`) and proven in the
+(`docs/Platform/specs/2026-06-05-build-enforcement-design.md`) and proven in the
 `poc/build/` replica (see its `FINDINGS.md`). Remaining: `.editorconfig` phase
 (Phase 2), real-tree seeding, and the `UseProjectReferences` switching session.
 ```
@@ -871,7 +871,7 @@ In `docs/spec-reconciliation-2026-06-04.md`, locate section `### ☐ 4.2 Build-e
 - [ ] **Step 4: Final staging checkpoint**
 
 ```powershell
-git add poc/build/FINDINGS.md docs/superpowers/specs/2026-06-05-build-enforcement-design.md docs/spec-reconciliation-2026-06-04.md
+git add poc/build/FINDINGS.md docs/Platform/specs/2026-06-05-build-enforcement-design.md docs/spec-reconciliation-2026-06-04.md
 git status --short
 ```
 

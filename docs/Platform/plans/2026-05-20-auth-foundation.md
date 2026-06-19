@@ -8,9 +8,9 @@
 
 **Tech Stack:** .NET 10 / C# 13, ASP.NET Core 10 (cookie authentication + Data Protection), OpenIddict 6.x (server registration only in this plan), xUnit, Shouldly, NSubstitute. *(Amended 2026-06-03: no EF in this plan — Mongo is the identity system of record; the Postgres reporting projection lands with `Norse.Auth.Worker` in Plan B. See auth spec §3.)*
 
-**Companion spec:** `docs/superpowers/specs/2026-05-20-auth-federation-design.md`. Read §3 (architecture), §5 (principal model), and §7.0 (anonymous bootstrap) before starting. Every design decision is justified in the spec.
+**Companion spec:** `docs/Platform/specs/2026-05-20-auth-federation-design.md`. Read §3 (architecture), §5 (principal model), and §7.0 (anonymous bootstrap) before starting. Every design decision is justified in the spec.
 
-> **Amended 2026-06-03:** CLAUDE.md §7 #4 (tenancy) resolved as stamp-per-tenant (`docs/superpowers/specs/2026-06-03-tenancy-model-design.md`). `NorsePrincipal` carries **no** `TenantId` and `ClaimNames` has **no** `nrs:tenant` — the code listings below have been updated; do not re-introduce them.
+> **Amended 2026-06-03:** CLAUDE.md §7 #4 (tenancy) resolved as stamp-per-tenant (`docs/Platform/specs/2026-06-03-tenancy-model-design.md`). `NorsePrincipal` carries **no** `TenantId` and `ClaimNames` has **no** `nrs:tenant` — the code listings below have been updated; do not re-introduce them.
 >
 > **Also amended 2026-06-03 (identity storage):** Mongo is the identity system of record (OpenIddict first-party Mongo stores; custom ASP.NET Identity stores) — see auth spec §3. `Norse.Auth.Server` carries **no** EF reference; Task 20 is void; the Postgres `auth` schema is a reporting projection owned by `Norse.Auth.Worker` (Plan B).
 
@@ -252,7 +252,7 @@ SOFTWARE.
 
 The Auth bounded context for the Norse platform. Implements the federation
 topology and principal model described in
-`docs/superpowers/specs/2026-05-20-auth-federation-design.md`.
+`docs/Platform/specs/2026-05-20-auth-federation-design.md`.
 
 ## Assemblies
 
@@ -2622,16 +2622,16 @@ git add .gitmodules
 
 Proposed commit message: `chore(meta): add norse-auth placeholder to .gitmodules`
 
-### Task 29: Update `docs/superpowers/specs/` cross-references
+### Task 29: Update `docs/Platform/specs/` cross-references
 
 **Files:**
-- Modify: `docs/superpowers/specs/2026-05-20-auth-federation-design.md`
+- Modify: `docs/Platform/specs/2026-05-20-auth-federation-design.md`
 
 Add a note at the top of the spec pointing readers to Plan A. (Plan B–E will append themselves when written.)
 
 - [ ] **Step 1: Edit the spec's frontmatter**
 
-In `docs/superpowers/specs/2026-05-20-auth-federation-design.md`, change the line:
+In `docs/Platform/specs/2026-05-20-auth-federation-design.md`, change the line:
 
 ```
 **Companion specs:** `2026-05-19-architecture-analyzers-design.md` (will gain `YGG110` to forbid `[AllowAnonymous]`); future `auth-identity-contract-design.md` (claim shape detail, role taxonomy); future `auth-authorization-model-design.md` (RBAC/ABAC/policy decisions)
@@ -2641,13 +2641,13 @@ to:
 
 ```
 **Companion specs:** `2026-05-19-architecture-analyzers-design.md` (will gain `YGG110` to forbid `[AllowAnonymous]`); future `auth-identity-contract-design.md` (claim shape detail, role taxonomy); future `auth-authorization-model-design.md` (RBAC/ABAC/policy decisions)
-**Implementation plans:** `docs/superpowers/plans/2026-05-20-auth-foundation.md` (Plan A of 5; B–E forthcoming)
+**Implementation plans:** `docs/Platform/plans/2026-05-20-auth-foundation.md` (Plan A of 5; B–E forthcoming)
 ```
 
 - [ ] **Step 2: Stage**
 
 ```
-git add docs/superpowers/specs/2026-05-20-auth-federation-design.md
+git add docs/Platform/specs/2026-05-20-auth-federation-design.md
 ```
 
 Proposed commit message: `docs(auth): cross-reference Plan A from the auth-federation spec`

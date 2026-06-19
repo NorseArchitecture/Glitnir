@@ -26,4 +26,4 @@ Reference detail relocated from `CLAUDE.md` §5 (which keeps the one-line rules 
 
 ## Style Law
 
-The complete style, formatting, and naming law lives in the root `.editorconfig`, designed in `docs/superpowers/specs/2026-06-05-editorconfig-curation-design.md`. Headline rules: tabs (width 4); var everywhere except construction (type left, `new()` right); file-scoped namespaces; `omit_if_default` accessibility; `_camelCase` private fields; collection expressions (`[]` is the only legal empty); IDE0005 unnecessary-using as build error.
+The complete style, formatting, and naming law lives in the root `.editorconfig`, designed in `docs/Platform/specs/2026-06-05-editorconfig-curation-design.md`. Headline rules: tabs (width 4); var everywhere except construction (type left, `new()` right); file-scoped namespaces; `omit_if_default` accessibility; `_camelCase` private fields; collection expressions (`[]` is the only legal empty); IDE0005 unnecessary-using as build error.

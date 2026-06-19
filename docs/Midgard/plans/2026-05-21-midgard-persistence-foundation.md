@@ -8,7 +8,7 @@
 
 **Tech Stack:** .NET 10 / C# 13, xUnit, Shouldly, NSubstitute (for any mock-based shape testing).
 
-**Companion spec:** `docs/superpowers/specs/2026-05-21-midgard-persistence-design.md`. Read §4 (repository contracts), §5 (marker hierarchy), §10.1 (TstzRange value type), and §14 (realm placement) before starting. Every design decision is justified in the spec.
+**Companion spec:** `docs/Midgard/specs/2026-05-21-midgard-persistence-design.md`. Read §4 (repository contracts), §5 (marker hierarchy), §10.1 (TstzRange value type), and §14 (realm placement) before starting. Every design decision is justified in the spec.
 
 ---
 
@@ -245,7 +245,7 @@ SOFTWARE.
 
 Declared-law contracts for persistence in the Norse platform. Implements the
 contract surface described in
-`docs/superpowers/specs/2026-05-21-midgard-persistence-design.md`.
+`docs/Midgard/specs/2026-05-21-midgard-persistence-design.md`.
 
 ## Assemblies
 
@@ -2303,7 +2303,7 @@ All type references match between declaration and use.
 
 ## Execution Handoff
 
-**Plan complete and staged at `docs/superpowers/plans/2026-05-21-midgard-persistence-foundation.md`.**
+**Plan complete and staged at `docs/Midgard/plans/2026-05-21-midgard-persistence-foundation.md`.**
 
 Per the spec-first-phase memory: this plan halts at the plan stage. Do not execute without explicit greenlight from the user.
 
