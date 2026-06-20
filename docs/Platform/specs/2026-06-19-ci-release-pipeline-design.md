@@ -55,6 +55,8 @@ Nothing additional runs on merge. Branch protection requires a PR branch to be u
 
 A release is cut by a human pushing an annotated tag `vX.Y.Z` on master. That act — a person typing a specific version number — is the audit trail; nothing upstream of it is automated, and nothing infers a version independently of it. **MinVer** (added as a `PackageReference` in each NuGet realm's root `Directory.Build.props`, alongside the existing `AssemblyName`/`RootNamespace` injection) derives the package version *from* that tag at build time. There is exactly one place a version number is ever typed; the build cannot diverge from what the human committed to.
 
+**Pre-release packages follow the identical rule, deliberately — ruled 2026-06-19.** A pre-release is a tag with a SemVer pre-release segment (`v0.1.0-beta.1`), typed by the same human, through the same `git tag` act, triggering the identical release ceremony. There is no second trigger (no auto-publish on feature-branch push, no commit-height-derived prerelease feed) — adding one would mean a package could exist on the feed that nobody deliberately decided to cut, breaking §2.5's absolute claim ("nothing infers a version independently of" the human-typed tag). The existing tag-glob trigger (`v*.*.*`) and MinVer already handle any valid SemVer string with no pipeline change; this is a policy ruling, not an implementation gap.
+
 ### 2.6 NuGet realm release ceremony
 
 Triggered on tag push, `release-nuget.yml`:

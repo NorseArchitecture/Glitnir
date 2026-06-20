@@ -13,7 +13,7 @@
 - **Scope is Svartalfheim only.** Per spec `../Glitnir/docs/Platform/specs/2026-06-19-ci-release-pipeline-design.md` and explicit direction in-session: Svartalfheim ("the dwarven forge") is the sole proving ground this round. Bifrost and every other realm are out of scope — propagating the pattern elsewhere is Buvy's own follow-up, done once this plan's receipts (a green PR run, a published package) exist. Do not add caller workflows to any other repo as part of this plan.
 - **No automatic git commits, pushes, merges, tags, or PR/release creation by the executor — ever, in any repo touched by this plan.** Every Norse Architecture realm's CLAUDE.md restates this; it is platform law, not a per-repo quirk. The executor (subagent or otherwise) edits files, runs `git add`, shows the diff, and **stops**. Buvy personally runs every `git commit`, `git push`, branch-protected merge, `git tag`, and `gh release` action in this plan. After he reports an action is done, the executor may resume using **read-only** `gh`/`git` commands (`gh pr checks`, `gh run view`, `gh ruleset list`, `git fetch`, `git log`) to verify and report results — never to mutate.
 - **Branch is `master`, never `main`,** everywhere in this plan — confirmed against this org's actual repos.
-- **SDK pinning:** every `actions/setup-dotnet` step uses `global-json-file: global.json` so the runner installs exactly what `global.json` declares (`11.0.100-`, `rollForward: latestFeature`, `allowPrerelease: true`) — never a hardcoded `dotnet-version`.
+- **SDK pinning:** every `actions/setup-dotnet` step uses `global-json-file: global.json` so the runner installs exactly what `global.json` declares (`11.0.100-`, `rollForward: latestFeature`, `allowPrerelease: true`) — never a hardcoded `dotnet-version`. Every such step also sets `dotnet-quality: "preview"` explicitly — `global.json`'s `allowPrerelease`/`rollForward` combination has long-standing, documented SDK-resolution flakiness (e.g. `dotnet/sdk#18272`, `dotnet/sdk#16418`), and an SDK that has never had a GA release (.NET 11, today) is exactly the case where relying on inference instead of an explicit quality channel is riskiest.
 - **Warnings-as-errors and `NuGetAudit` are already enforced** via Svartalfheim's `Directory.Build.props` (`TreatWarningsAsErrors=true`, `WarningLevel=9999`) per the build-enforcement spec (2026-06-05). CI executes that law; this plan does not reconfigure it.
 - **Tags are `vX.Y.Z`** (semver, `v`-prefixed) — the human-typed version is the audit-trail moment (design spec §2.5). MinVer is configured with `MinVerTagPrefix=v` to match.
 - **The `.github` repo already exists** (`NorseArchitecture/.github`, created 2026-06-11) — it is **not** created in this plan, only added to. It is cloned to a sibling working directory, `../.github` relative to the Bifrost workspace root — **never** as a Bifrost submodule (Bifrost CLAUDE.md §4: only platform realms and the AppHost belong inside Bifrost).
@@ -77,6 +77,7 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
+          dotnet-quality: "preview"
 
       - name: Restore
         run: dotnet restore
@@ -149,6 +150,7 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
+          dotnet-quality: "preview"
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
@@ -176,6 +178,7 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
+          dotnet-quality: "preview"
 
       - name: Restore
         run: dotnet restore
@@ -295,7 +298,7 @@ Expected: build succeeds (zero warnings, per existing `TreatWarningsAsErrors`). 
 dotnet build src/Primitives/Primitives.csproj -c Release -getProperty:Version
 ```
 
-Expected: a MinVer-style prerelease version (e.g. `0.0.0-alpha.0.<N>`) since no `v*` tag exists yet on this checkout's history. This confirms MinVer is active before any tag exists.
+Expected: `1.0.0` — MinVer's actual default when no `v*` tag exists yet anywhere in this checkout's history (confirmed empirically; MinVer does not add a prerelease/height suffix until there's at least one tag to count commits ahead of). This confirms MinVer is active before any tag exists; once Task 6 pushes `v0.0.1`, the same query will report exactly `0.0.1`.
 
 - [ ] **Step 3: Stage and stop**
 
@@ -528,8 +531,8 @@ git -C Svartalfheim diff --cached
 Once `release.yml` is on `master`, Buvy tags a release:
 
 ```bash
-git -C Svartalfheim tag -a v0.1.0 -m "First CI-proven release"
-git -C Svartalfheim push origin v0.1.0
+git -C Svartalfheim tag -a v0.0.1 -m "First CI-proven release"
+git -C Svartalfheim push origin v0.0.1
 ```
 
 **Do not run these yourself.**
@@ -545,10 +548,10 @@ Expected: `build-test`, `codeql`, and `pack-and-publish` all succeed. Then confi
 
 ```bash
 gh api orgs/NorseArchitecture/packages/nuget/Norse.Primitives/versions --jq '.[0].name'
-gh release view v0.1.0 -R NorseArchitecture/Svartalfheim
+gh release view v0.0.1 -R NorseArchitecture/Svartalfheim
 ```
 
-Expected: the package version is `0.1.0` (MinVer read it straight from the tag — no other source of truth involved), and the release page lists both the `.nupkg` and `sbom.cyclonedx.json` as assets. These three things together — green run, published package, attached SBOM — are the "dwarvish receipts."
+Expected: the package version is `0.0.1` (MinVer read it straight from the tag — no other source of truth involved), and the release page lists both the `.nupkg` and `sbom.cyclonedx.json` as assets. These three things together — green run, published package, attached SBOM — are the "dwarvish receipts."
 
 ---
 
@@ -558,4 +561,4 @@ Expected: the package version is `0.1.0` (MinVer read it straight from the tag �
 
 **Placeholder scan:** no TBD/TODO; every code block is complete and runnable as written.
 
-**Type/name consistency:** job id `build` (Task 1) is the same id referenced by Task 4's caller and re-confirmed in Task 5; `Norse.Primitives` (Task 6 verification) matches the `AssemblyName` pattern already in `Directory.Build.props`; tag pattern `v*.*.*` (Task 6's trigger) matches `MinVerTagPrefix=v` (Task 3) and the `v0.1.0` tag actually cut.
+**Type/name consistency:** job id `build` (Task 1) is the same id referenced by Task 4's caller and re-confirmed in Task 5; `Norse.Primitives` (Task 6 verification) matches the `AssemblyName` pattern already in `Directory.Build.props`; tag pattern `v*.*.*` (Task 6's trigger) matches `MinVerTagPrefix=v` (Task 3) and the `v0.0.1` tag actually cut.
