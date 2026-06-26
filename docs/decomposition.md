@@ -25,7 +25,8 @@ Platform-wide; not bounded contexts. Namespace (code); codename (lore) maps in `
 
 | Namespace | Concern | Codename (lore) |
 |---|---|---|
-| `Norse.Auth` | OpenIddict authorization server, identity stores, `IAccountApi`, the gate every product realm passes through | Heimdall |
+| `Norse.Identity` | EF persistence for ASP.NET Identity and OpenIddict: entities, conventions, and migrations; sealed server-side, never referenced from WASM or MAUI | Himinbjorg |
+| `Norse.Access` | Auth services on Himinbjorg's identity record: one access ruleset across Blazor Server, WASM, and MAUI, with admin components and the backing gRPC service | Heimdall |
 | `Norse.Observability` | Logs, metrics, traces, alerting, SLO tracking | Gjallarhorn |
 | `Norse.AI` | Model serving, embeddings, RAG over policy/claim docs, decision support | Mimir |
 | *(in the ether — unplaced)* | Fraud detection / legal enforcement: signals, case management, SIU referral, recovery — **platform-vs-product placement unsettled** | Tyr |
@@ -39,8 +40,13 @@ Platform-wide; not bounded contexts. Namespace (code); codename (lore) maps in `
 |---|---|---|
 | **Svartalfheim** | `Norse.Primitives.*` | Forged primitives (`Result<T>`, `Money`, parsing stack, UUID v5 registry, `[MustConsume]`) + the hammer: analyzers and BuildCheck rules (`Norse.Primitives.Architecture`, `YGG001`..`YGG3xx`). |
 | **Asgard** | `Norse.Abstractions.*` | Declared law: attribute model (`Norse.Abstractions.Architecture`), host plugin contracts, repository contract family + shared entity bases + audit/timestamp interfaces, mediator law (`[MediatorService]`, `ICommandRequest<T>`, validator/authorizer contracts, forwarder + projection source generator — dispatch core is martinothamar/Mediator). |
-| **Midgard** | `Norse.Infrastructure.*` | Embodied law: DbContext family, EF conventions, `IEntityTypeConfiguration<T>` aggregator, repository implementations; `JsonControllerBase<TService>` + JSON-face primitives; mediator runtime (fixed validate → authorize pipeline, strict-single helper, paging clamps, `ErrorCategory` door table); UI Composition framework. |
+| **Midgard** | `Norse.Infrastructure.*` | Embodied law: repository implementations (riding on Urdarbrunnr's EF foundation); `JsonControllerBase<TService>` + JSON-face primitives; mediator runtime (fixed validate → authorize pipeline, strict-single helper, paging clamps, `ErrorCategory` door table); UI Composition framework. |
+| **Urdarbrunnr** | `Norse.EntityFramework.*` | The EF Core foundation layer: entity base types, DbContext foundations, conventions, value converters, and the migrations chassis. The EF foundation Midgard's concrete family rides on, governed by Asgard's declared law. |
+| **Ratatoskr** | `Norse.NServiceBus.*` | NServiceBus endpoint configuration, saga infrastructure, message conventions, and transport wiring. Asgard declares the messaging surface; Ratatoskr carries it. |
 | **Yggdrasil** | `Norse.Hosting.*` | Hosting chassis: server deployables (`Norse.Hosting.Web.Server`, `Norse.Hosting.Worker`, `Norse.Hosting.Migrations.Service`) and client deployables (`Norse.Hosting.Web.Client`, `Norse.Hosting.App`). `Norse.Hosting.DevServer` deleted 2026-06-05 — superseded by `InteractiveServer` render mode on `Norse.Hosting.Web.Server` (UI Composition spec §7.1). |
+| **Himinbjorg** | `Norse.Identity.*` | EF persistence for ASP.NET Identity and OpenIddict: entities, conventions, and migrations; sealed server-side, never referenced from WASM or MAUI. |
+| **Heimdall** | `Norse.Access.*` | Auth services riding on Himinbjorg: one access ruleset across Blazor Server, WASM, and MAUI, with admin components and the backing gRPC service. |
+| **Nagalfar** | `Norse.DesignSystem.*` | Design tokens, radii, and component primitives — standalone for now, no declared consumers. |
 | **Bifrost** | `Norse.Orchestration.*` | Local developer meta-repository: the .NET Aspire AppHost composing services, databases, queues, and configuration; carries the realm repos as submodules (relative URLs, tracking `master`). A reference composition — consumers are expected to build their own bridge from the constituent realms. |
 
 Consequences and rulings of the amendment:
@@ -48,7 +54,7 @@ Consequences and rulings of the amendment:
 - **Law-and-hammer pairs now version across repo boundaries.** The Abstractions + implementation pairs that previously traveled in one submodule (architecture, mediator, persistence, hosting) split as law → Asgard, hammer → Svartalfheim/Midgard. Lockstep mechanics across repos fold into the build-substrate session (reconciliation tracker 4.2).
 - **`ServiceDefaults` (ruled 2026-06-11):** Midgard if possible; Yggdrasil only if it carries shared runtime context that touches all the composition runtimes; never Bifrost. The `AppHost` keeps its Aspire-conventional name as `Norse.Orchestration.AppHost` in Bifrost.
 - **`norse-referencedata` is dissolved (2026-06-11):** temporal contracts (`ITemporalRepository<T>`) → Asgard; implementations → Midgard; universal geographic/world content → a thin library, named when real; vertical reference content is sovereign (`{Company}.ReferenceData.*` — loss costs are insurance's business, transit zones are logistics'). Norns returned to the bench (`docs/codenames.md`).
-- **Future platform realms** (`Norse.Auth`, `Norse.Observability`, `Norse.AI`, `Norse.Warehouse`, `Norse.Notifications`) each get their own lore-named repository when they land; `docs/codenames.md` binds each name.
+- **Future platform realms** (`Norse.Observability`, `Norse.AI`, `Norse.Warehouse`) each get their own lore-named repository when they land; `docs/codenames.md` binds each name.
 
 Product realms follow the same pattern under their own roots:
 
