@@ -16,7 +16,7 @@
 - `FLOOR=60` lives in exactly one place: the `Enforce branch coverage threshold` step in `ci-build-test.yml`.
 - `minimum_coverage` input default is `0` — the floor, not the default, is the enforced minimum.
 - Tabs for indentation in `.props` files; 2-space for YAML (ecosystem convention per `.editorconfig`).
-- All package version wildcards (`17.*`, `5.*`, `2.*`) match the patterns already established in the realm.
+- All package version wildcards (`18.*`, `5.*`, `2.*`) match the patterns already established in the realm. Note: `Microsoft.Testing.Extensions.CodeCoverage` jumped from the 17.x series (MTP 1.x era) to 18.x (MTP 2.x era) — `17.*` fails with `MissingMethodException` against MTP 2.x.
 
 ---
 
@@ -202,8 +202,10 @@ jobs:
 
       - name: Generate coverage report
         run: |
+          COVERAGE_FILES=$(find . -name "coverage*.xml" -not -path "*/obj/*" | tr '\n' ';' | sed 's/;$//')
+          echo "Coverage files: $COVERAGE_FILES"
           reportgenerator \
-            -reports:coverage*.xml \
+            -reports:"$COVERAGE_FILES" \
             -targetdir:./coverage-report \
             -reporttypes:"MarkdownSummaryGithub;JsonSummary"
 

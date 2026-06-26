@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-26
 **Scope:** Platform-wide — proven in Svartalfheim, propagated realm by realm
-**Status:** Approved, ready for implementation
+**Status:** Implemented — live on Svartalfheim as of 2026-06-26
 
 ---
 
@@ -83,7 +83,7 @@ This is the official Microsoft coverage extension for Microsoft.Testing.Platform
   run: dotnet test --no-build -c Release --coverage --coverage-output-format cobertura --coverage-output coverage.xml
 ```
 
-`--coverage` activates the MTP extension. `--coverage-output-format cobertura` produces Cobertura XML directly. When a solution has multiple test projects, MTP appends a counter (`coverage_1.xml`, `coverage_2.xml`); downstream ReportGenerator uses a glob (`coverage*.xml`) — multi-project safe from day one.
+`--coverage` activates the MTP extension. `--coverage-output-format cobertura` produces Cobertura XML directly. MTP writes the file relative to the test binary's output directory, not the repo root — a flat `coverage*.xml` glob from the workspace root finds nothing. The Generate coverage report step uses `find` to locate files dynamically. When a solution has multiple test projects, MTP appends a counter (`coverage_1.xml`, `coverage_2.xml`); the `find`-based approach handles multi-project repos without change.
 
 ---
 
@@ -107,11 +107,15 @@ Produces two outputs: GitHub-flavoured Markdown for the PR comment/step summary,
 ```yaml
 - name: Generate coverage report
   run: |
+    COVERAGE_FILES=$(find . -name "coverage*.xml" -not -path "*/obj/*" | tr '\n' ';' | sed 's/;$//')
+    echo "Coverage files: $COVERAGE_FILES"
     reportgenerator \
-      -reports:coverage*.xml \
+      -reports:"$COVERAGE_FILES" \
       -targetdir:./coverage-report \
       -reporttypes:"MarkdownSummaryGithub;JsonSummary"
 ```
+
+`find` locates coverage files wherever MTP wrote them (relative to the test binary, not the repo root). The `echo` line makes the CI log self-diagnosing if coverage files are ever missing.
 
 ### Write step summary
 
