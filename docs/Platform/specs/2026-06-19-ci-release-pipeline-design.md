@@ -45,11 +45,13 @@ Every PR against a CI-enabled repo triggers `ci-build-test.yml`:
 
 Integration tests that hit real Postgres or RabbitMQ via testcontainers require no special CI plumbing — GitHub-hosted Linux runners ship Docker by default.
 
+**Required status check context — empirically confirmed 2026-06-25.** GitHub Actions reports reusable workflow checks as `{caller job id} / {called job id}`. The caller workflow `name:` field and the trigger event suffix (`(pull_request)`) are UI display decorations only — they must not appear in the required status check context. For the NuGet realm PR gate, the caller job is named `gate` and the called job in `ci-build-test.yml` is `build`, so the context is `gate / build`. The source must be locked to `integration_id: 15368` (the GitHub Actions app, a platform constant) — without it, any integration that can report a status check can spoof the context name and satisfy the gate. Both values are encoded in `carve-the-laws.ps1`; run it against a realm to apply.
+
 ### 2.4 Merge to master
 
 Nothing additional runs on merge. Branch protection requires a PR branch to be up to date with master before merge is permitted, so the tree landing on master is byte-for-byte what the PR gate already built and tested — a second build on merge would be redundant compute, not redundant insurance.
 
-**Operational note, recorded so it does not quietly become permanent:** branch protection currently carries an admin-bypass exception for Buvy. The exception is removed once this pipeline is live and proven.
+**Operational note — amended 2026-06-25:** the pipeline is live and proven on Svartalfheim. The admin-bypass exception in the "Law of the Aesir" ruleset is retained deliberately: `required_approving_review_count: 0` means Buvy would be self-approving his own PRs, which is theater; the bypass lets him push directly in genuine emergencies. Re-entry trigger: a second contributor joins — then flip to `bypass_mode: pull_request` and raise the review count to 1.
 
 ### 2.5 The tag is the version
 
@@ -79,6 +81,8 @@ Triggered identically, `release-container.yml` runs steps 1–4 above unchanged,
 
 GitHub Packages and GHCR both live under the `NorseArchitecture` org, so the workflow-scoped `GITHUB_TOKEN` (with `packages: write` permission) covers both publish targets — no new PAT, no new secret to provision or rotate. CodeQL runs via `github/codeql-action`; the SBOM via `anchore/sbom-action`. Both are GitHub-native or marketplace actions, not new vendor accounts.
 
+**`carve-the-laws.ps1` requires `pwsh` (PowerShell Core).** It is cross-platform (`#!/usr/bin/env pwsh`) and runs on Windows natively and on Linux/WSL via `snap install powershell --classic`. It is listed in the `.github` repo's `TOOLCHAIN.md`. It applies both repo settings (`delete_branch_on_merge: true`) and the "Law of the Aesir" ruleset in a single idempotent run — `./scripts/carve-the-laws.ps1 <Realm>` is the complete ceremony for any new realm.
+
 ## 3. Alternatives Rejected
 
 - **Per-repo duplicated workflow YAML.** Rejected: every convention change becomes N pull requests, and drift between realms is the exact silent-incongruence failure mode the repository-topology spec rejects at the spec-distribution level (§2.4 of that spec) — the same argument applies one layer down, at the workflow-file level.
@@ -89,8 +93,9 @@ GitHub Packages and GHCR both live under the `NorseArchitecture` org, so the wor
 
 ## 4. Consequences
 
-1. Stand up the `NorseArchitecture/.github` repository carrying `ci-build-test.yml`, `release-nuget.yml`, `release-container.yml`.
-2. Add MinVer to the `Directory.Build.props` of each NuGet realm (Asgard, Svartalfheim, Midgard, Urdarbrunnr, Himinbjorg, Heimdall).
-3. Add thin caller workflow files to every CI-enabled repo (all realms except Glitnir).
-4. Once live and proven, remove Buvy's branch-protection admin-bypass exception (§2.4).
-5. **Unblocks:** the Asgard `UseProjectReferences` MSBuild pipeline plan, and the subsequent carry-through of the same discipline across the remaining realms — both were explicitly gated on this design landing first.
+1. Stand up the `NorseArchitecture/.github` repository carrying `ci-build-test.yml`, `release-nuget.yml`, `release-container.yml`. **Done 2026-06-25.**
+2. Add MinVer to the `Directory.Build.props` of each NuGet realm (Asgard, Svartalfheim, Midgard, Urdarbrunnr, Himinbjorg, Heimdall). **Done for Svartalfheim 2026-06-25; remaining realms follow when they have buildable code.**
+3. Add thin caller workflow files to every CI-enabled repo (all realms except Glitnir). **Done for Svartalfheim 2026-06-25; remaining realms follow.**
+4. Once live and proven, remove Buvy's branch-protection admin-bypass exception (§2.4). **Amended — see §2.4; bypass retained deliberately for solo-maintainer mode.**
+5. `carve-the-laws.ps1` applies `delete_branch_on_merge: true` as a repo setting alongside the ruleset — added 2026-06-25; run it against each realm when it receives its caller workflows.
+6. **Unblocks:** the Asgard `UseProjectReferences` MSBuild pipeline plan, and the subsequent carry-through of the same discipline across the remaining realms — both were explicitly gated on this design landing first.

@@ -69,12 +69,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
           dotnet-quality: "preview"
@@ -144,16 +144,16 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
           dotnet-quality: "preview"
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: csharp
 
@@ -163,19 +163,19 @@ jobs:
           dotnet build --no-restore -c Release
 
       - name: Analyze
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
 
   pack-and-publish:
     needs: [build-test, codeql]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
           dotnet-quality: "preview"
@@ -332,9 +332,11 @@ on:
     branches: [master]
 
 jobs:
-  build:
+  gate:
     uses: NorseArchitecture/.github/.github/workflows/ci-build-test.yml@master
 ```
+
+The caller job is named `gate` (not `build`) to avoid a confusing stutter in the GitHub check name — the called job inside `ci-build-test.yml` is `build`, giving the required status check context `gate / build`. If both were named `build` the context would read `build / build`.
 
 - [ ] **Step 2: Stage and stop**
 
@@ -408,43 +410,26 @@ Leave the PR open. Task 5 must land first, because the existing required-status-
 
 - [ ] **Step 1: Confirm the real check name**
 
+**Empirically confirmed 2026-06-25.** GitHub Actions reports the check as `{caller job} / {called job}` — the workflow `name:` field and the `(pull_request)` event suffix visible in the UI are decorations only and must not appear in the context string. With the caller job named `gate` and the called job `build`, the context is `gate / build`. Also confirmed: the source must be locked to `integration_id: 15368` (the GitHub Actions app) — without it, the ruleset UI shows the check waiting even when a check of the same name has succeeded, because any integration can report that name. Get the app ID from the check runs API rather than hardcoding speculatively:
+
 ```bash
-gh pr checks ci/add-pr-gate -R NorseArchitecture/Svartalfheim --json name,state
+gh api repos/NorseArchitecture/Svartalfheim/commits/$(git rev-parse HEAD)/check-runs \
+  --jq '.check_runs[] | {name: .name, app_id: .app.id}'
 ```
 
-Confirm the literal value of `name` for the passing check from Task 4.
+Expected: `{"name":"gate / build","app_id":15368}`.
 
 - [ ] **Step 2: Update the ruleset script**
 
-In `../.github/scripts/carve-the-laws.ps1`, find:
+In `../.github/scripts/carve-the-laws.ps1`, update the required status check entry to include both the confirmed context and the `integration_id` lock:
 
 ```powershell
-		@{
-			type = 'required_status_checks'
-			parameters = @{
-				strict_required_status_checks_policy = $true
-				required_status_checks = @(
-					@{ context = 'build' }
-				)
-			}
-		}
+			required_status_checks = @(
+				@{ context = 'gate / build'; integration_id = 15368 }
+			)
 ```
 
-Replace `'build'` with the exact string confirmed in Step 1 (for example, if it is `build / build`):
-
-```powershell
-		@{
-			type = 'required_status_checks'
-			parameters = @{
-				strict_required_status_checks_policy = $true
-				required_status_checks = @(
-					@{ context = 'build / build' }
-				)
-			}
-		}
-```
-
-Also update the comment above the `$Ruleset` block that currently reads *"required_status_checks context 'build' must exactly match the CI job/check name reported to GitHub. Adjust when workflows settle."* — replace with a note that it was adjusted here, on this date, to match Svartalfheim's actual reusable-workflow check name.
+Update the comment block to record the empirical finding and the rationale for the `integration_id` lock.
 
 - [ ] **Step 3: Stage and stop**
 
