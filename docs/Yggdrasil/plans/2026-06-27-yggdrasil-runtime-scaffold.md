@@ -16,6 +16,8 @@
 - `IsAotCompatible` omitted throughout — that is a packable-library concern; these are deployable executables.
 - No `NorseRef` items — no Norse package dependencies in this scaffold.
 - `DotNetVersion=11.0.0-preview.5.26302.115` — added to root `Directory.Packages.props`; the only runtime version pin in the repo; updated manually each month when Microsoft ships the next preview.
+- `ContainerDotNetVersion=11.0.0-preview.5` — also added to root `Directory.Packages.props`; the full SDK build suffix is stripped for MCR tag matching. .NET 11 preview images live in `mcr.microsoft.com/dotnet/nightly/` (not the stable registry); drop this override once .NET 11 goes stable.
+- `Microsoft.Extensions.Hosting Version="10.0.9"` — explicit CPM entry required for `Microsoft.NET.Sdk.Worker` projects; the Worker SDK in .NET 11 preview does not include `Host` implicitly. Reference with `<PackageReference Include="Microsoft.Extensions.Hosting" />` (no version — CPM supplies it).
 - **Container publish arch:** `--arch arm64` for all local commands (Snapdragon X1 Elite development host); `--arch x64` in `release-container.yml` (CI runs on x64 Ubuntu). Never use `--arch x64` for local `dotnet publish /t:PublishContainer` steps.
 - CPM ON for `src/`; CPM OFF for `tests/` via `tests/Directory.Packages.props`. Test packages float with `Version="*"`.
 - `InternalsVisibleTo` hoisted in `src/Directory.Build.props` — never per-csproj.
@@ -29,7 +31,7 @@
 | Action | File | Repo | Notes |
 |---|---|---|---|
 | Modify | `Glitnir/docs/Platform/plans/2026-06-27-yggdrasil-tag-release.md` | Bifrost | Add `src/` prefix to all project paths; fix smoke-test arch flag |
-| Modify | `Directory.Packages.props` | Yggdrasil | Add `DotNetVersion` property |
+| Modify | `Directory.Packages.props` | Yggdrasil | Add `DotNetVersion` + `ContainerDotNetVersion` properties; add `Microsoft.Extensions.Hosting 10.0.9` |
 | Verify | `src/Directory.Build.targets` | Yggdrasil | Confirm no `OutputType` — pre-condition, no edit |
 | Create | `src/Directory.Build.props` | Yggdrasil | `IsPackable=false`, `InternalsVisibleTo` |
 | Create | `tests/Directory.Packages.props` | Yggdrasil | CPM off |
@@ -200,6 +202,7 @@ Rewrite `/home/buvy/code/NorseArchitecture/Bifrost/Yggdrasil/Directory.Packages.
 	<PropertyGroup>
 		<ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
 		<DotNetVersion>11.0.0-preview.5.26302.115</DotNetVersion>
+		<ContainerDotNetVersion>11.0.0-preview.5</ContainerDotNetVersion>
 		<SvartalfheimVersion>0.0.4</SvartalfheimVersion>
 		<AsgardVersion>0.0.0</AsgardVersion>
 		<MidgardVersion>0.0.0</MidgardVersion>
@@ -280,7 +283,7 @@ Create `/home/buvy/code/NorseArchitecture/Bifrost/Yggdrasil/src/Hosting.Web.Serv
 ```xml
 <Project Sdk="Microsoft.NET.Sdk.Web">
 	<PropertyGroup>
-		<ContainerBaseImage>mcr.microsoft.com/dotnet/aspnet:$(DotNetVersion)</ContainerBaseImage>
+		<ContainerBaseImage>mcr.microsoft.com/dotnet/nightly/aspnet:$(ContainerDotNetVersion)</ContainerBaseImage>
 	</PropertyGroup>
 </Project>
 ```
@@ -403,8 +406,11 @@ Create `/home/buvy/code/NorseArchitecture/Bifrost/Yggdrasil/src/Hosting.Worker/H
 ```xml
 <Project Sdk="Microsoft.NET.Sdk.Worker">
 	<PropertyGroup>
-		<ContainerBaseImage>mcr.microsoft.com/dotnet/runtime:$(DotNetVersion)</ContainerBaseImage>
+		<ContainerBaseImage>mcr.microsoft.com/dotnet/nightly/runtime:$(ContainerDotNetVersion)</ContainerBaseImage>
 	</PropertyGroup>
+	<ItemGroup>
+		<PackageReference Include="Microsoft.Extensions.Hosting" />
+	</ItemGroup>
 </Project>
 ```
 
@@ -517,8 +523,11 @@ Create `/home/buvy/code/NorseArchitecture/Bifrost/Yggdrasil/src/Hosting.Migratio
 ```xml
 <Project Sdk="Microsoft.NET.Sdk.Worker">
 	<PropertyGroup>
-		<ContainerBaseImage>mcr.microsoft.com/dotnet/runtime:$(DotNetVersion)</ContainerBaseImage>
+		<ContainerBaseImage>mcr.microsoft.com/dotnet/nightly/runtime:$(ContainerDotNetVersion)</ContainerBaseImage>
 	</PropertyGroup>
+	<ItemGroup>
+		<PackageReference Include="Microsoft.Extensions.Hosting" />
+	</ItemGroup>
 </Project>
 ```
 

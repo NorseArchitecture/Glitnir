@@ -21,10 +21,10 @@
   - `ghcr.io/norsearchitecture/hosting/migrations:{version}`
   - `ghcr.io/norsearchitecture/hosting/web:{version}`
   - `ghcr.io/norsearchitecture/hosting/worker:{version}`
-- **Project paths** (brand-free per Bifrost CLAUDE.md §2, at Yggdrasil repo root):
-  - `Hosting.Migrations.Service/Hosting.Migrations.Service.csproj`
-  - `Hosting.Web.Server/Hosting.Web.Server.csproj`
-  - `Hosting.Worker/Hosting.Worker.csproj`
+- **Project paths** (brand-free per Bifrost CLAUDE.md §2, under `src/` at Yggdrasil repo root):
+  - `src/Hosting.Migrations.Service/Hosting.Migrations.Service.csproj`
+  - `src/Hosting.Web.Server/Hosting.Web.Server.csproj`
+  - `src/Hosting.Worker/Hosting.Worker.csproj`
 - **`GITHUB_TOKEN` only** — no `SCATTER_PAT` needed (Yggdrasil sends no phone-home PRs).
 - **Deploy-hook routing** (per spec §2.7): tag containing `-` → feature environment; stable tag → dev/integration. Routing condition: `contains(github.ref_name, '-')`. Both are no-ops today; structure is locked in now.
 - **Smoke test (Task 5) requires the Yggdrasil hosting skeleton** (the three `Program.cs` stubs and `.csproj` files for the deployable hosts). That skeleton is implemented in a separate context. Do not execute Task 5 until those projects exist and `dotnet publish /t:PublishContainer` succeeds locally or on CI.
@@ -197,7 +197,7 @@ jobs:
 
       - name: Publish migrations image (local daemon)
         run: |
-          dotnet publish Hosting.Migrations.Service/Hosting.Migrations.Service.csproj \
+          dotnet publish src/Hosting.Migrations.Service/Hosting.Migrations.Service.csproj \
             --os linux --arch x64 -c Release /t:PublishContainer \
             /p:ContainerRepository=norsearchitecture/hosting/migrations \
             /p:ContainerImageTag=${{ steps.version.outputs.value }}
@@ -221,7 +221,7 @@ jobs:
 
       - name: Publish web image (local daemon)
         run: |
-          dotnet publish Hosting.Web.Server/Hosting.Web.Server.csproj \
+          dotnet publish src/Hosting.Web.Server/Hosting.Web.Server.csproj \
             --os linux --arch x64 -c Release /t:PublishContainer \
             /p:ContainerRepository=norsearchitecture/hosting/web \
             /p:ContainerImageTag=${{ steps.version.outputs.value }}
@@ -245,7 +245,7 @@ jobs:
 
       - name: Publish worker image (local daemon)
         run: |
-          dotnet publish Hosting.Worker/Hosting.Worker.csproj \
+          dotnet publish src/Hosting.Worker/Hosting.Worker.csproj \
             --os linux --arch x64 -c Release /t:PublishContainer \
             /p:ContainerRepository=norsearchitecture/hosting/worker \
             /p:ContainerImageTag=${{ steps.version.outputs.value }}
@@ -456,13 +456,13 @@ No stage/commit — `carve-the-laws.ps1` applies changes directly via the GitHub
 ## Task 5: Smoke test — pre-release tag end-to-end
 
 **Hard prerequisite:** The Yggdrasil hosting skeleton must exist before this task. Specifically, the three projects must be in Yggdrasil's `master` and `dotnet publish /t:PublishContainer` must succeed for each:
-- `Hosting.Migrations.Service/Hosting.Migrations.Service.csproj`
-- `Hosting.Web.Server/Hosting.Web.Server.csproj`
-- `Hosting.Worker/Hosting.Worker.csproj`
+- `src/Hosting.Migrations.Service/Hosting.Migrations.Service.csproj`
+- `src/Hosting.Web.Server/Hosting.Web.Server.csproj`
+- `src/Hosting.Worker/Hosting.Worker.csproj`
 
 Each project must have `<ContainerBaseImage>` set in its `.csproj` (or a `Directory.Build.props` override) so .NET container publish picks the right base image. Minimum values:
-- Web.Server: `mcr.microsoft.com/dotnet/aspnet:11.0-preview`
-- Worker + Migrations.Service: `mcr.microsoft.com/dotnet/runtime:11.0-preview`
+- Web.Server: `mcr.microsoft.com/dotnet/nightly/aspnet:11.0.0-preview.5`
+- Worker + Migrations.Service: `mcr.microsoft.com/dotnet/nightly/runtime:11.0.0-preview.5`
 
 If the skeleton context has not run, **stop here and do not proceed.**
 
@@ -470,8 +470,8 @@ If the skeleton context has not run, **stop here and do not proceed.**
 
 ```bash
 cd /home/buvy/code/NorseArchitecture/Bifrost/Yggdrasil
-dotnet publish Hosting.Migrations.Service/Hosting.Migrations.Service.csproj \
-  --os linux --arch x64 -c Release /t:PublishContainer \
+dotnet publish src/Hosting.Migrations.Service/Hosting.Migrations.Service.csproj \
+  --os linux --arch arm64 -c Release /t:PublishContainer \
   /p:ContainerRepository=norsearchitecture/hosting/migrations \
   /p:ContainerImageTag=smoke-test
 docker image ls norsearchitecture/hosting/migrations:smoke-test
