@@ -46,7 +46,7 @@ Platform-wide; not bounded contexts. Namespace (code); codename (lore) maps in `
 | **Yggdrasil** | `Norse.Hosting.*` | Hosting chassis: server deployables (`Norse.Hosting.Web.Server`, `Norse.Hosting.Worker`, `Norse.Hosting.Migrations.Service`) and client deployables (`Norse.Hosting.Web.Client`, `Norse.Hosting.App`). `Norse.Hosting.DevServer` deleted 2026-06-05 — superseded by `InteractiveServer` render mode on `Norse.Hosting.Web.Server` (UI Composition spec §7.1). |
 | **Himinbjorg** | `Norse.Identity.*` | EF persistence for ASP.NET Identity and OpenIddict: entities, conventions, and migrations; sealed server-side, never referenced from WASM or MAUI. |
 | **Heimdall** | `Norse.Access.*` | Auth services riding on Himinbjorg: one access ruleset across Blazor Server, WASM, and MAUI, with admin components and the backing gRPC service. |
-| **Nagalfar** | `Norse.DesignSystem.*` | Design tokens, radii, and component primitives — standalone for now, no declared consumers. |
+| **Naglfar** | `Norse.DesignSystem.*` | Design tokens, radii, and component primitives — standalone for now, no declared consumers. |
 | **Bifrost** | `Norse.Orchestration.*` | Local developer meta-repository: the .NET Aspire AppHost composing services, databases, queues, and configuration; carries the realm repos as submodules (relative URLs, tracking `master`). A reference composition — consumers are expected to build their own bridge from the constituent realms. |
 
 Consequences and rulings of the amendment:

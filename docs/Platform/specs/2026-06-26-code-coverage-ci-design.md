@@ -71,7 +71,7 @@ Effective threshold = `max(FLOOR, minimum_coverage)`. A realm passing `25` gets 
 Added to `tests/Directory.Build.props` (hoisted, not per-csproj):
 
 ```xml
-<PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.*" />
+<PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" Version="*" />
 ```
 
 This is the official Microsoft coverage extension for Microsoft.Testing.Platform. No VSTest DataCollector, no `.runsettings`, no separate collection tool.

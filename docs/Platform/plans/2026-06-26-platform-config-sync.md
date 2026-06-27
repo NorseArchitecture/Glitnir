@@ -240,7 +240,7 @@ The manifest is the single file that controls which realms receive which files. 
 		# Aspire composition root — universal only; owns its own minimal host props
 		Bifrost      = @('universal')
 		# Design system — no .NET tooling; crafts its own .editorconfig
-		Nagalfar     = @('git')
+		Naglfar      = @('git')
 		# Docs and proofs of concept — git hygiene only
 		Glitnir      = @('git')
 	}
@@ -260,7 +260,7 @@ pwsh -NoProfile -Command "
 Expected output (order may vary):
 ```
 Groups: git universal dotnet nuget
-Realms: Svartalfheim Asgard Midgard Urdarbrunnr Ratatoskr Heimdall Himinbjorg Yggdrasil Bifrost Nagalfar Glitnir
+Realms: Svartalfheim Asgard Midgard Urdarbrunnr Ratatoskr Heimdall Himinbjorg Yggdrasil Bifrost Naglfar Glitnir
 Svartalfheim files: .editorconfig .gitattributes .gitignore Directory.Build.props LICENSE global.json src/Directory.Build.props tests/Directory.Build.props
 ```
 
@@ -462,7 +462,7 @@ Expected output (order of realms is alphabetical; files within a realm are sorte
     [DRY RUN] Would sync: .editorconfig, .gitattributes, .gitignore, Directory.Build.props, global.json, LICENSE, src/Directory.Build.props, tests/Directory.Build.props
 ==> NorseArchitecture/Midgard (8 files)
     [DRY RUN] Would sync: .editorconfig, .gitattributes, .gitignore, Directory.Build.props, global.json, LICENSE, src/Directory.Build.props, tests/Directory.Build.props
-==> NorseArchitecture/Nagalfar (2 files)
+==> NorseArchitecture/Naglfar (2 files)
     [DRY RUN] Would sync: .gitattributes, .gitignore
 ==> NorseArchitecture/Ratatoskr (8 files)
     [DRY RUN] Would sync: .editorconfig, .gitattributes, .gitignore, Directory.Build.props, global.json, LICENSE, src/Directory.Build.props, tests/Directory.Build.props

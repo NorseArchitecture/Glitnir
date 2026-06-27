@@ -55,7 +55,7 @@ One repository per platform realm, named for the myth; every project inside name
 | **Yggdrasil** | `Norse.Hosting.*` | The world tree — hosting runtimes and deployables the cosmos hangs on |
 | **Himinbjorg** | `Norse.Identity.*` | Heimdall's hall — EF persistence for ASP.NET Identity and OpenIddict: entities, conventions, and migrations; sealed server-side, never referenced from WASM or MAUI |
 | **Heimdall** | `Norse.Access.*` | The watchman — auth services on Himinbjorg: one access ruleset across Blazor Server, WASM, and MAUI, with admin components and the backing gRPC service |
-| **Nagalfar** | `Norse.DesignSystem.*` | The ship of the dead — design tokens, radii, and component primitives assembled into something seaworthy enough to carry every product UI |
+| **Naglfar** | `Norse.DesignSystem.*` | The ship of the dead — design tokens, radii, and component primitives assembled into something seaworthy enough to carry every product UI |
 | **Glitnir** | *(docs only)* | This repo — the design court and court of record |
 
 Further realms (Observability, Warehouse, AI) each get their own lore-named repository when they land; [`docs/codenames.md`](docs/codenames.md) is the dictionary that binds every name.

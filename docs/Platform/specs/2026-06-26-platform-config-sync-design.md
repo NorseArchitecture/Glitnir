@@ -79,13 +79,13 @@ Groups are additive: `universal` implies `git`. The manifest stores the minimal 
 | Heimdall | `universal`, `dotnet`, `nuget` |
 | Himinbjorg | `universal`, `dotnet`, `nuget` |
 | Yggdrasil | `universal`, `dotnet` |
-| Nagalfar | `git` |
+| Naglfar | `git` |
 | Glitnir | `git` |
 | Bifrost | `universal` |
 
 **Yggdrasil** receives `universal` + `dotnet` but not `nuget` — it is the runtime hosting composition layer, does not ship to NuGet, and owns its own `src/` and `tests/` MSBuild props for two reasons: (1) no `IsAotCompatible=true`, since it is the composition root not a portable library; (2) it uses Central Package Management (CPM) where `<PackageReference>` items carry no `Version` attribute, while NuGet-shipping realms do not use CPM and require explicit versions. Both differences propagate into the future `Directory.Build.targets` files (see §11), making Yggdrasil's copies structurally incompatible with the canonical `nuget` group files.
 
-**Nagalfar** receives `git` only — it is the design system home, not a .NET build target. `global.json` is an SDK version pin with no meaning outside .NET; the platform `.editorconfig` is saturated with `csharp_style_*` and `dotnet_*` rules that are wrong for CSS/tokens/JS work. Nagalfar crafts its own `.editorconfig` suited to whatever toolchain the design system uses. `LICENSE` is omitted — design tokens and component primitives are not distributable library artifacts.
+**Naglfar** receives `git` only — it is the design system home, not a .NET build target. `global.json` is an SDK version pin with no meaning outside .NET; the platform `.editorconfig` is saturated with `csharp_style_*` and `dotnet_*` rules that are wrong for CSS/tokens/JS work. Naglfar crafts its own `.editorconfig` suited to whatever toolchain the design system uses. `LICENSE` is omitted — design tokens and component primitives are not distributable library artifacts.
 
 **Glitnir** receives `git` only — it is a docs and proof-of-concept repo. Nothing in it produces an installable artifact, so `LICENSE`, `global.json`, and the .NET `.editorconfig` have no place there.
 
@@ -205,7 +205,7 @@ The seven NuGet-shipping realms share an identical `.github/workflows/release.ym
 | Heimdall | Yes |
 | Yggdrasil | No — Yggdrasil does not ship NuGet packages and has no release ceremony |
 | Bifrost | No |
-| Nagalfar | No |
+| Naglfar | No |
 | Glitnir | No |
 
 **`config/` directory structure addition:**

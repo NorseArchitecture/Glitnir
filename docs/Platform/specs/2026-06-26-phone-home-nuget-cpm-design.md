@@ -17,7 +17,7 @@ The pattern is the deliberate inverse of `scatter-the-runes`: scatter fans confi
 
 ### 2.1 Scope
 
-Seven NuGet-shipping realms participate: Svartalfheim, Asgard, Midgard, Urdarbrunnr, Ratatoskr, Himinbjorg, Heimdall. Bifrost, Glitnir, and Nagalfar do not publish NuGet packages and are not callers.
+Seven NuGet-shipping realms participate: Svartalfheim, Asgard, Midgard, Urdarbrunnr, Ratatoskr, Himinbjorg, Heimdall. Bifrost, Glitnir, and Naglfar do not publish NuGet packages and are not callers.
 
 Yggdrasil is the sole phone-home target for this design. Product realm repos (`{Company}.{Context}.*`) are sovereign; if they need CPM automation, they build their own bridge.
 

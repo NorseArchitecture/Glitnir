@@ -38,7 +38,7 @@ Two item types replace raw cross-realm `<ProjectReference>` paths. Both live in 
 
 ```xml
 <NorseDesignRef Include="DesignSystem">
-  <Repo>Nagalfar</Repo>
+  <Repo>Naglfar</Repo>
 </NorseDesignRef>
 ```
 
@@ -368,7 +368,7 @@ When a project in realm B needs to reference a project in realm A:
 
 **Svartalfheim** (`Norse.Primitives`) is the bottom of the dependency graph. It has no cross-realm Norse dependencies and never will. No `<NorseRef>` items appear in any Svartalfheim csproj. The canonical `src/Directory.Build.targets` arrives via sync and is harmless — empty item transforms produce nothing.
 
-**Nagalfar** (`Norse.DesignSystem`) is a design-artifact repository — Figma exports, brand tokens, visual reference. It does not produce NuGet packages and does not participate in the MSBuild build graph. It receives `git`-group files only from `scatter-the-runes`, the same posture as Glitnir. No `<NorseDesignRef>` item currently points at Nagalfar. The `<NorseDesignRef>` item type is defined and available for any design package a consuming realm chooses to reference regardless of source; whether Nagalfar ever ships one is a separate design decision.
+**Naglfar** (`Norse.DesignSystem`) is a design-artifact repository — Figma exports, brand tokens, visual reference. It does not produce NuGet packages and does not participate in the MSBuild build graph. It receives `git`-group files only from `scatter-the-runes`, the same posture as Glitnir. No `<NorseDesignRef>` item currently points at Naglfar. The `<NorseDesignRef>` item type is defined and available for any design package a consuming realm chooses to reference regardless of source; whether Naglfar ever ships one is a separate design decision.
 
 ---
 

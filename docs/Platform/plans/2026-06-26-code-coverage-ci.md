@@ -47,16 +47,17 @@ The file currently has no coverage package. Add the reference (maintain alphabet
 	<Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
 	<PropertyGroup>
 		<IsPackable>false</IsPackable>
+		<IsPublishable>false</IsPublishable>
 		<IsTestProject>true</IsTestProject>
 		<NoWarn>$(NoWarn);CA1812;CA1859;CS1591;IDE0051</NoWarn>
 		<OutputType>Exe</OutputType>
 		<UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
 	</PropertyGroup>
 	<ItemGroup>
-		<PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.*" />
-		<PackageReference Include="Microsoft.Testing.Platform.MSBuild" Version="2.*" />
-		<PackageReference Include="Shouldly" Version="4.*" />
-		<PackageReference Include="xunit.v3.mtp-v2" Version="3.*" />
+		<PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" Version="*" />
+		<PackageReference Include="Microsoft.Testing.Platform.MSBuild" Version="*" />
+		<PackageReference Include="Shouldly" Version="*" />
+		<PackageReference Include="xunit.v3.mtp-v2" Version="*" />
 		<Using Include="Shouldly" />
 		<Using Include="Xunit" />
 	</ItemGroup>
