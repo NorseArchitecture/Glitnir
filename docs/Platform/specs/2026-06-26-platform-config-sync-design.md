@@ -179,3 +179,43 @@ No other drift is known; realms checked were identical on `.editorconfig`, `.git
 When that feature lands, uncommenting those two lines in `manifest.psd1` and placing the canonical targets files at `config/src/Directory.Build.targets` and `config/tests/Directory.Build.targets` is the entire wiring cost. The next push to `config/**` fans them out to all NuGet-shipping realms automatically.
 
 The canonical targets files use `Version="*"` on the generated `<PackageReference>` items — correct for the NuGet realms, which do not use Central Package Management. Yggdrasil is intentionally excluded from the `nuget` group and will carry its own targets files that omit `Version` entirely, relying on its `Directory.Packages.props` to supply versions via CPM. This is the same boundary that already separates `src/Directory.Build.props` between the groups.
+
+---
+
+## 12. `workflows` Group — Scatter `release.yml` to NuGet Realms
+
+The seven NuGet-shipping realms share an identical `.github/workflows/release.yml` (Svartalfheim's live file is the canonical form, proven 2026-06-26). Rather than manually creating six copies, scatter delivers them.
+
+**New group: `workflows`**
+
+| File | Target path in each realm |
+|---|---|
+| `config/.github/workflows/release.yml` | `.github/workflows/release.yml` |
+
+**Realm assignments** — only NuGet-shipping realms:
+
+| Realm | Adds `workflows` |
+|---|---|
+| Svartalfheim | Yes — already has the file; scatter idempotency means no-op on re-run if unchanged |
+| Asgard | Yes |
+| Midgard | Yes |
+| Urdarbrunnr | Yes |
+| Ratatoskr | Yes |
+| Himinbjorg | Yes |
+| Heimdall | Yes |
+| Yggdrasil | No — Yggdrasil does not ship NuGet packages and has no release ceremony |
+| Bifrost | No |
+| Nagalfar | No |
+| Glitnir | No |
+
+**`config/` directory structure addition:**
+
+```
+.github/
+  config/
+    .github/
+      workflows/
+        release.yml      ← canonical NuGet realm release + phone-home caller
+```
+
+**Wiring:** copy `Svartalfheim/.github/workflows/release.yml` to `config/.github/workflows/release.yml`, add the `workflows` group to `manifest.psd1`, assign it to the seven NuGet realms. The `paths: config/**` trigger in `scatter-the-runes.yml` picks up the new file automatically on the next push to `master`.

@@ -79,6 +79,12 @@ MSBuild evaluates `<PropertyGroup>` elements before `<ItemGroup>` elements withi
 ```yaml
 name: Phone Home — NuGet CPM Update
 
+# Composite actions cannot be called cross-repo from a reusable workflow — the
+# runner checks out the caller's repository, so ./paths resolve there, not here.
+# Scripts are fetched by explicitly checking out NorseArchitecture/.github.
+# GITHUB_TOKEN in workflow_call is caller-scoped; secrets.token (SCATTER_PAT)
+# covers cross-repo reads (.github) and writes (Yggdrasil).
+
 on:
   workflow_call:
     secrets:
@@ -89,11 +95,15 @@ jobs:
   update-cpm:
     if: ${{ !contains(github.ref_name, '-') }}
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: pwsh
     steps:
       - name: Checkout .github scripts
         uses: actions/checkout@v7
         with:
           repository: NorseArchitecture/.github
+          token: ${{ secrets.token }}
           path: github-src
 
       - name: Checkout Yggdrasil
@@ -113,10 +123,12 @@ jobs:
           GH_TOKEN: ${{ secrets.token }}
           REALM: ${{ github.event.repository.name }}
           VERSION: ${{ github.ref_name }}
-        run: pwsh github-src/scripts/phone-home-nuget.ps1 -Realm "$env:REALM" -Tag "$env:VERSION" -YggdrasilPath yggdrasil
+        run: ./github-src/scripts/phone-home-nuget.ps1 -Realm "$env:REALM" -Tag "$env:VERSION" -YggdrasilPath "$env:GITHUB_WORKSPACE/yggdrasil"
 ```
 
 **Context in `workflow_call`:** `github.event.repository.name` resolves to the calling repo (e.g., `Svartalfheim`); `github.ref_name` resolves to the tag that triggered the caller (e.g., `v0.0.2`). Both are confirmed behavior — `update-bifrost.yml` uses `github.event.repository.name` and `github.sha` on the same premise.
+
+`defaults: run: shell: pwsh` sets PowerShell Core as the default runner shell for every `run:` step so the script invocation uses `./` path syntax without an explicit `pwsh` prefix. Both `.github` checkouts require `secrets.token` because the org repos are private and `GITHUB_TOKEN` in a `workflow_call` context is scoped to the caller's repo. `$env:GITHUB_WORKSPACE/yggdrasil` is the absolute path to the Yggdrasil checkout — more robust than a relative path when the working directory shifts inside the script.
 
 The caller's repo is never checked out; only `.github` (to get the script) and Yggdrasil (to edit and push) are fetched.
 
@@ -147,9 +159,26 @@ PR body links back to the GitHub Release that triggered the phone-home so the au
 
 ### 2.7 Realm caller changes
 
-Each of the seven NuGet realms appends one job to its `release.yml`:
+Each of the seven NuGet realms needs a `release.yml` with both the `release` and `phone-home` jobs:
 
 ```yaml
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+  packages: write
+  pull-requests: write
+  security-events: write
+
+jobs:
+  release:
+    uses: NorseArchitecture/.github/.github/workflows/release-nuget.yml@master
+
   phone-home:
     needs: [release]
     uses: NorseArchitecture/.github/.github/workflows/phone-home-nuget.yml@master
@@ -158,6 +187,10 @@ Each of the seven NuGet realms appends one job to its `release.yml`:
 ```
 
 `needs: [release]` waits for the entire `release-nuget.yml` reusable workflow (build-test, codeql, pack-and-publish — all three jobs) before firing. Phone-home never runs if the release ceremony fails.
+
+`pull-requests: write` at the workflow level is required so the phone-home job can call `gh pr merge --auto` in Yggdrasil.
+
+**Delivery:** Svartalfheim's `release.yml` is already live (committed directly). The remaining six NuGet realms receive their `release.yml` via `scatter-the-runes` — the file is identical across all seven, so it is a natural fit for the canonical config fan-out. It lives in `.github/config/.github/workflows/release.yml` and is assigned to a new `workflows` file group in `manifest.psd1` covering all seven NuGet-shipping realms. This avoids seven independent manual PRs and keeps all future `release.yml` updates to a single edit in `.github`.
 
 **Token:** `SCATTER_PAT` is the org-level PAT with `repo` scope. It already covers cross-repo writes for scatter; the same credential covers Yggdrasil. If any realm does not yet have access to `SCATTER_PAT` as an org secret, promote it to org-level once rather than provisioning per-realm.
 
@@ -190,9 +223,10 @@ Release `v0.0.2` from Svartalfheim against a Yggdrasil that contains only `Direc
 
 ## 4. Consequences
 
-1. Create `Directory.Packages.props` in Yggdrasil with initial `0.0.0` placeholders for all seven realms. **One-time human step.**
-2. Add `phone-home-nuget.yml` to `.github/.github/workflows/`. **New artifact.**
-3. Add `phone-home-nuget.ps1` to `.github/scripts/`. **New artifact.**
-4. Append `phone-home` job to `release.yml` in each of the seven NuGet realms. **Seven thin caller stubs.**
-5. Confirm `SCATTER_PAT` is available as an org-level secret to all NuGet realm repos. **Secret audit / promotion if needed.**
-6. Smoke-test: release `v0.0.2` from Svartalfheim (§2.9).
+1. Create `Directory.Packages.props` in Yggdrasil with initial `0.0.0` placeholders for all seven realms. **One-time human step. Pending.**
+2. Add `phone-home-nuget.yml` to `.github/.github/workflows/`. **Done — live on master.**
+3. Add `phone-home-nuget.ps1` to `.github/scripts/`. **Done — live on master.**
+4. Svartalfheim's `release.yml` updated with `phone-home` job and `pull-requests: write`. **Done — live on master.**
+5. Add `release.yml` to `.github/config/.github/workflows/` and wire a `workflows` group into `manifest.psd1` covering all seven NuGet realms. Run scatter to deliver to the remaining six. **Next session.**
+6. Confirm `SCATTER_PAT` is available as an org-level secret to all NuGet realm repos. **Secret audit / promotion if needed. Next session.**
+7. Smoke-test: release `v0.0.2` from Svartalfheim (§2.9). **Pending — blocked on items 1 and 5.**

@@ -26,18 +26,18 @@
 
 ## File Map
 
-| Action | Path | Responsibility |
-|---|---|---|
-| Create | `Yggdrasil/Directory.Packages.props` | CPM file; version properties + PackageVersion items; hand-maintained, automation updates values only |
-| Create | `.github/.github/workflows/phone-home-nuget.yml` | Reusable `workflow_call`; pre-release guard; two checkouts; runs script |
-| Create | `.github/scripts/phone-home-nuget.ps1` | Edits props file, commits, pushes branch, opens/updates PR, arms auto-merge |
-| Modify | `Svartalfheim/.github/workflows/release.yml` | Append `phone-home` job |
-| Create | `Asgard/.github/workflows/release.yml` | New; both `release` and `phone-home` jobs |
-| Create | `Midgard/.github/workflows/release.yml` | New; both jobs |
-| Create | `Urdarbrunnr/.github/workflows/release.yml` | New; both jobs |
-| Create | `Ratatoskr/.github/workflows/release.yml` | New; both jobs |
-| Create | `Himinbjorg/.github/workflows/release.yml` | New; both jobs |
-| Create | `Heimdall/.github/workflows/release.yml` | New; both jobs |
+| Action | Path | Responsibility | Status |
+|---|---|---|---|
+| Create | `Yggdrasil/Directory.Packages.props` | CPM file; version properties + PackageVersion items; hand-maintained, automation updates values only | **Pending** |
+| ~~Create~~ | `.github/.github/workflows/phone-home-nuget.yml` | Reusable `workflow_call`; pre-release guard; two checkouts; runs script | **Done** |
+| ~~Create~~ | `.github/scripts/phone-home-nuget.ps1` | Edits props file, commits, pushes branch, opens/updates PR, arms auto-merge | **Done** |
+| ~~Modify~~ | `Svartalfheim/.github/workflows/release.yml` | Updated with `phone-home` job and `pull-requests: write` | **Done** |
+| Via scatter | `Asgard/.github/workflows/release.yml` | Delivered by `scatter-the-runes` — `workflows` group in manifest | Next session |
+| Via scatter | `Midgard/.github/workflows/release.yml` | Via scatter | Next session |
+| Via scatter | `Urdarbrunnr/.github/workflows/release.yml` | Via scatter | Next session |
+| Via scatter | `Ratatoskr/.github/workflows/release.yml` | Via scatter | Next session |
+| Via scatter | `Himinbjorg/.github/workflows/release.yml` | Via scatter | Next session |
+| Via scatter | `Heimdall/.github/workflows/release.yml` | Via scatter | Next session |
 
 ---
 
@@ -95,16 +95,13 @@ Expected: new file with the full CPM structure above. Stop here — human commit
 
 ---
 
-## Task 2: Add `phone-home-nuget.yml` reusable workflow
+## Task 2: Add `phone-home-nuget.yml` reusable workflow ✅ DONE
 
 **Files:**
-- Create: `.github/.github/workflows/phone-home-nuget.yml`
+- `.github/.github/workflows/phone-home-nuget.yml` — live on master (`e4105ec`, `ae5586f`, `706fce7`)
 
-**Context:** In a `workflow_call`, `github.event.repository.name` resolves to the calling repo (e.g., `Svartalfheim`) and `github.ref_name` resolves to the tag that triggered the caller (e.g., `v0.0.2`). Both checkouts use `secrets.token` — `GITHUB_TOKEN` in a `workflow_call` context is scoped to the caller's repo and cannot read `.github` or write to Yggdrasil cross-repo. The caller's repo is never checked out.
+**Actual file** (three differences from the original draft: `defaults: run: shell: pwsh`; `token:` on the `.github` checkout; run step uses `./github-src/...` and `$env:GITHUB_WORKSPACE/yggdrasil`):
 
-- [ ] **Step 1: Create the workflow file**
-
-`.github/.github/workflows/phone-home-nuget.yml`:
 ```yaml
 name: Phone Home — NuGet CPM Update
 
@@ -124,6 +121,9 @@ jobs:
   update-cpm:
     if: ${{ !contains(github.ref_name, '-') }}
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: pwsh
     steps:
       - name: Checkout .github scripts
         uses: actions/checkout@v7
@@ -149,39 +149,15 @@ jobs:
           GH_TOKEN: ${{ secrets.token }}
           REALM: ${{ github.event.repository.name }}
           VERSION: ${{ github.ref_name }}
-        run: pwsh github-src/scripts/phone-home-nuget.ps1 -Realm "$env:REALM" -Tag "$env:VERSION" -YggdrasilPath yggdrasil
+        run: ./github-src/scripts/phone-home-nuget.ps1 -Realm "$env:REALM" -Tag "$env:VERSION" -YggdrasilPath "$env:GITHUB_WORKSPACE/yggdrasil"
 ```
-
-- [ ] **Step 2: Validate YAML structure**
-
-```bash
-pwsh -c "
-  \$raw = Get-Content .github/.github/workflows/phone-home-nuget.yml -Raw
-  if (\$raw -match 'workflow_call' -and \$raw -match 'update-cpm' -and \$raw -match 'phone-home-nuget.ps1') {
-    Write-Host 'YAML structure check passed'
-  } else {
-    throw 'Missing expected keys'
-  }
-"
-```
-
-Expected: `YAML structure check passed`
-
-- [ ] **Step 3: Stage and review**
-
-```bash
-git -C .github add .github/workflows/phone-home-nuget.yml
-git -C .github diff --staged
-```
-
-Expected: new file with the full workflow above. Stop — human commits.
 
 ---
 
-## Task 3: Add `phone-home-nuget.ps1` script
+## Task 3: Add `phone-home-nuget.ps1` script ✅ DONE
 
 **Files:**
-- Create: `.github/scripts/phone-home-nuget.ps1`
+- `.github/scripts/phone-home-nuget.ps1` — live on master (`e4105ec`); matches the spec exactly
 
 **Context:** The script derives the property element name from the realm name by interpolating `$($Realm)Version` (PowerShell subexpression syntax avoids `$RealmVersion` being misread as a single variable). `Set-Content -NoNewline` prevents adding a trailing newline the original file doesn't have. Force-with-lease push means a faster re-release of the same realm updates the existing open PR rather than opening a duplicate.
 
@@ -385,16 +361,13 @@ Expected: new file with full script above. Stop — human commits.
 
 ---
 
-## Task 4: Wire Svartalfheim's `release.yml`
+## Task 4: Wire Svartalfheim's `release.yml` ✅ DONE
 
 **Files:**
-- Modify: `Svartalfheim/.github/workflows/release.yml`
+- `Svartalfheim/.github/workflows/release.yml` — live on master; includes `pull-requests: write` (required for `gh pr merge --auto` in Yggdrasil)
 
-**Context:** `needs: [release]` blocks `phone-home` until all three jobs inside `release-nuget.yml` (build-test, codeql, pack-and-publish) complete successfully. The `phone-home` job itself inherits the `permissions` block from the workflow level. The `SCATTER_PAT` org-level secret provides the PAT with cross-repo write access; see Task 6 for secret audit.
+**Actual file** (adds `pull-requests: write` vs. original draft):
 
-- [ ] **Step 1: Add the `phone-home` job**
-
-`Svartalfheim/.github/workflows/release.yml` — replace entire file:
 ```yaml
 name: Release
 
@@ -406,6 +379,7 @@ on:
 permissions:
   contents: write
   packages: write
+  pull-requests: write
   security-events: write
 
 jobs:
@@ -418,100 +392,21 @@ jobs:
     secrets:
       token: ${{ secrets.SCATTER_PAT }}
 ```
-
-- [ ] **Step 2: Stage and review**
-
-```bash
-git -C Svartalfheim add .github/workflows/release.yml
-git -C Svartalfheim diff --staged
-```
-
-Expected: only the `phone-home` job block added below the existing `release` job. Stop — human commits.
 
 ---
 
-## Task 5: Create `release.yml` for the remaining six NuGet realms
+## Task 5: Deliver `release.yml` to remaining six NuGet realms via scatter — Next session
 
-**Files:**
-- Create: `Asgard/.github/workflows/release.yml`
-- Create: `Midgard/.github/workflows/release.yml`
-- Create: `Urdarbrunnr/.github/workflows/release.yml`
-- Create: `Ratatoskr/.github/workflows/release.yml`
-- Create: `Himinbjorg/.github/workflows/release.yml`
-- Create: `Heimdall/.github/workflows/release.yml`
+**Strategy change:** `release.yml` is identical across all seven NuGet realms — a natural fit for `scatter-the-runes`. Rather than manually creating six copies, the canonical file lives in `.github/config/.github/workflows/release.yml` and is fanned out by the scatter machinery. This is the work of the next session (platform-config-sync implementation), not this plan.
 
-**Context:** These realms have no `.github/workflows/` directory yet. The release.yml is identical in shape across all six — thin callers with both jobs. The workflow only fires on tag pushes, so creating it now causes no build activity until the realm has packages to release and someone pushes a tag. Create the `.github/workflows/` directory as needed.
+**What the next session adds to the platform-config-sync plan:**
 
-- [ ] **Step 1: Create all six files**
+1. Copy `Svartalfheim/.github/workflows/release.yml` (the proven live file) to `.github/config/.github/workflows/release.yml`.
+2. Add a `workflows` group to `manifest.psd1` covering `.github/workflows/release.yml`.
+3. Assign `workflows` to the seven NuGet-shipping realms: Svartalfheim, Asgard, Midgard, Urdarbrunnr, Ratatoskr, Himinbjorg, Heimdall.
+4. Run scatter — six PRs open automatically with auto-merge armed.
 
-For each of Asgard, Midgard, Urdarbrunnr, Ratatoskr, Himinbjorg, Heimdall — the content is identical:
-
-```yaml
-name: Release
-
-on:
-  push:
-    tags:
-      - 'v*.*.*'
-
-permissions:
-  contents: write
-  packages: write
-  security-events: write
-
-jobs:
-  release:
-    uses: NorseArchitecture/.github/.github/workflows/release-nuget.yml@master
-
-  phone-home:
-    needs: [release]
-    uses: NorseArchitecture/.github/.github/workflows/phone-home-nuget.yml@master
-    secrets:
-      token: ${{ secrets.SCATTER_PAT }}
-```
-
-Create for each realm (run from the Bifrost workspace root):
-
-```bash
-for realm in Asgard Midgard Urdarbrunnr Ratatoskr Himinbjorg Heimdall; do
-  mkdir -p "$realm/.github/workflows"
-  cat > "$realm/.github/workflows/release.yml" << 'EOF'
-name: Release
-
-on:
-  push:
-    tags:
-      - 'v*.*.*'
-
-permissions:
-  contents: write
-  packages: write
-  security-events: write
-
-jobs:
-  release:
-    uses: NorseArchitecture/.github/.github/workflows/release-nuget.yml@master
-
-  phone-home:
-    needs: [release]
-    uses: NorseArchitecture/.github/.github/workflows/phone-home-nuget.yml@master
-    secrets:
-      token: ${{ secrets.SCATTER_PAT }}
-EOF
-  echo "Created $realm/.github/workflows/release.yml"
-done
-```
-
-- [ ] **Step 2: Stage and review all six**
-
-```bash
-for realm in Asgard Midgard Urdarbrunnr Ratatoskr Himinbjorg Heimdall; do
-  git -C "$realm" add .github/workflows/release.yml
-  echo "=== $realm ===" && git -C "$realm" diff --staged
-done
-```
-
-Expected: six identical new files, one per realm. Stop — human commits each realm (or batches them — human decides).
+Svartalfheim is included in the `workflows` group so any future change to the canonical `release.yml` flows to all seven realms uniformly.
 
 ---
 
@@ -540,6 +435,8 @@ The fastest confirmation is the smoke test (Task 7) — if Svartalfheim's phone-
 ---
 
 ## Task 7: Smoke test — Svartalfheim `v0.0.2`
+
+**Blocked on:** Task 1 (`Directory.Packages.props` in Yggdrasil) and Task 5 (scatter delivering `release.yml` is a precondition for the other six realms but not for Svartalfheim itself — Svartalfheim can smoke-test once Task 1 is done).
 
 **Context:** Yggdrasil currently has no CI workflow and no branch protection configured via `carve-the-laws.ps1`. With no required status checks, `gh pr merge --auto --merge` will fire as soon as the PR is created (nothing to wait for). This is the correct smoke-test behavior — proving the full chain before Yggdrasil has a build. Once Yggdrasil has a `.slnx` and a `ci.yml`, the auto-merge gate will become meaningful.
 

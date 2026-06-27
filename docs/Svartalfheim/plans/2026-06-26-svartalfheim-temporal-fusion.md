@@ -127,6 +127,17 @@ public sealed class TimeZoneParserTests
 		actual.TryGetValue(out Failure failure).ShouldBeTrue();
 		failure.Reason.ShouldBe(ParseFailure.Empty);
 	}
+
+	[Fact]
+	void Should_fail_with_malformed_reason_when_optional_input_is_unrecognized()
+	{
+		var actual = TimeZoneParser.ParseOptional("Not/A/Zone");
+		actual.HasValue.ShouldBeTrue();
+		actual.Value.TryGetValue(out Failure failure).ShouldBeTrue();
+		failure.Reason.ShouldBe(ParseFailure.Malformed);
+		failure.ExpectedType.ShouldBe("TimeZoneInfo");
+		failure.Format.ShouldBe("IANA");
+	}
 }
 ```
 
@@ -353,6 +364,7 @@ public sealed class TemporalFusionTests
 		failure.Reason.ShouldBe(ParseFailure.Malformed);
 		failure.ExpectedType.ShouldBe("DateTime");
 		failure.Detail.ShouldBe("partial instant");
+		failure.Input.ShouldBe("2026-01-02");
 	}
 
 	[Fact]
@@ -363,6 +375,7 @@ public sealed class TemporalFusionTests
 		failure.Reason.ShouldBe(ParseFailure.Malformed);
 		failure.ExpectedType.ShouldBe("DateTime");
 		failure.Detail.ShouldBe("partial instant");
+		failure.Input.ShouldBe("15:04:05");
 	}
 
 	[Fact]
@@ -373,6 +386,7 @@ public sealed class TemporalFusionTests
 		actual.HasValue.ShouldBeTrue();
 		actual.Value.TryGetValue(out Failure failure).ShouldBeTrue();
 		failure.Detail.ShouldBe("partial instant");
+		failure.Input.ShouldBe("2026-01-02");
 	}
 
 	// ── Absence (both fields empty — zone is not consulted) ─────────────────
@@ -409,13 +423,14 @@ public sealed class TemporalFusionTests
 	// ── Sentinel guard ───────────────────────────────────────────────────────
 
 	[Fact]
-	void Should_reject_sentinel_datetime_as_malformed()
+	void Should_propagate_date_sentinel_failure_when_date_is_datetime_minvalue()
 	{
-		// DateTime.MinValue = 0001-01-01T00:00:00 UTC; use UTC zone so the round-trip is exact.
+		// DateOnlyParser blocks DateOnly.MinValue (0001-01-01) before TemporalFusion reaches
+		// its own UTC sentinel guard. The sub-parser is the first line of defense.
 		var actual = TemporalFusion.FuseRequired("0001-01-01", "00:00:00", "UTC");
 		actual.TryGetValue(out Failure failure).ShouldBeTrue();
 		failure.Reason.ShouldBe(ParseFailure.Malformed);
-		failure.ExpectedType.ShouldBe("DateTime");
+		failure.ExpectedType.ShouldBe("DateOnly");
 	}
 }
 ```
@@ -477,12 +492,12 @@ public static class TemporalFusion
 	/// <returns>The fuse outcome — never throws on bad input.</returns>
 	public static Result<DateTime> FuseRequired(ReadOnlySpan<char> date, ReadOnlySpan<char> time, ReadOnlySpan<char> zone)
 	{
-		var dateAbsent = date.Trim().IsEmpty;
-		var timeAbsent = time.Trim().IsEmpty;
-		if (dateAbsent && timeAbsent)
+		var dateTrimmed = date.Trim();
+		var timeTrimmed = time.Trim();
+		if (dateTrimmed.IsEmpty && timeTrimmed.IsEmpty)
 			return new Failure(ParseFailure.Empty, string.Empty, ExpectedType);
-		if (dateAbsent || timeAbsent)
-			return new Failure(ParseFailure.Malformed, string.Empty, ExpectedType, null, "partial instant");
+		if (dateTrimmed.IsEmpty || timeTrimmed.IsEmpty)
+			return new Failure(ParseFailure.Malformed, dateTrimmed.IsEmpty ? timeTrimmed : dateTrimmed, ExpectedType, null, "partial instant");
 		return Fuse(date, time, zone);
 	}
 
@@ -499,12 +514,12 @@ public static class TemporalFusion
 	/// <returns><see langword="null"/> when both date and time are absent; otherwise the fuse outcome.</returns>
 	public static Result<DateTime>? FuseOptional(ReadOnlySpan<char> date, ReadOnlySpan<char> time, ReadOnlySpan<char> zone)
 	{
-		var dateAbsent = date.Trim().IsEmpty;
-		var timeAbsent = time.Trim().IsEmpty;
-		if (dateAbsent && timeAbsent)
+		var dateTrimmed = date.Trim();
+		var timeTrimmed = time.Trim();
+		if (dateTrimmed.IsEmpty && timeTrimmed.IsEmpty)
 			return null;
-		if (dateAbsent || timeAbsent)
-			return new Failure(ParseFailure.Malformed, string.Empty, ExpectedType, null, "partial instant");
+		if (dateTrimmed.IsEmpty || timeTrimmed.IsEmpty)
+			return new Failure(ParseFailure.Malformed, dateTrimmed.IsEmpty ? timeTrimmed : dateTrimmed, ExpectedType, null, "partial instant");
 		return Fuse(date, time, zone);
 	}
 
@@ -528,10 +543,10 @@ public static class TemporalFusion
 			zoneResult.TryGetValue(out Failure zoneFailure);
 			return zoneFailure;
 		}
-		return Convert(dateSuccess.Value, timeSuccess.Value, zoneSuccess.Value);
+		return ConvertToUtc(dateSuccess.Value, timeSuccess.Value, zoneSuccess.Value);
 	}
 
-	static Result<DateTime> Convert(DateOnly date, TimeOnly time, TimeZoneInfo zone)
+	static Result<DateTime> ConvertToUtc(DateOnly date, TimeOnly time, TimeZoneInfo zone)
 	{
 		var wall = date.ToDateTime(time, DateTimeKind.Unspecified);
 		var compositeInput = $"{wall:yyyy-MM-ddTHH:mm} {zone.Id}";
@@ -631,10 +646,10 @@ Suggested message: `Extend AOT smoke: TimeZoneParser and TemporalFusion survive 
 | §4 `FuseRequired`/`FuseOptional` — three spans, `Result<DateTime>`/`Result<DateTime>?`, no provider | Task 2 |
 | §4 Algorithm — date→time→zone parse order, first-failure-wins verbatim | Task 2 `Fuse()` |
 | §4 `wall = date.ToDateTime(time, DateTimeKind.Unspecified)` | Task 2 `Convert()` |
-| §5 Gap check (`IsInvalidTime`) before conversion → `Detail = "DST gap"` | Task 2 `Convert()` |
-| §5 Ambiguity check (`IsAmbiguousTime`) before conversion → `Detail = "DST ambiguous"` | Task 2 `Convert()` |
+| §5 Gap check (`IsInvalidTime`) before conversion → `Detail = "DST gap"` | Task 2 `ConvertToUtc()` |
+| §5 Ambiguity check (`IsAmbiguousTime`) before conversion → `Detail = "DST ambiguous"` | Task 2 `ConvertToUtc()` |
 | §5 BCL silent standard-time pick proven not to occur | Task 2 test `Should_fail_with_dst_ambiguous_detail...` |
-| §4 Sentinel guard on fused UTC result (MinValue/MaxValue → Malformed) | Task 2 `Convert()` + test |
+| §4 Sentinel guard on fused UTC result (MinValue/MaxValue → Malformed) | Task 2 `ConvertToUtc()` + test |
 | §4 `FuseOptional` partial rule — both empty → null, one empty → Malformed partial instant | Task 2 |
 | §6 `ParseFailure` unchanged, Detail stable tokens | Task 2 impl |
 | §7 No provider — ISO canonical doors called directly (no gateway routing) | Task 2 (no `Parser.cs` changes) |
