@@ -3,7 +3,7 @@
 > *Glitnir is the tenth; its pillars are gold, and its roof is set with silver.*
 > — Grímnismál 15. The shining hall of the Edda, where every suit is settled.
 
-<img width="720" height="960" alt="Image" src="https://github.com/user-attachments/assets/c3658c7f-db98-4814-ae44-966c038a7536" />
+<img width="720" height="960" alt="Glitnir — the shining hall, its pillars of gold and roof of silver" src="https://github.com/user-attachments/assets/c3658c7f-db98-4814-ae44-966c038a7536" />
 
 *Image credit: [@norsemythologyclips](https://www.instagram.com/norsemythologyclips/) — go follow them.*
 
