@@ -74,10 +74,10 @@ tag vX.Y.Z
 
 `package` gates on both `ci` and `codeql`. It:
 
-1. Builds the container image.
-2. Runs Trivy (`aquasecurity/trivy-action`) against the built image — OS-layer CVEs and language-package vulnerabilities in one pass. Fails the job on HIGH or CRITICAL findings; nothing lands in the registry from a vulnerable image.
-3. Generates a CycloneDX SBOM via Trivy and attaches it to the GitHub Release alongside the container image metadata.
-4. Pushes `ghcr.io/norsearchitecture/yggdrasil:{version}` to GHCR. The version is the bare tag with the `v` prefix stripped (`v0.1.0` → `0.1.0`), consistent with the MinVer convention used by NuGet realms.
+1. Builds three container images — `hosting/migrations`, `hosting/web`, `hosting/worker` — to the local Docker daemon via `dotnet publish /t:PublishContainer`. Images never reach GHCR until Trivy passes.
+2. Runs Trivy (`aquasecurity/trivy-action`) against each built image — OS-layer CVEs and language-package vulnerabilities in one pass. Fails the job on HIGH or CRITICAL findings; nothing lands in the registry from a vulnerable image.
+3. Generates a CycloneDX SBOM via Trivy for each image and attaches all three to the GitHub Release.
+4. Pushes all three images to GHCR. The version is the bare tag with the `v` prefix stripped (`v0.1.0` → `0.1.0`), consistent with the MinVer convention used by NuGet realms.
 
 `deploy-hook` gates on `package`. Today it is a named no-op:
 
@@ -120,14 +120,18 @@ The full ceremony logic lives in `.github`. A future container-shipping realm (a
 
 ### 2.6 Container identity
 
+| Image | GHCR path | Tag | `:latest` |
+|---|---|---|---|
+| Migrations init container | `ghcr.io/norsearchitecture/hosting/migrations` | `{bare-version}` | Never |
+| Web server | `ghcr.io/norsearchitecture/hosting/web` | `{bare-version}` | Never |
+| Worker | `ghcr.io/norsearchitecture/hosting/worker` | `{bare-version}` | Never |
+
+`{bare-version}` = tag with `v` prefix stripped (`v0.1.0` → `0.1.0`), consistent with MinVer convention.
+
 | Property | Value |
 |---|---|
-| Registry | `ghcr.io` |
-| Image | `ghcr.io/norsearchitecture/yggdrasil` |
-| Tag | `{bare-version}` — `v` prefix stripped, e.g. `0.1.0` |
-| `:latest` | Never |
-| SBOM format | CycloneDX, attached to GitHub Release |
-| Vulnerability threshold | Fail on HIGH or CRITICAL |
+| SBOM format | CycloneDX, one file per image, attached to GitHub Release |
+| Vulnerability threshold | Fail on HIGH or CRITICAL — nothing reaches GHCR from a vulnerable image |
 
 ### 2.7 Pre-release tags
 
