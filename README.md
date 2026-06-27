@@ -3,6 +3,10 @@
 > *Glitnir is the tenth; its pillars are gold, and its roof is set with silver.*
 > — Grímnismál 15. The shining hall of the Edda, where every suit is settled.
 
+<img width="720" height="960" alt="Image" src="https://github.com/user-attachments/assets/c3658c7f-db98-4814-ae44-966c038a7536" />
+
+*Image credit: [@norsemythologyclips](https://www.instagram.com/norsemythologyclips/) — go follow them.*
+
 **The software industry builds the same foundation over and over, badly, once per company.** Every new venture re-implements auth, persistence, hosting, observability, and messaging from scratch — accruing tech debt and build-error tax before it writes a line of the thing that actually makes money. Glitnir is the court where we prove the alternative, and the alternative is audacious: **one rigorously-built substrate that spins up whole companies.**
 
 Glitnir is the **design court** — where the Norse Architecture is argued to convergence before a line of production code is rendered. Code is the verdict, not the deliberation, and verdicts come last. What's on trial is a platform thesis worth betting companies on.
