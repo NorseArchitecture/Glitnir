@@ -50,15 +50,15 @@ One repository per platform realm, named for the myth; every project inside name
 
 | Repository | Namespace root | Purpose |
 |---|---|---|
-| **Bifrost** | `Norse.Orchestration.*` | The bridge in — the .NET Aspire AppHost meta-repository; clone once, cross the bridge, and every realm is running |
+| **Bifröst** | `Norse.Orchestration.*` | The bridge in — the .NET Aspire AppHost meta-repository; clone once, cross the bridge, and every realm is running |
 | **Asgard** | `Norse.Abstractions.*` | Declared law — contracts, attribute model, plugin interfaces, mediator law |
 | **Midgard** | `Norse.Infrastructure.*` | Embodied law — persistence, API, the source-generated mediator runtime, UI composition |
 | **Svartalfheim** | `Norse.Primitives.*` | The forge — primitives (`Result<T>`, `Money`) and the analyzers that strike when law is broken |
 | **Urdarbrunnr** | `Norse.EntityFramework.*` | The Well of Urd — entity base types, DbContext foundations, conventions, value converters, and the migrations chassis: the record of all that has become |
 | **Ratatoskr** | `Norse.NServiceBus.*` | The squirrel — NServiceBus endpoint configuration, saga infrastructure, message conventions, and transport wiring; Asgard declares the messaging surface, Ratatoskr carries it |
 | **Yggdrasil** | `Norse.Hosting.*` | The world tree — hosting runtimes and deployables the cosmos hangs on |
-| **Himinbjorg** | `Norse.Identity.*` | Heimdall's hall — EF persistence for ASP.NET Identity and OpenIddict: entities, conventions, and migrations; sealed server-side, never referenced from WASM or MAUI |
-| **Heimdall** | `Norse.Access.*` | The watchman — auth services on Himinbjorg: one access ruleset across Blazor Server, WASM, and MAUI, with admin components and the backing gRPC service |
+| **Himinbjörg** | `Norse.Identity.*` | Heimdall's hall — EF persistence for ASP.NET Identity and OpenIddict: entities, conventions, and migrations; sealed server-side, never referenced from WASM or MAUI |
+| **Heimdall** | `Norse.Access.*` | The watchman — auth services on Himinbjörg: one access ruleset across Blazor Server, WASM, and MAUI, with admin components and the backing gRPC service |
 | **Naglfar** | `Norse.DesignSystem.*` | The ship of the dead — design tokens, radii, and component primitives assembled into something seaworthy enough to carry every product UI |
 | **Glitnir** | *(docs only)* | This repo — the design court and court of record |
 
@@ -66,7 +66,7 @@ Further realms (Observability, Warehouse, AI) each get their own lore-named repo
 
 ## The Court
 
-Glitnir rides inside Bifrost at `./Glitnir`, so the entire record is on disk in every development workspace: when an appeal surfaces, the verdict is reached without scouring repositories. Glitnir records **the platform** — each product venture, when born, stands up its own design court in its own perimeter, and launches its brand on its own terms. That is why no operating entity is named in this corpus: the architecture is bigger than any of its parts.
+Glitnir rides inside Bifröst at `./Glitnir`, so the entire record is on disk in every development workspace: when an appeal surfaces, the verdict is reached without scouring repositories. Glitnir records **the platform** — each product venture, when born, stands up its own design court in its own perimeter, and launches its brand on its own terms. That is why no operating entity is named in this corpus: the architecture is bigger than any of its parts.
 
 ## Finding Your Way
 
