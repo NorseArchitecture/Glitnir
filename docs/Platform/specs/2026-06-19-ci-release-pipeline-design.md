@@ -51,7 +51,7 @@ Integration tests that hit real Postgres or RabbitMQ via testcontainers require 
 
 Nothing additional runs on merge. Branch protection requires a PR branch to be up to date with master before merge is permitted, so the tree landing on master is byte-for-byte what the PR gate already built and tested — a second build on merge would be redundant compute, not redundant insurance.
 
-**Operational note — amended 2026-06-25:** the pipeline is live and proven on Svartalfheim. The admin-bypass exception in the "Law of the Aesir" ruleset is retained deliberately: `required_approving_review_count: 0` means Buvy would be self-approving his own PRs, which is theater; the bypass lets him push directly in genuine emergencies. Re-entry trigger: a second contributor joins — then flip to `bypass_mode: pull_request` and raise the review count to 1.
+**Operational note — amended 2026-06-25:** the pipeline is live and proven on Svartalfheim. The admin-bypass exception in the "Law of the Æsir" ruleset is retained deliberately: `required_approving_review_count: 0` means Buvy would be self-approving his own PRs, which is theater; the bypass lets him push directly in genuine emergencies. Re-entry trigger: a second contributor joins — then flip to `bypass_mode: pull_request` and raise the review count to 1.
 
 ### 2.5 The tag is the version
 
@@ -85,7 +85,7 @@ GitHub Packages and GHCR both live under the `NorseArchitecture` org, so the wor
 
 **NuGet source — do not add inline — confirmed 2026-06-27.** The `nuget.config` is scattered to every realm by `scatter-the-runes.ps1`. It declares the `github` source with package source mapping (`Norse.*` → GitHub Packages, `*` → nuget.org) required for realms that consume `Norse.*` packages. When the runner checks out the caller's repo, the `nuget.config` is already present and `dotnet restore` uses it automatically. Any inline `dotnet nuget add source --name github` step will fail with "The name specified has already been added" because the source is already registered at the project level. Never add inline NuGet source steps in `release-container.yml` or any reusable workflow — the scattered config is the one source of truth.
 
-**`carve-the-laws.ps1` requires `pwsh` (PowerShell Core).** It is cross-platform (`#!/usr/bin/env pwsh`) and runs on Windows natively and on Linux/WSL via `snap install powershell --classic`. It is listed in the `.github` repo's `TOOLCHAIN.md`. It applies both repo settings (`delete_branch_on_merge: true`) and the "Law of the Aesir" ruleset in a single idempotent run — `./scripts/carve-the-laws.ps1 <Realm>` is the complete ceremony for any new realm.
+**`carve-the-laws.ps1` requires `pwsh` (PowerShell Core).** It is cross-platform (`#!/usr/bin/env pwsh`) and runs on Windows natively and on Linux/WSL via `snap install powershell --classic`. It is listed in the `.github` repo's `TOOLCHAIN.md`. It applies both repo settings (`delete_branch_on_merge: true`) and the "Law of the Æsir" ruleset in a single idempotent run — `./scripts/carve-the-laws.ps1 <Realm>` is the complete ceremony for any new realm.
 
 ## 3. Alternatives Rejected
 

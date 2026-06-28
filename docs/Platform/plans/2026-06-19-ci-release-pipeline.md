@@ -6,7 +6,7 @@
 
 **Architecture:** Two reusable workflows (`workflow_call`) in the org's `.github` repo — `ci-build-test.yml` (restore/build/test) and `release-nuget.yml` (rebuild, CodeQL, SBOM, `dotnet pack`, push to GitHub Packages, GitHub Release). Svartalfheim gets two thin caller workflows referencing them, plus MinVer wired into its `Directory.Build.props` so a pushed `vX.Y.Z` tag is the only place a version number is ever typed.
 
-**Tech Stack:** GitHub Actions (`workflow_call` reusable workflows), MinVer, `github/codeql-action`, `anchore/sbom-action`, GitHub Packages (NuGet), GitHub's existing "Law of the Aesir" repository ruleset.
+**Tech Stack:** GitHub Actions (`workflow_call` reusable workflows), MinVer, `github/codeql-action`, `anchore/sbom-action`, GitHub Packages (NuGet), GitHub's existing "Law of the Æsir" repository ruleset.
 
 ## Global Constraints
 
@@ -17,7 +17,7 @@
 - **Warnings-as-errors and `NuGetAudit` are already enforced** via Svartalfheim's `Directory.Build.props` (`TreatWarningsAsErrors=true`, `WarningLevel=9999`) per the build-enforcement spec (2026-06-05). CI executes that law; this plan does not reconfigure it.
 - **Tags are `vX.Y.Z`** (semver, `v`-prefixed) — the human-typed version is the audit-trail moment (design spec §2.5). MinVer is configured with `MinVerTagPrefix=v` to match.
 - **The `.github` repo already exists** (`NorseArchitecture/.github`, created 2026-06-11) — it is **not** created in this plan, only added to. It is cloned to a sibling working directory, `../.github` relative to the Bifrost workspace root — **never** as a Bifrost submodule (Bifrost CLAUDE.md §4: only platform realms and the AppHost belong inside Bifrost).
-- **Branch protection already exists.** The "Law of the Aesir" ruleset (`NorseArchitecture/.github/scripts/carve-the-laws.ps1`) is already active on Svartalfheim — PRs required, no force-push, no deletion, a required status check with `context: 'build'`. This plan does not invent new branch protection; it aligns that existing required-check name to whatever GitHub Actions actually reports once the real workflow exists (the script's own comment anticipates this: *"Adjust when workflows settle"*).
+- **Branch protection already exists.** The "Law of the Æsir" ruleset (`NorseArchitecture/.github/scripts/carve-the-laws.ps1`) is already active on Svartalfheim — PRs required, no force-push, no deletion, a required status check with `context: 'build'`. This plan does not invent new branch protection; it aligns that existing required-check name to whatever GitHub Actions actually reports once the real workflow exists (the script's own comment anticipates this: *"Adjust when workflows settle"*).
 - **GitHub Packages is the NuGet feed:** `https://nuget.pkg.github.com/NorseArchitecture/index.json`, authenticated with the workflow's automatic `GITHUB_TOKEN` — no new secret is provisioned anywhere in this plan.
 - **US English spelling** in every file, commit message, and PR/release title touched by this plan.
 - **No packaging-metadata authoring beyond what `dotnet pack` needs to succeed, plus making `PackageId` explicit.** Svartalfheim's own CLAUDE.md already tracks "NuGet packaging metadata" as its own deferred increment (#3) — icon, license expression, tags, embedded README stay there, out of scope here. The one exception: `PackageId` is set explicitly to `Norse.$(MSBuildProjectName)` in `Directory.Build.props` (Task 3), mirroring `AssemblyName`/`RootNamespace` — it already resolves to that value by NuGet's default fallback, but the platform's convention is to state identity properties explicitly rather than lean on an implicit default. This also fixes the package identity in place for whenever the platform matures enough to publish to a public feed instead of GitHub Packages — same `PackageId`, just a different `--source`.
@@ -406,7 +406,7 @@ Leave the PR open. Task 5 must land first, because the existing required-status-
 
 **Interfaces:**
 - Consumes: the exact check-name string recorded in Task 4 Step 4.
-- Produces: an updated "Law of the Aesir" ruleset on `NorseArchitecture/Svartalfheim` whose required status check matches reality.
+- Produces: an updated "Law of the Æsir" ruleset on `NorseArchitecture/Svartalfheim` whose required status check matches reality.
 
 - [ ] **Step 1: Confirm the real check name**
 

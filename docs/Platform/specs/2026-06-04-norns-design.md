@@ -21,7 +21,7 @@
 
 ## 1. Motivation
 
-The Norns — Urd, Verdandi, Skuld; what was, what is, what shall be — weave fate at Yggdrasil's roots. Even the Aesir are bound by their weave. In platform terms:
+The Norns — Urd, Verdandi, Skuld; what was, what is, what shall be — weave fate at Yggdrasil's roots. Even the Æsir are bound by their weave. In platform terms:
 
 - **Urd (what was)** — the audit substrate. Every row version, who wrote it, from where, through which message chain. When a dispute needs an unwind eighteen months from now, the answer exists because it was woven at write time. History that was not captured cannot be recovered; this spec makes *not capturing it* a deliberate, typed, reviewed act rather than an omission.
 - **Verdandi (what is)** — the classification fabric. SIC, NAICS, geography, currencies, units of measure, and the licensed datasets (NCCI, ISO forms) every bounded context FKs against. Canonical, versioned, deterministic identity, seeded through one pipeline.

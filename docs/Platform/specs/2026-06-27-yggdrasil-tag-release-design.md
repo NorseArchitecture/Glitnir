@@ -169,7 +169,7 @@ The routing condition (`contains(github.ref_name, '-')`) mirrors the pre-release
 
 1. Add `release-container.yml` to `NorseArchitecture/.github/.github/workflows/`. **Pending.**
 2. Add Yggdrasil's thin `ci.yml` and `release.yml` callers. **Pending.**
-3. Run `carve-the-laws.ps1` against Yggdrasil to apply branch protection and the "Law of the Aesir" ruleset. **Pending.**
+3. Run `carve-the-laws.ps1` against Yggdrasil to apply branch protection and the "Law of the Æsir" ruleset. **Pending.**
 4. Confirm `SCATTER_PAT` is not needed on Yggdrasil (no phone-home job); only `GITHUB_TOKEN` with `packages: write` is required for the GHCR push. **Confirmed by design.**
 5. When the cloud environment story is designed, implement `deploy-hook` in `release-container.yml`. Job name and position in the graph are fixed; only the steps change. Apply the routing decided in §2.7: pre-release tags deploy to a feature environment; stable tags deploy to the default target and wait for human promotion via the deployment tool of record. **Future — implement together.**
 6. Set `minimum_coverage` in Yggdrasil's `ci.yml` when the first tests land. **Future.**

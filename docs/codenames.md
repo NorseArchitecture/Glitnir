@@ -5,7 +5,7 @@ The single source of truth binding each Norse **codename** (lore) to the **funct
 **The model (2026-06-07 capstone — see `docs/norse-architecture.md`):**
 
 - **Code and spec prose use the FUNCTION.** The shared platform substrate is **`Norse.{Function}`** — branded *"the Norse Architecture."* Function names are compiler-enforced and cannot drift.
-- **Codenames are LORE.** Heimdall, Mimir, the Aesir, the realms live in this dictionary, the README, and — since 2026-06-11 — as the **repository names** (the marketing front door: open the org and tour the cosmos; open the solution and every project says its function). They never appear inside code as operational identifiers: namespaces, projects, and specs use the function. *Mythology markets, functions operate, docs explain.*
+- **Codenames are LORE.** Heimdall, Mimir, the Æsir, the realms live in this dictionary, the README, and — since 2026-06-11 — as the **repository names** (the marketing front door: open the org and tour the cosmos; open the solution and every project says its function). They never appear inside code as operational identifiers: namespaces, projects, and specs use the function. *Mythology markets, functions operate, docs explain.*
 - **Products are sovereign.** Each separately-capitalized company rides the substrate under its own root — `{Company}.{Context}.*` — and owns its internals once it conforms to `Norse.Abstractions` and rides the rails.
 - **`Norse.` is a brand/vendor root, not a tier.** The realms stay peers within it (CLAUDE.md §5), reading like `Microsoft.Extensions.*`.
 
@@ -19,7 +19,7 @@ The shared, product-agnostic cosmos. Codename = the lore; namespace = the operat
 
 | Codename (lore) | Namespace (code) | Rationale (myth → function) |
 |---|---|---|
-| **Asgard** | `Norse.Abstractions` | Realm of the law-giving Aesir — *declares* the law (contracts, attribute model, mediator law) that Infrastructure embodies. |
+| **Asgard** | `Norse.Abstractions` | Realm of the law-giving Æsir — *declares* the law (contracts, attribute model, mediator law) that Infrastructure embodies. |
 | **Midgard** | `Norse.Infrastructure` | Realm of mortals where law is *lived* — concrete persistence, mediator runtime, API, UI Composition framework. |
 | **Urdarbrunnr** | `Norse.EntityFramework` | The Well of Urd at Yggdrasil's roots, where the Norns draw water to sustain the tree and carve fate into its trunk as runes — the EF Core foundation layer: entity base types, DbContext foundations, conventions, value converters, and the migrations chassis. The record of all that has become, governed by Asgard's declared law. Named 2026-06-11 — the *well* leaves the lore pool, not a Norn (see the bench note). |
 | **Svartalfheim** | `Norse.Primitives` | Dwarven forge of Mjölnir — primitives + analyzers, forged in a hotter fire *below* the domain, and they *compose* the domain you later define (hence Primitives, not "Domain"). |

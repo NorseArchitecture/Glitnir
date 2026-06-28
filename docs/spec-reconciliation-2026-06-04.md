@@ -215,7 +215,7 @@ The hosting runtime wires NSB's System.Text.Json serializer to a combined `JsonT
 - **Living docs not yet swept** (reserved for a careful hand-pass): CLAUDE.md **inline** §2/§4/§7/§8 usages; `decomposition.md` submodule map + realm refs; `project-structure.md`.
 - **Four residue decisions, all riding the Yggdrasil-umbrella-vs-Norse-brand flag** (`docs/codenames.md`): (a) **bare realm-actor prose** ("Midgard owns", "Asgard tier", "Heimdall judges") — convert to function-prose, or keep codenames as acceptable lore-shorthand? (b) **PascalCase API/type symbols** — `AddYggdrasilWebHost`, `YggdrasilTier`, `HeimdallService`, `HeimdallDbContext`, `MidgardDbContext` → function form, or keep? (`YggdrasilPrincipal` stays per ruling 1.2.) (c) **lowercase repo/submodule slugs** — `asgard-infrastructure`, `yggdrasil-hosting`, `{company}-auth` → `norse-*` form? (d) **lowercase DB schema names** — `heimdall` schema → `auth`?
 - **Ghost references (content cleanup, not naming):** `Yggdrasil.DevServer`, `Yggdrasil.Hosting.Wasm`, `Yggdrasil.Hosting.Composition` reference *deleted* projects (DevServer deleted 2026-06-05; Wasm/Composition erased) — remove/update in a content pass, separate from the rename.
-- The **Aesir-README** (lore home) still to author.
+- The **Æsir-README** (lore home) still to author.
 
 ---
 

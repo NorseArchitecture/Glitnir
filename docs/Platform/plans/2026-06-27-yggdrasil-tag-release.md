@@ -430,13 +430,13 @@ The laws are carved. Verify with:
 gh ruleset list -R NorseArchitecture/Yggdrasil
 ```
 
-Expected: one ruleset named `Law of the Aesir` with status `active`.
+Expected: one ruleset named `Law of the Æsir` with status `active`.
 
 - [ ] **Step 4: Verify the required status check name**
 
 ```bash
 gh api repos/NorseArchitecture/Yggdrasil/rulesets \
-  --jq '.[] | select(.name == "Law of the Aesir") | .rules[] | select(.type == "required_status_checks") | .parameters.required_status_checks'
+  --jq '.[] | select(.name == "Law of the Æsir") | .rules[] | select(.type == "required_status_checks") | .parameters.required_status_checks'
 ```
 
 Expected:
