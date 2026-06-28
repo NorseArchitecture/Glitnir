@@ -77,3 +77,6 @@ Glitnir rides inside Bifröst at `./Glitnir`, so the entire record is on disk in
 - [`docs/decomposition.md`](docs/decomposition.md) — bounded-context map and repository map
 - [`docs/conventions.md`](docs/conventions.md) — enum and database-object law
 - [`docs/project-structure.md`](docs/project-structure.md) — per-context project shapes and deployables
+
+## Soundtrack: Glitnir
+[![Soundtrack: Glitnir](https://img.youtube.com/vi/E8mGWYRcmec/maxresdefault.jpg)](https://www.youtube.com/watch?v=E8mGWYRcmec)
