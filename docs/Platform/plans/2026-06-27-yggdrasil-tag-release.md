@@ -6,7 +6,7 @@
 
 **Architecture:** Two repositories are touched: `NorseArchitecture/.github` receives the reusable `release-container.yml` workflow (the ceremony); `NorseArchitecture/Yggdrasil` receives two thin callers (`ci.yml`, `release.yml`) that invoke the shared workflows by their fully-qualified org path. The package job builds three images to the local Docker daemon, scans each with Trivy (CycloneDX SBOM output, HIGH/CRITICAL exit), pushes only on clean scans, then creates a GitHub Release attaching all three SBOMs. The `deploy-hook` job is a named no-op today with routing stubs for the future cloud-environment implementation.
 
-**Tech Stack:** GitHub Actions, `actions/checkout@v7`, `actions/setup-dotnet@v5`, `docker/login-action@v3`, `aquasecurity/trivy-action@master`, `github/codeql-action/{init,analyze}@v4`, `gh` CLI, .NET 11 preview (`11.0.x`/`preview`), `dotnet publish /t:PublishContainer`.
+**Tech Stack:** GitHub Actions, `actions/checkout@v7`, `actions/setup-dotnet@v5`, `docker/login-action@v4`, `aquasecurity/trivy-action@master`, `github/codeql-action/{init,analyze}@v4`, `gh` CLI, .NET 11 preview (`11.0.x`/`preview`), `dotnet publish /t:PublishContainer`.
 
 ## Global Constraints
 
@@ -150,9 +150,6 @@ jobs:
           dotnet-version: ${{ env.DOTNET_VERSION }}
           dotnet-quality: ${{ env.DOTNET_QUALITY }}
 
-      - name: Add Norse NuGet source
-        run: dotnet nuget add source "https://nuget.pkg.github.com/NorseArchitecture/index.json" --name github
-
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:
@@ -179,11 +176,8 @@ jobs:
           dotnet-version: ${{ env.DOTNET_VERSION }}
           dotnet-quality: ${{ env.DOTNET_QUALITY }}
 
-      - name: Add Norse NuGet source
-        run: dotnet nuget add source "https://nuget.pkg.github.com/NorseArchitecture/index.json" --name github
-
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -359,6 +353,7 @@ on:
 permissions:
   contents: write
   packages: write
+  pull-requests: write
   security-events: write
 
 jobs:

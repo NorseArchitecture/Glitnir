@@ -107,6 +107,7 @@ on:
 permissions:
   contents: write
   packages: write
+  pull-requests: write
   security-events: write
 
 jobs:
@@ -114,7 +115,7 @@ jobs:
     uses: NorseArchitecture/.github/.github/workflows/release-container.yml@master
 ```
 
-No `pull-requests: write` — Yggdrasil has no phone-home job that opens PRs.
+`pull-requests: write` is required even though Yggdrasil has no phone-home job. `release-container.yml` chains to `ci-build-test.yml`, which declares `pull-requests: write` on its `build` job (for the coverage comment). GitHub enforces the full permission chain at validation time: every caller in a `workflow_call` stack must grant every permission that any descendant job declares, regardless of whether the guarded step actually runs on the event. The permission must flow from `release.yml` → `release-container.yml` → `ci-build-test.yml` or the workflow is rejected at parse time.
 
 The full ceremony logic lives in `.github`. A future container-shipping realm (a MAUI chassis, a standalone WASM host, anything that becomes its own repo) gets the identical ceremony with a five-line thin caller. "This one is different" never enters the institutional vocabulary.
 
