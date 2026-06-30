@@ -6,7 +6,7 @@
 
 **Architecture:** Six realms share the work in strict dependency order. Asgard declares the `IMigrationContributor` interface. Midgard implements the runner. Urdarbrunnr provides the EF base context, the abstract EF contributor, and a Roslyn generator that discovers all contributors at compile time and emits `AddNorseMigrations()`. Himinbjörg provides the Identity entities, DbContext, UserStore, and the contributor that drives `dotnet ef migrations`. Yggdrasil replaces the stub `Program.cs` with a three-line form that calls only the generated method. Bifrost wires the complete Postgres primary+replica topology and adds the migrations service project reference to the AppHost.
 
-**Execution model — realm-by-realm ship gates:** This plan executes in five phases. Each phase ends with a `## SHIP GATE` section. Do not start the next phase until the gate is cleared: the realm's PR is merged, GitHub CI is green, a version tag is pushed, and the resulting NuGet package(s) are live on the feed. This is what makes the `UseProjectReferences=false` verification real — by Task 9 every cross-realm reference already resolves from NuGet; there is no local-feed workaround. In Bifrost during development (`UseProjectReferences=true`), NorseRef items resolve as ProjectReferences across the submodule tree as designed.
+**Execution model — realm-by-realm ship gates:** This plan executes in five phases. Each phase ends with a `## SHIP GATE` section. Do not start the next phase until the gate is cleared: the realm's PR is merged, GitHub CI is green, a version tag is pushed, and the resulting NuGet package(s) are live on the feed. This is what makes the `UseProjectReferences=false` verification real — by Task 10 every cross-realm reference already resolves from NuGet; there is no local-feed workaround. In Bifrost during development (`UseProjectReferences=true`), NorseRef items resolve as ProjectReferences across the submodule tree as designed.
 
 **Tech Stack:** .NET 11, C#, EF Core (Npgsql), ASP.NET Core Identity v3, OpenIddict, Roslyn `IIncrementalGenerator`, `EFCore.NamingConventions`, xUnit v3 + Shouldly + NSubstitute, .NET Aspire 13.x
 
@@ -39,11 +39,11 @@
 | Action | Path |
 |---|---|
 | Create | `Midgard/Midgard.slnx` |
-| Create | `Midgard/src/Infrastructure/Infrastructure.csproj` |
-| Create | `Midgard/src/Infrastructure/MigrationRunnerService.cs` |
-| Create | `Midgard/src/Infrastructure/HostApplicationBuilderExtensions.cs` |
-| Create | `Midgard/tests/Infrastructure.Tests/Infrastructure.Tests.csproj` |
-| Create | `Midgard/tests/Infrastructure.Tests/MigrationRunnerServiceTests.cs` |
+| Create | `Midgard/src/Infrastructure.Migrations/Infrastructure.Migrations.csproj` |
+| Create | `Midgard/src/Infrastructure.Migrations/MigrationRunnerService.cs` |
+| Create | `Midgard/src/Infrastructure.Migrations/HostApplicationBuilderExtensions.cs` |
+| Create | `Midgard/tests/Infrastructure.Migrations.Tests/Infrastructure.Migrations.Tests.csproj` |
+| Create | `Midgard/tests/Infrastructure.Migrations.Tests/MigrationRunnerServiceTests.cs` |
 | Modify | `Bifrost.slnx` — add `/Infrastructure/` solution folder |
 
 ### Urdarbrunnr
@@ -51,19 +51,25 @@
 |---|---|
 | Create | `Urdarbrunnr/Urdarbrunnr.slnx` |
 | Create | `Urdarbrunnr/src/EntityFramework/EntityFramework.csproj` |
+| Create | `Urdarbrunnr/src/EntityFramework/INorseDbContext.cs` |
 | Create | `Urdarbrunnr/src/EntityFramework/NorseDbContext.cs` |
 | Create | `Urdarbrunnr/src/EntityFramework/NorseModelBuilderExtensions.cs` |
 | Create | `Urdarbrunnr/tests/EntityFramework.Tests/EntityFramework.Tests.csproj` |
 | Create | `Urdarbrunnr/tests/EntityFramework.Tests/NorseModelBuilderExtensionsTests.cs` |
+| Create | `Urdarbrunnr/src/EntityFramework.PostgreSQL/EntityFramework.PostgreSQL.csproj` |
+| Create | `Urdarbrunnr/src/EntityFramework.PostgreSQL/NorsePostgresContextExtensions.cs` |
+| Create | `Urdarbrunnr/tests/EntityFramework.PostgreSQL.Tests/EntityFramework.PostgreSQL.Tests.csproj` |
+| Create | `Urdarbrunnr/tests/EntityFramework.PostgreSQL.Tests/NorsePostgresContextExtensionsTests.cs` |
 | Create | `Urdarbrunnr/src/EntityFramework.Migrations/EntityFramework.Migrations.csproj` |
 | Create | `Urdarbrunnr/src/EntityFramework.Migrations/EfMigrationContributor.cs` |
 | Create | `Urdarbrunnr/src/EntityFramework.Migrations/MigrationConnectionStringAttribute.cs` |
 | Create | `Urdarbrunnr/tests/EntityFramework.Migrations.Tests/EntityFramework.Migrations.Tests.csproj` |
 | Create | `Urdarbrunnr/tests/EntityFramework.Migrations.Tests/EfMigrationContributorTests.cs` |
-| Create | `Urdarbrunnr/src/EntityFramework.Migrations.Generator/EntityFramework.Migrations.Generator.csproj` |
-| Create | `Urdarbrunnr/src/EntityFramework.Migrations.Generator/MigrationContributorGenerator.cs` |
-| Create | `Urdarbrunnr/tests/EntityFramework.Migrations.Generator.Tests/EntityFramework.Migrations.Generator.Tests.csproj` |
-| Create | `Urdarbrunnr/tests/EntityFramework.Migrations.Generator.Tests/MigrationContributorGeneratorTests.cs` |
+| Create | `Urdarbrunnr/src/EntityFramework.Migrations.PostgreSQL/EntityFramework.Migrations.PostgreSQL.csproj` |
+| Create | `Urdarbrunnr/src/EntityFramework.Migrations.PostgreSQL.Generator/EntityFramework.Migrations.PostgreSQL.Generator.csproj` |
+| Create | `Urdarbrunnr/src/EntityFramework.Migrations.PostgreSQL.Generator/MigrationContributorGenerator.cs` |
+| Create | `Urdarbrunnr/tests/EntityFramework.Migrations.PostgreSQL.Generator.Tests/EntityFramework.Migrations.PostgreSQL.Generator.Tests.csproj` |
+| Create | `Urdarbrunnr/tests/EntityFramework.Migrations.PostgreSQL.Generator.Tests/MigrationContributorGeneratorTests.cs` |
 | Modify | `Bifrost.slnx` — add `/EntityFramework/` solution folder |
 
 ### Himinbjörg
@@ -215,11 +221,11 @@ Only after the package is live does Task 2 begin.
 
 **Files:**
 - Create: `Midgard/Midgard.slnx`
-- Create: `Midgard/src/Infrastructure/Infrastructure.csproj`
-- Create: `Midgard/src/Infrastructure/MigrationRunnerService.cs`
-- Create: `Midgard/src/Infrastructure/HostApplicationBuilderExtensions.cs`
-- Create: `Midgard/tests/Infrastructure.Tests/Infrastructure.Tests.csproj`
-- Create: `Midgard/tests/Infrastructure.Tests/MigrationRunnerServiceTests.cs`
+- Create: `Midgard/src/Infrastructure.Migrations/Infrastructure.Migrations.csproj`
+- Create: `Midgard/src/Infrastructure.Migrations/MigrationRunnerService.cs`
+- Create: `Midgard/src/Infrastructure.Migrations/HostApplicationBuilderExtensions.cs`
+- Create: `Midgard/tests/Infrastructure.Migrations.Tests/Infrastructure.Migrations.Tests.csproj`
+- Create: `Midgard/tests/Infrastructure.Migrations.Tests/MigrationRunnerServiceTests.cs`
 - Modify: `Bifrost.slnx`
 
 **Interfaces:**
@@ -247,28 +253,24 @@ Only after the package is live does Task 2 begin.
 	<Folder Name="/src/">
 		<File Path="src/Directory.Build.props" />
 		<File Path="src/Directory.Build.targets" />
-		<Project Path="src/Infrastructure/Infrastructure.csproj" />
+		<Project Path="src/Infrastructure.Migrations/Infrastructure.Migrations.csproj" />
 	</Folder>
 	<Folder Name="/tests/">
 		<File Path="tests/Directory.Build.props" />
 		<File Path="tests/Directory.Build.targets" />
-		<Project Path="tests/Infrastructure.Tests/Infrastructure.Tests.csproj" />
+		<Project Path="tests/Infrastructure.Migrations.Tests/Infrastructure.Migrations.Tests.csproj" />
 	</Folder>
 </Solution>
 ```
 
 - [ ] **Step 2: Create the project file**
 
-`Midgard/src/Infrastructure/Infrastructure.csproj`:
+`Midgard/src/Infrastructure.Migrations/Infrastructure.Migrations.csproj`:
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
-		<Description>Norse.Infrastructure: the MigrationRunnerService and AddNorseMigrationsRunner extension — the hosted service that calls all IMigrationContributor implementations and exits cleanly.</Description>
+		<Description>Norse.Infrastructure.Migrations: the MigrationRunnerService and AddNorseMigrationsRunner extension — the hosted service that calls all IMigrationContributor implementations and exits cleanly. Consumed only by the migrations service; never referenced from runtime containers.</Description>
 	</PropertyGroup>
-	<ItemGroup>
-		<PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
-		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
-	</ItemGroup>
 	<ItemGroup>
 		<NorseRef Include="Abstractions.Migrations">
 			<Repo>Asgard</Repo>
@@ -279,26 +281,26 @@ Only after the package is live does Task 2 begin.
 
 - [ ] **Step 3: Create the test project**
 
-`Midgard/tests/Infrastructure.Tests/Infrastructure.Tests.csproj`:
+`Midgard/tests/Infrastructure.Migrations.Tests/Infrastructure.Migrations.Tests.csproj`:
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
 	<ItemGroup>
-		<PackageReference Include="NSubstitute" />
-		<ProjectReference Include="../../src/Infrastructure/Infrastructure.csproj" />
+		<PackageReference Include="NSubstitute" Version="*" />
+		<ProjectReference Include="../../src/Infrastructure.Migrations/Infrastructure.Migrations.csproj" />
 	</ItemGroup>
 </Project>
 ```
 
 - [ ] **Step 4: Write the failing tests**
 
-`Midgard/tests/Infrastructure.Tests/MigrationRunnerServiceTests.cs`:
+`Midgard/tests/Infrastructure.Migrations.Tests/MigrationRunnerServiceTests.cs`:
 ```csharp
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Norse.Abstractions.Migrations;
 using NSubstitute;
 
-namespace Norse.Infrastructure;
+namespace Norse.Infrastructure.Migrations.Tests;
 
 public sealed class MigrationRunnerServiceTests
 {
@@ -381,20 +383,20 @@ public sealed class MigrationRunnerServiceTests
 - [ ] **Step 5: Run the tests to confirm they fail**
 
 ```bash
-dotnet test Midgard/tests/Infrastructure.Tests/Infrastructure.Tests.csproj
+dotnet test Midgard/tests/Infrastructure.Migrations.Tests/Infrastructure.Migrations.Tests.csproj
 ```
 
 Expected: compile error — `MigrationRunnerService` not defined.
 
 - [ ] **Step 6: Implement `MigrationRunnerService`**
 
-`Midgard/src/Infrastructure/MigrationRunnerService.cs`:
+`Midgard/src/Infrastructure.Migrations/MigrationRunnerService.cs`:
 ```csharp
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Norse.Abstractions.Migrations;
 
-namespace Norse.Infrastructure;
+namespace Norse.Infrastructure.Migrations;
 
 sealed class MigrationRunnerService(
 	IEnumerable<IMigrationContributor> contributors,
@@ -420,12 +422,12 @@ sealed class MigrationRunnerService(
 
 - [ ] **Step 7: Implement `AddNorseMigrationsRunner()`**
 
-`Midgard/src/Infrastructure/HostApplicationBuilderExtensions.cs`:
+`Midgard/src/Infrastructure.Migrations/HostApplicationBuilderExtensions.cs`:
 ```csharp
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
-namespace Norse.Infrastructure;
+namespace Norse.Infrastructure.Migrations;
 
 public static class HostApplicationBuilderExtensions
 {
@@ -440,7 +442,7 @@ public static class HostApplicationBuilderExtensions
 - [ ] **Step 8: Run the tests to confirm they pass**
 
 ```bash
-dotnet test Midgard/tests/Infrastructure.Tests/Infrastructure.Tests.csproj
+dotnet test Midgard/tests/Infrastructure.Migrations.Tests/Infrastructure.Migrations.Tests.csproj
 ```
 
 Expected: all 4 tests PASS.
@@ -465,11 +467,11 @@ Add the following folder block inside the `<Solution>` element of `Bifrost/Bifro
 <Folder Name="/Infrastructure/src/">
 	<File Path="Midgard/src/Directory.Build.props" />
 	<File Path="Midgard/src/Directory.Build.targets" />
-	<Project Path="Midgard/src/Infrastructure/Infrastructure.csproj" />
+	<Project Path="Midgard/src/Infrastructure.Migrations/Infrastructure.Migrations.csproj" />
 </Folder>
 <Folder Name="/Infrastructure/tests/">
 	<File Path="Midgard/tests/Directory.Build.props" />
-	<Project Path="Midgard/tests/Infrastructure.Tests/Infrastructure.Tests.csproj" />
+	<Project Path="Midgard/tests/Infrastructure.Migrations.Tests/Infrastructure.Migrations.Tests.csproj" />
 </Folder>
 ```
 
@@ -477,11 +479,11 @@ Add the following folder block inside the `<Solution>` element of `Bifrost/Bifro
 
 ```bash
 git -C Midgard add Midgard.slnx \
-  src/Infrastructure/Infrastructure.csproj \
-  src/Infrastructure/MigrationRunnerService.cs \
-  src/Infrastructure/HostApplicationBuilderExtensions.cs \
-  tests/Infrastructure.Tests/Infrastructure.Tests.csproj \
-  tests/Infrastructure.Tests/MigrationRunnerServiceTests.cs
+  src/Infrastructure.Migrations/Infrastructure.Migrations.csproj \
+  src/Infrastructure.Migrations/MigrationRunnerService.cs \
+  src/Infrastructure.Migrations/HostApplicationBuilderExtensions.cs \
+  tests/Infrastructure.Migrations.Tests/Infrastructure.Migrations.Tests.csproj \
+  tests/Infrastructure.Migrations.Tests/MigrationRunnerServiceTests.cs
 git add Bifrost.slnx
 ```
 
@@ -511,8 +513,9 @@ git add Bifrost.slnx
 
 **Interfaces:**
 - Produces:
-  - `Norse.EntityFramework.NorseDbContext` — abstract `DbContext` base; calls `NorseModelBuilderExtensions.ApplyNorseConventions` in its `OnModelCreating`. Referenced by non-auth EF contexts. Auth contexts call `ApplyNorseConventions` manually (they inherit `IdentityDbContext` instead).
-  - `Norse.EntityFramework.NorseModelBuilderExtensions.ApplyNorseConventions(ModelBuilder)` — applies `UseSnakeCaseNamingConvention()` from `EFCore.NamingConventions`.
+  - `Norse.EntityFramework.INorseDbContext` — marker interface; implemented by all Norse EF contexts. Allows `EfMigrationContributor<TContext>` to constrain `TContext : DbContext, INorseDbContext` without forcing a single base class (auth contexts must inherit `IdentityDbContext`, not `NorseDbContext`).
+  - `Norse.EntityFramework.NorseDbContext` — abstract `DbContext` base implementing `INorseDbContext`; overrides `OnConfiguring` to call `NorseDbContextOptionsExtensions.ApplyNorseConventions(optionsBuilder)`, ensuring snake_case naming is always applied regardless of how the context is constructed. Used by non-auth EF contexts.
+  - `Norse.EntityFramework.NorseDbContextOptionsExtensions.ApplyNorseConventions(DbContextOptionsBuilder)` — applies `UseSnakeCaseNamingConvention()` from `EFCore.NamingConventions`. Called manually by auth contexts (e.g. `NorseIdentityDbContext`) that cannot inherit `NorseDbContext` and must override `OnConfiguring` themselves.
 
 - [ ] **Step 1: Create solution and project files**
 
@@ -534,29 +537,26 @@ git add Bifrost.slnx
 		<File Path="src/Directory.Build.props" />
 		<File Path="src/Directory.Build.targets" />
 		<Project Path="src/EntityFramework/EntityFramework.csproj" />
-		<Project Path="src/EntityFramework.Migrations/EntityFramework.Migrations.csproj" />
-		<Project Path="src/EntityFramework.Migrations.Generator/EntityFramework.Migrations.Generator.csproj" />
 	</Folder>
 	<Folder Name="/tests/">
 		<File Path="tests/Directory.Build.props" />
 		<File Path="tests/Directory.Build.targets" />
 		<Project Path="tests/EntityFramework.Tests/EntityFramework.Tests.csproj" />
-		<Project Path="tests/EntityFramework.Migrations.Tests/EntityFramework.Migrations.Tests.csproj" />
-		<Project Path="tests/EntityFramework.Migrations.Generator.Tests/EntityFramework.Migrations.Generator.Tests.csproj" />
 	</Folder>
 </Solution>
+
+Each subsequent task adds its own projects to `Urdarbrunnr.slnx` — never pre-populate future projects that don't exist yet.
 ```
 
 `Urdarbrunnr/src/EntityFramework/EntityFramework.csproj`:
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
-		<Description>Norse.EntityFramework: the abstract NorseDbContext base, snake_case naming conventions, and EF value converters — the runtime EF foundation that all non-auth contexts inherit from.</Description>
+		<Description>Norse.EntityFramework: the INorseDbContext marker interface, the abstract NorseDbContext base, and snake_case naming conventions — provider-agnostic EF foundation shared by all Norse contexts regardless of RDBMS.</Description>
 	</PropertyGroup>
 	<ItemGroup>
 		<PackageReference Include="EFCore.NamingConventions" />
 		<PackageReference Include="Microsoft.EntityFrameworkCore" />
-		<PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
 	</ItemGroup>
 </Project>
 ```
@@ -565,7 +565,7 @@ git add Bifrost.slnx
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
 	<ItemGroup>
-		<PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
 		<ProjectReference Include="../../src/EntityFramework/EntityFramework.csproj" />
 	</ItemGroup>
 </Project>
@@ -577,7 +577,7 @@ git add Bifrost.slnx
 ```csharp
 using Microsoft.EntityFrameworkCore;
 
-namespace Norse.EntityFramework;
+namespace Norse.EntityFramework.Tests;
 
 public sealed class NorseModelBuilderExtensionsTests
 {
@@ -585,25 +585,30 @@ public sealed class NorseModelBuilderExtensionsTests
 	public void ApplyNorseConventions_applies_snake_case_naming()
 	{
 		var options = new DbContextOptionsBuilder<TestContext>()
-			.UseInMemoryDatabase("test")
+			.UseSqlite("Data Source=:memory:")
 			.Options;
 
 		using var ctx = new TestContext(options);
-		var model = ctx.Model;
-		var tableName = model.FindEntityType(typeof(TestEntity))!.GetTableName();
+		var tableName = ctx.Model.FindEntityType(typeof(TestEntity))!.GetTableName();
 
 		tableName.ShouldBe("test_entities");
 	}
 
-	sealed class TestContext(DbContextOptions<TestContext> options) : DbContext(options)
+	[Fact]
+	public void NorseDbContext_implements_INorseDbContext()
+	{
+		var options = new DbContextOptionsBuilder<TestContext>()
+			.UseSqlite("Data Source=:memory:")
+			.Options;
+
+		using var ctx = new TestContext(options);
+
+		ctx.ShouldBeAssignableTo<INorseDbContext>();
+	}
+
+	sealed class TestContext(DbContextOptions<TestContext> options) : NorseDbContext(options)
 	{
 		public DbSet<TestEntity> TestEntities => Set<TestEntity>();
-
-		protected override void OnModelCreating(ModelBuilder modelBuilder)
-		{
-			base.OnModelCreating(modelBuilder);
-			NorseModelBuilderExtensions.ApplyNorseConventions(modelBuilder);
-		}
 	}
 
 	sealed class TestEntity
@@ -622,25 +627,36 @@ dotnet test Urdarbrunnr/tests/EntityFramework.Tests/EntityFramework.Tests.csproj
 
 Expected: compile error — `NorseModelBuilderExtensions` not defined.
 
-- [ ] **Step 4: Implement `NorseModelBuilderExtensions`**
+- [ ] **Step 4: Implement `INorseDbContext`**
 
-`Urdarbrunnr/src/EntityFramework/NorseModelBuilderExtensions.cs`:
+`Urdarbrunnr/src/EntityFramework/INorseDbContext.cs`:
+```csharp
+namespace Norse.EntityFramework;
+
+public interface INorseDbContext;
+```
+
+- [ ] **Step 5: Implement `NorseDbContextOptionsExtensions`**
+
+`Urdarbrunnr/src/EntityFramework/NorseDbContextOptionsExtensions.cs`:
 ```csharp
 using Microsoft.EntityFrameworkCore;
 
 namespace Norse.EntityFramework;
 
-public static class NorseModelBuilderExtensions
+public static class NorseDbContextOptionsExtensions
 {
-	public static ModelBuilder ApplyNorseConventions(ModelBuilder modelBuilder)
+	public static DbContextOptionsBuilder ApplyNorseConventions(DbContextOptionsBuilder optionsBuilder)
 	{
-		modelBuilder.UseSnakeCaseNamingConvention();
-		return modelBuilder;
+		optionsBuilder.UseSnakeCaseNamingConvention();
+		return optionsBuilder;
 	}
 }
 ```
 
-- [ ] **Step 5: Implement `NorseDbContext`**
+Note: `UseSnakeCaseNamingConvention()` is an extension on `DbContextOptionsBuilder` (from `EFCore.NamingConventions`), not on `ModelBuilder`. Naming conventions are registered at the options level and applied when EF Core builds the model.
+
+- [ ] **Step 6: Implement `NorseDbContext`**
 
 `Urdarbrunnr/src/EntityFramework/NorseDbContext.cs`:
 ```csharp
@@ -648,25 +664,27 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Norse.EntityFramework;
 
-public abstract class NorseDbContext(DbContextOptions options) : DbContext(options)
+public abstract class NorseDbContext(DbContextOptions options) : DbContext(options), INorseDbContext
 {
-	protected override void OnModelCreating(ModelBuilder modelBuilder)
+	protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
 	{
-		base.OnModelCreating(modelBuilder);
-		NorseModelBuilderExtensions.ApplyNorseConventions(modelBuilder);
+		base.OnConfiguring(optionsBuilder);
+		NorseDbContextOptionsExtensions.ApplyNorseConventions(optionsBuilder);
 	}
 }
 ```
 
-- [ ] **Step 6: Run the test to confirm it passes**
+Note: `OnConfiguring` is called by EF Core even when options are supplied via the constructor (DI path). The optionsBuilder is seeded from the pre-built options and is fully mutable — naming conventions are added on top of whatever the consumer configured.
+
+- [ ] **Step 7: Run the tests to confirm they pass**
 
 ```bash
 dotnet test Urdarbrunnr/tests/EntityFramework.Tests/EntityFramework.Tests.csproj
 ```
 
-Expected: PASS.
+Expected: 2/2 PASS.
 
-- [ ] **Step 7: Add Urdarbrunnr to `Bifrost.slnx`**
+- [ ] **Step 8: Add Urdarbrunnr to `Bifrost.slnx`**
 
 Add the following folder block after the `/Infrastructure/` folders added in Task 2:
 
@@ -687,32 +705,173 @@ Add the following folder block after the `/Infrastructure/` folders added in Tas
 	<File Path="Urdarbrunnr/src/Directory.Build.props" />
 	<File Path="Urdarbrunnr/src/Directory.Build.targets" />
 	<Project Path="Urdarbrunnr/src/EntityFramework/EntityFramework.csproj" />
+	<Project Path="Urdarbrunnr/src/EntityFramework.PostgreSQL/EntityFramework.PostgreSQL.csproj" />
 	<Project Path="Urdarbrunnr/src/EntityFramework.Migrations/EntityFramework.Migrations.csproj" />
-	<Project Path="Urdarbrunnr/src/EntityFramework.Migrations.Generator/EntityFramework.Migrations.Generator.csproj" />
+	<Project Path="Urdarbrunnr/src/EntityFramework.Migrations.PostgreSQL/EntityFramework.Migrations.PostgreSQL.csproj" />
+	<Project Path="Urdarbrunnr/src/EntityFramework.Migrations.PostgreSQL.Generator/EntityFramework.Migrations.PostgreSQL.Generator.csproj" />
 </Folder>
 <Folder Name="/EntityFramework/tests/">
 	<File Path="Urdarbrunnr/tests/Directory.Build.props" />
 	<Project Path="Urdarbrunnr/tests/EntityFramework.Tests/EntityFramework.Tests.csproj" />
+	<Project Path="Urdarbrunnr/tests/EntityFramework.PostgreSQL.Tests/EntityFramework.PostgreSQL.Tests.csproj" />
 	<Project Path="Urdarbrunnr/tests/EntityFramework.Migrations.Tests/EntityFramework.Migrations.Tests.csproj" />
-	<Project Path="Urdarbrunnr/tests/EntityFramework.Migrations.Generator.Tests/EntityFramework.Migrations.Generator.Tests.csproj" />
+	<Project Path="Urdarbrunnr/tests/EntityFramework.Migrations.PostgreSQL.Generator.Tests/EntityFramework.Migrations.PostgreSQL.Generator.Tests.csproj" />
 </Folder>
 ```
 
-- [ ] **Step 8: Stage**
+- [ ] **Step 9: Stage**
 
 ```bash
 git -C Urdarbrunnr add Urdarbrunnr.slnx \
   src/EntityFramework/EntityFramework.csproj \
+  src/EntityFramework/INorseDbContext.cs \
   src/EntityFramework/NorseDbContext.cs \
-  src/EntityFramework/NorseModelBuilderExtensions.cs \
+  src/EntityFramework/NorseDbContextOptionsExtensions.cs \
   tests/EntityFramework.Tests/EntityFramework.Tests.csproj \
-  tests/EntityFramework.Tests/NorseModelBuilderExtensionsTests.cs
+  tests/EntityFramework.Tests/NorseDbContextOptionsExtensionsTests.cs
 git add Bifrost.slnx
 ```
 
 ---
 
-## Task 4: Urdarbrunnr — `Norse.EntityFramework.Migrations` (base contributor + attribute)
+## Task 4: Urdarbrunnr — `Norse.EntityFramework.PostgreSQL` (Aspire-wired Postgres runtime)
+
+**Files:**
+- Create: `Urdarbrunnr/src/EntityFramework.PostgreSQL/EntityFramework.PostgreSQL.csproj`
+- Create: `Urdarbrunnr/src/EntityFramework.PostgreSQL/NorsePostgresContextExtensions.cs`
+- Create: `Urdarbrunnr/tests/EntityFramework.PostgreSQL.Tests/EntityFramework.PostgreSQL.Tests.csproj`
+- Create: `Urdarbrunnr/tests/EntityFramework.PostgreSQL.Tests/NorsePostgresContextExtensionsTests.cs`
+
+**Interfaces:**
+- Consumes: `Norse.EntityFramework` (Task 3) — same-realm `ProjectReference`
+- Produces:
+  - `Norse.EntityFramework.PostgreSQL.NorsePostgresContextExtensions.AddNorsePostgresContext<TContext>(this IHostApplicationBuilder, string connectionStringName)` — wires `TContext` into the Aspire host using `AddNpgsqlDbContext<TContext>` with `UseSnakeCaseNamingConvention()`. Referenced by web.server and worker; also emitted by the generator in Task 6.
+
+This package is the canonical runtime Postgres wiring for Norse contexts. The constraint `where TContext : DbContext, INorseDbContext` ensures only Norse-registered contexts can be wired through this path. The migrations service does NOT reference this package directly; it gets it transitively through `Norse.EntityFramework.Migrations.PostgreSQL`.
+
+- [ ] **Step 1: Create the project files**
+
+`Urdarbrunnr/src/EntityFramework.PostgreSQL/EntityFramework.PostgreSQL.csproj`:
+```xml
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<Description>Norse.EntityFramework.PostgreSQL: canonical Aspire-wired Postgres context registration via AddNorsePostgresContext&lt;TContext&gt;. Referenced by web server and worker hosts; pulled in transitively by Norse.EntityFramework.Migrations.PostgreSQL for the migrations service.</Description>
+	</PropertyGroup>
+	<ItemGroup>
+		<PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="*" />
+	</ItemGroup>
+	<ItemGroup>
+		<ProjectReference Include="../EntityFramework/EntityFramework.csproj" />
+	</ItemGroup>
+</Project>
+```
+
+`Urdarbrunnr/tests/EntityFramework.PostgreSQL.Tests/EntityFramework.PostgreSQL.Tests.csproj`:
+```xml
+<Project Sdk="Microsoft.NET.Sdk">
+	<ItemGroup>
+		<PackageReference Include="Microsoft.Extensions.Hosting" Version="*" />
+		<ProjectReference Include="../../src/EntityFramework.PostgreSQL/EntityFramework.PostgreSQL.csproj" />
+	</ItemGroup>
+</Project>
+```
+
+- [ ] **Step 2: Write the failing test**
+
+`Urdarbrunnr/tests/EntityFramework.PostgreSQL.Tests/NorsePostgresContextExtensionsTests.cs`:
+```csharp
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+
+namespace Norse.EntityFramework.PostgreSQL.Tests;
+
+public sealed class NorsePostgresContextExtensionsTests
+{
+	[Fact]
+	public void AddNorsePostgresContext_registers_TContext_in_DI()
+	{
+		var builder = Host.CreateApplicationBuilder();
+		builder.Configuration.AddInMemoryCollection(
+			new Dictionary<string, string?> { ["ConnectionStrings:test-db"] = "Host=localhost;Database=test" });
+
+		builder.AddNorsePostgresContext<TestContext>("test-db");
+
+		var descriptor = builder.Services
+			.FirstOrDefault(d => d.ServiceType == typeof(TestContext));
+		descriptor.ShouldNotBeNull();
+	}
+
+	sealed class TestContext(DbContextOptions<TestContext> options) : NorseDbContext(options);
+}
+```
+
+- [ ] **Step 3: Run the test to confirm it fails**
+
+```bash
+dotnet test Urdarbrunnr/tests/EntityFramework.PostgreSQL.Tests/EntityFramework.PostgreSQL.Tests.csproj
+```
+
+Expected: compile error — `AddNorsePostgresContext` not defined.
+
+- [ ] **Step 4: Implement `NorsePostgresContextExtensions`**
+
+`Urdarbrunnr/src/EntityFramework.PostgreSQL/NorsePostgresContextExtensions.cs`:
+```csharp
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
+
+namespace Norse.EntityFramework.PostgreSQL;
+
+public static class NorsePostgresContextExtensions
+{
+	public static IHostApplicationBuilder AddNorsePostgresContext<TContext>(
+		this IHostApplicationBuilder builder,
+		string connectionStringName)
+		where TContext : DbContext, INorseDbContext
+	{
+		builder.AddNpgsqlDbContext<TContext>(connectionStringName,
+			configureDbContextOptions: opts => opts.UseSnakeCaseNamingConvention());
+		return builder;
+	}
+}
+```
+
+- [ ] **Step 5: Run the test to confirm it passes**
+
+```bash
+dotnet test Urdarbrunnr/tests/EntityFramework.PostgreSQL.Tests/EntityFramework.PostgreSQL.Tests.csproj
+```
+
+Expected: PASS.
+
+- [ ] **Step 6: Add projects to `Urdarbrunnr.slnx`**
+
+Add the new project lines to `Urdarbrunnr/Urdarbrunnr.slnx` under the existing `/src/` and `/tests/` folders:
+
+```xml
+<!-- in /src/ folder, after EntityFramework.csproj -->
+<Project Path="src/EntityFramework.PostgreSQL/EntityFramework.PostgreSQL.csproj" />
+```
+```xml
+<!-- in /tests/ folder, after EntityFramework.Tests.csproj -->
+<Project Path="tests/EntityFramework.PostgreSQL.Tests/EntityFramework.PostgreSQL.Tests.csproj" />
+```
+
+- [ ] **Step 7: Stage**
+
+```bash
+git -C Urdarbrunnr add \
+  Urdarbrunnr.slnx \
+  src/EntityFramework.PostgreSQL/EntityFramework.PostgreSQL.csproj \
+  src/EntityFramework.PostgreSQL/NorsePostgresContextExtensions.cs \
+  tests/EntityFramework.PostgreSQL.Tests/EntityFramework.PostgreSQL.Tests.csproj \
+  tests/EntityFramework.PostgreSQL.Tests/NorsePostgresContextExtensionsTests.cs
+```
+
+---
+
+## Task 5: Urdarbrunnr — `Norse.EntityFramework.Migrations` (base contributor + attribute)
 
 **Files:**
 - Create: `Urdarbrunnr/src/EntityFramework.Migrations/EntityFramework.Migrations.csproj`
@@ -724,7 +883,7 @@ git add Bifrost.slnx
 **Interfaces:**
 - Consumes: `IMigrationContributor` (Task 1), `Norse.EntityFramework` (Task 3)
 - Produces:
-  - `Norse.EntityFramework.Migrations.EfMigrationContributor<TContext>` — abstract base implementing `IMigrationContributor`; `MigrateAsync` delegates to `TContext.Database.MigrateAsync`.
+  - `Norse.EntityFramework.Migrations.EfMigrationContributor<TContext>` — abstract base implementing `IMigrationContributor`; `MigrateAsync` delegates to `TContext.Database.MigrateAsync`; constrained `where TContext : DbContext, INorseDbContext` so only Norse-registered contexts can be wired in.
   - `Norse.EntityFramework.Migrations.MigrationConnectionStringAttribute(string connectionStringName)` — annotates EF contributor classes with the Aspire connection string name; the generator reads this to emit `GetConnectionString(name)` and `AddDbContext<TContext>` calls.
 
 - [ ] **Step 1: Create the project files**
@@ -766,7 +925,7 @@ git add Bifrost.slnx
 ```csharp
 using Microsoft.EntityFrameworkCore;
 
-namespace Norse.EntityFramework.Migrations;
+namespace Norse.EntityFramework.Migrations.Tests;
 
 public sealed class EfMigrationContributorTests
 {
@@ -798,7 +957,7 @@ public sealed class EfMigrationContributorTests
 		public override string Name => "Stub";
 	}
 
-	sealed class StubContext(DbContextOptions<StubContext> options) : DbContext(options);
+	sealed class StubContext(DbContextOptions<StubContext> options) : NorseDbContext(options);
 }
 ```
 
@@ -829,11 +988,12 @@ public sealed class MigrationConnectionStringAttribute(string connectionStringNa
 ```csharp
 using Microsoft.EntityFrameworkCore;
 using Norse.Abstractions.Migrations;
+using Norse.EntityFramework;
 
 namespace Norse.EntityFramework.Migrations;
 
 public abstract class EfMigrationContributor<TContext>(TContext context) : IMigrationContributor
-	where TContext : DbContext
+	where TContext : DbContext, INorseDbContext
 {
 	public abstract string Name { get; }
 
@@ -848,12 +1008,26 @@ public abstract class EfMigrationContributor<TContext>(TContext context) : IMigr
 dotnet test Urdarbrunnr/tests/EntityFramework.Migrations.Tests/EntityFramework.Migrations.Tests.csproj
 ```
 
-Expected: PASS. (The `MigrateAsync` behavior is proven by the integration test in Task 9, not here — in-memory provider does not support `MigrateAsync`.)
+Expected: PASS. (The `MigrateAsync` behavior is proven by the integration test in Task 10, not here — in-memory provider does not support `MigrateAsync`.)
 
-- [ ] **Step 7: Stage**
+- [ ] **Step 7: Add projects to `Urdarbrunnr.slnx`**
+
+Add the new project lines to `Urdarbrunnr/Urdarbrunnr.slnx`:
+
+```xml
+<!-- in /src/ folder, after EntityFramework.PostgreSQL.csproj -->
+<Project Path="src/EntityFramework.Migrations/EntityFramework.Migrations.csproj" />
+```
+```xml
+<!-- in /tests/ folder, after EntityFramework.PostgreSQL.Tests.csproj -->
+<Project Path="tests/EntityFramework.Migrations.Tests/EntityFramework.Migrations.Tests.csproj" />
+```
+
+- [ ] **Step 8: Stage**
 
 ```bash
 git -C Urdarbrunnr add \
+  Urdarbrunnr.slnx \
   src/EntityFramework.Migrations/EntityFramework.Migrations.csproj \
   src/EntityFramework.Migrations/EfMigrationContributor.cs \
   src/EntityFramework.Migrations/MigrationConnectionStringAttribute.cs \
@@ -863,28 +1037,30 @@ git -C Urdarbrunnr add \
 
 ---
 
-## Task 5: Urdarbrunnr — `Norse.EntityFramework.Migrations.Generator`
+## Task 6: Urdarbrunnr — `Norse.EntityFramework.Migrations.PostgreSQL`
 
 **Files:**
-- Create: `Urdarbrunnr/src/EntityFramework.Migrations.Generator/EntityFramework.Migrations.Generator.csproj`
-- Create: `Urdarbrunnr/src/EntityFramework.Migrations.Generator/MigrationContributorGenerator.cs`
-- Modify: `Urdarbrunnr/src/EntityFramework.Migrations/EntityFramework.Migrations.csproj` — add analyzer reference to the generator project
-- Create: `Urdarbrunnr/tests/EntityFramework.Migrations.Generator.Tests/EntityFramework.Migrations.Generator.Tests.csproj`
-- Create: `Urdarbrunnr/tests/EntityFramework.Migrations.Generator.Tests/MigrationContributorGeneratorTests.cs`
+- Create: `Urdarbrunnr/src/EntityFramework.Migrations.PostgreSQL.Generator/EntityFramework.Migrations.PostgreSQL.Generator.csproj`
+- Create: `Urdarbrunnr/src/EntityFramework.Migrations.PostgreSQL.Generator/MigrationContributorGenerator.cs`
+- Create: `Urdarbrunnr/src/EntityFramework.Migrations.PostgreSQL/EntityFramework.Migrations.PostgreSQL.csproj`
+- Create: `Urdarbrunnr/tests/EntityFramework.Migrations.PostgreSQL.Generator.Tests/EntityFramework.Migrations.PostgreSQL.Generator.Tests.csproj`
+- Create: `Urdarbrunnr/tests/EntityFramework.Migrations.PostgreSQL.Generator.Tests/MigrationContributorGeneratorTests.cs`
 
 **Interfaces:**
 - Consumes: `MigrationConnectionStringAttribute`, `EfMigrationContributor<TContext>`, `IMigrationContributor` (all from prior tasks) — read from compiled assembly symbols, never source trees.
-- Produces: `AddNorseMigrations(this IHostApplicationBuilder)` — emitted into the migrations service project's compilation; registers each discovered contributor's `DbContext` + the contributor itself, then calls `AddNorseMigrationsRunner()`.
+- Produces:
+  - `Norse.EntityFramework.Migrations.PostgreSQL` NuGet package — references `Norse.EntityFramework.Migrations` (Task 5) AND `Norse.EntityFramework.PostgreSQL` (Task 4) transitively; ships the generator DLL in `analyzers/dotnet/cs/`. Migrations service projects reference this one package and get everything.
+  - `AddNorseMigrations(this IHostApplicationBuilder)` — emitted into the migrations service project's compilation; calls `AddNorsePostgresContext<TContext>(connectionStringName)` for each discovered contributor (from `Norse.EntityFramework.PostgreSQL`), registers each contributor as `IMigrationContributor`, then calls `AddNorseMigrationsRunner()`.
 
-The generator must walk `compilation.SourceModule.ReferencedAssemblySymbols` (not syntax trees) so it works identically in both ProjectReference and PackageReference modes.
+The generator must walk `compilation.SourceModule.ReferencedAssemblySymbols` (not syntax trees) so it works identically in both ProjectReference and PackageReference modes. `Norse.EntityFramework.Migrations` is unchanged by this task — the generator ships in a separate Postgres-specific package.
 
 - [ ] **Step 1: Create the generator project**
 
-`Urdarbrunnr/src/EntityFramework.Migrations.Generator/EntityFramework.Migrations.Generator.csproj`:
+`Urdarbrunnr/src/EntityFramework.Migrations.PostgreSQL.Generator/EntityFramework.Migrations.PostgreSQL.Generator.csproj`:
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
-		<Description>Norse.EntityFramework.Migrations.Generator: the Roslyn IIncrementalGenerator that discovers IMigrationContributor implementations at compile time and emits AddNorseMigrations().</Description>
+		<Description>Norse.EntityFramework.Migrations.PostgreSQL.Generator: the Roslyn IIncrementalGenerator that discovers EfMigrationContributor&lt;TContext&gt; implementations at compile time and emits AddNorseMigrations() with Npgsql connection wiring.</Description>
 		<TargetFramework>netstandard2.0</TargetFramework>
 		<IsRoslynComponent>true</IsRoslynComponent>
 		<EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
@@ -904,36 +1080,39 @@ The generator must walk `compilation.SourceModule.ReferencedAssemblySymbols` (no
 </Project>
 ```
 
-- [ ] **Step 2: Wire the generator into `EntityFramework.Migrations.csproj`**
+- [ ] **Step 2: Create the PostgreSQL migrations wrapper package**
 
-Add to the `<ItemGroup>` section of `Urdarbrunnr/src/EntityFramework.Migrations/EntityFramework.Migrations.csproj`:
+`Urdarbrunnr/src/EntityFramework.Migrations.PostgreSQL/EntityFramework.Migrations.PostgreSQL.csproj`:
 ```xml
-<ItemGroup>
-	<ProjectReference
-		Include="../EntityFramework.Migrations.Generator/EntityFramework.Migrations.Generator.csproj"
-		OutputItemType="Analyzer"
-		ReferenceOutputAssembly="false" />
-</ItemGroup>
-```
-
-Also add a pack target so the generator DLL is included in the NuGet package's `analyzers/dotnet/cs/` folder. Add this target block at the end of `EntityFramework.Migrations.csproj`:
-```xml
-<Target Name="IncludeGeneratorInPackage" BeforeTargets="_GetPackageFiles">
-	<MSBuild Projects="../EntityFramework.Migrations.Generator/EntityFramework.Migrations.Generator.csproj"
-		Targets="Build"
-		Properties="Configuration=$(Configuration)" />
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<Description>Norse.EntityFramework.Migrations.PostgreSQL: pulls in Norse.EntityFramework.Migrations (contributor base) and Norse.EntityFramework.PostgreSQL (Aspire Postgres wiring) and ships the Roslyn generator that emits AddNorseMigrations(). Reference this single package from your migrations service.</Description>
+	</PropertyGroup>
 	<ItemGroup>
-		<None Include="../EntityFramework.Migrations.Generator/bin/$(Configuration)/netstandard2.0/Norse.EntityFramework.Migrations.Generator.dll"
-			Pack="true"
-			PackagePath="analyzers/dotnet/cs/"
-			Visible="false" />
+		<ProjectReference Include="../EntityFramework.Migrations/EntityFramework.Migrations.csproj" />
+		<ProjectReference Include="../EntityFramework.PostgreSQL/EntityFramework.PostgreSQL.csproj" />
+		<ProjectReference
+			Include="../EntityFramework.Migrations.PostgreSQL.Generator/EntityFramework.Migrations.PostgreSQL.Generator.csproj"
+			OutputItemType="Analyzer"
+			ReferenceOutputAssembly="false" />
 	</ItemGroup>
-</Target>
+	<Target Name="IncludeGeneratorInPackage" BeforeTargets="_GetPackageFiles">
+		<MSBuild Projects="../EntityFramework.Migrations.PostgreSQL.Generator/EntityFramework.Migrations.PostgreSQL.Generator.csproj"
+			Targets="Build"
+			Properties="Configuration=$(Configuration)" />
+		<ItemGroup>
+			<None Include="../EntityFramework.Migrations.PostgreSQL.Generator/bin/$(Configuration)/netstandard2.0/Norse.EntityFramework.Migrations.PostgreSQL.Generator.dll"
+				Pack="true"
+				PackagePath="analyzers/dotnet/cs/"
+				Visible="false" />
+		</ItemGroup>
+	</Target>
+</Project>
 ```
 
 - [ ] **Step 3: Create the test project**
 
-`Urdarbrunnr/tests/EntityFramework.Migrations.Generator.Tests/EntityFramework.Migrations.Generator.Tests.csproj`:
+`Urdarbrunnr/tests/EntityFramework.Migrations.PostgreSQL.Generator.Tests/EntityFramework.Migrations.PostgreSQL.Generator.Tests.csproj`:
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
@@ -943,19 +1122,19 @@ Also add a pack target so the generator DLL is included in the NuGet package's `
 		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="*">
 			<PrivateAssets>all</PrivateAssets>
 		</PackageReference>
-		<ProjectReference Include="../../src/EntityFramework.Migrations.Generator/EntityFramework.Migrations.Generator.csproj" />
+		<ProjectReference Include="../../src/EntityFramework.Migrations.PostgreSQL.Generator/EntityFramework.Migrations.PostgreSQL.Generator.csproj" />
 	</ItemGroup>
 </Project>
 ```
 
 - [ ] **Step 4: Write the failing tests**
 
-`Urdarbrunnr/tests/EntityFramework.Migrations.Generator.Tests/MigrationContributorGeneratorTests.cs`:
+`Urdarbrunnr/tests/EntityFramework.Migrations.PostgreSQL.Generator.Tests/MigrationContributorGeneratorTests.cs`:
 ```csharp
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 
-namespace Norse.EntityFramework.Migrations.Generator;
+namespace Norse.EntityFramework.Migrations.PostgreSQL.Generator.Tests;
 
 public sealed class MigrationContributorGeneratorTests
 {
@@ -972,7 +1151,7 @@ public sealed class MigrationContributorGeneratorTests
 				public override string Name => "Test";
 			}
 
-			sealed class TestContext(DbContextOptions<TestContext> opts) : DbContext(opts);
+			sealed class TestContext(DbContextOptions<TestContext> opts) : NorseDbContext(opts);
 			""";
 
 		var compilation = CreateCompilation(source);
@@ -987,6 +1166,7 @@ public sealed class MigrationContributorGeneratorTests
 		generated.ShouldContain("AddNorseMigrationsRunner");
 		generated.ShouldContain("TestContributor");
 		generated.ShouldContain("test-db");
+		generated.ShouldContain("AddNorsePostgresContext");
 	}
 
 	[Fact]
@@ -1021,14 +1201,14 @@ public sealed class MigrationContributorGeneratorTests
 - [ ] **Step 5: Run the tests to confirm they fail**
 
 ```bash
-dotnet test Urdarbrunnr/tests/EntityFramework.Migrations.Generator.Tests/EntityFramework.Migrations.Generator.Tests.csproj
+dotnet test Urdarbrunnr/tests/EntityFramework.Migrations.PostgreSQL.Generator.Tests/EntityFramework.Migrations.PostgreSQL.Generator.Tests.csproj
 ```
 
 Expected: compile error — `MigrationContributorGenerator` not defined.
 
 - [ ] **Step 6: Implement the generator**
 
-`Urdarbrunnr/src/EntityFramework.Migrations.Generator/MigrationContributorGenerator.cs`:
+`Urdarbrunnr/src/EntityFramework.Migrations.PostgreSQL.Generator/MigrationContributorGenerator.cs`:
 ```csharp
 using System.Collections.Generic;
 using System.Linq;
@@ -1036,7 +1216,7 @@ using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 
-namespace Norse.EntityFramework.Migrations.Generator;
+namespace Norse.EntityFramework.Migrations.PostgreSQL.Generator;
 
 [Generator]
 public sealed class MigrationContributorGenerator : IIncrementalGenerator
@@ -1147,7 +1327,8 @@ public sealed class MigrationContributorGenerator : IIncrementalGenerator
 		sb.AppendLine("using Microsoft.Extensions.DependencyInjection;");
 		sb.AppendLine("using Microsoft.Extensions.Hosting;");
 		sb.AppendLine("using Norse.Abstractions.Migrations;");
-		sb.AppendLine("using Norse.Infrastructure;");
+		sb.AppendLine("using Norse.EntityFramework.PostgreSQL;");
+		sb.AppendLine("using Norse.Infrastructure.Migrations;");
 		sb.AppendLine();
 		sb.AppendLine("static class NorseMigrationsGeneratedExtensions");
 		sb.AppendLine("{");
@@ -1157,11 +1338,7 @@ public sealed class MigrationContributorGenerator : IIncrementalGenerator
 
 		foreach (var c in contributors)
 		{
-			sb.AppendLine($"\t\tbuilder.Services.AddDbContext<{c.ContextType}>(o =>");
-			sb.AppendLine($"\t\t\to.UseNpgsql(");
-			sb.AppendLine($"\t\t\t\tbuilder.Configuration.GetConnectionString(\"{c.ConnectionStringName}\")");
-			sb.AppendLine($"\t\t\t\t?? throw new global::System.InvalidOperationException(");
-			sb.AppendLine($"\t\t\t\t\t\"Connection string '{c.ConnectionStringName}' is not configured.\")));");
+			sb.AppendLine($"\t\tbuilder.AddNorsePostgresContext<{c.ContextType}>(\"{c.ConnectionStringName}\");");
 			sb.AppendLine($"\t\tbuilder.Services.AddTransient<global::Norse.Abstractions.Migrations.IMigrationContributor, {c.ContributorType}>();");
 		}
 
@@ -1180,36 +1357,51 @@ public sealed class MigrationContributorGenerator : IIncrementalGenerator
 - [ ] **Step 7: Run the tests to confirm they pass**
 
 ```bash
-dotnet test Urdarbrunnr/tests/EntityFramework.Migrations.Generator.Tests/EntityFramework.Migrations.Generator.Tests.csproj
+dotnet test Urdarbrunnr/tests/EntityFramework.Migrations.PostgreSQL.Generator.Tests/EntityFramework.Migrations.PostgreSQL.Generator.Tests.csproj
 ```
 
 Expected: PASS.
 
-- [ ] **Step 8: Stage**
+- [ ] **Step 8: Add projects to `Urdarbrunnr.slnx`**
+
+Add the new project lines to `Urdarbrunnr/Urdarbrunnr.slnx`:
+
+```xml
+<!-- in /src/ folder, after EntityFramework.Migrations.csproj -->
+<Project Path="src/EntityFramework.Migrations.PostgreSQL/EntityFramework.Migrations.PostgreSQL.csproj" />
+<Project Path="src/EntityFramework.Migrations.PostgreSQL.Generator/EntityFramework.Migrations.PostgreSQL.Generator.csproj" />
+```
+```xml
+<!-- in /tests/ folder, after EntityFramework.Migrations.Tests.csproj -->
+<Project Path="tests/EntityFramework.Migrations.PostgreSQL.Generator.Tests/EntityFramework.Migrations.PostgreSQL.Generator.Tests.csproj" />
+```
+
+- [ ] **Step 9: Stage**
 
 ```bash
 git -C Urdarbrunnr add \
-  src/EntityFramework.Migrations.Generator/EntityFramework.Migrations.Generator.csproj \
-  src/EntityFramework.Migrations.Generator/MigrationContributorGenerator.cs \
-  src/EntityFramework.Migrations/EntityFramework.Migrations.csproj \
-  tests/EntityFramework.Migrations.Generator.Tests/EntityFramework.Migrations.Generator.Tests.csproj \
-  tests/EntityFramework.Migrations.Generator.Tests/MigrationContributorGeneratorTests.cs
+  Urdarbrunnr.slnx \
+  src/EntityFramework.Migrations.PostgreSQL.Generator/EntityFramework.Migrations.PostgreSQL.Generator.csproj \
+  src/EntityFramework.Migrations.PostgreSQL.Generator/MigrationContributorGenerator.cs \
+  src/EntityFramework.Migrations.PostgreSQL/EntityFramework.Migrations.PostgreSQL.csproj \
+  tests/EntityFramework.Migrations.PostgreSQL.Generator.Tests/EntityFramework.Migrations.PostgreSQL.Generator.Tests.csproj \
+  tests/EntityFramework.Migrations.PostgreSQL.Generator.Tests/MigrationContributorGeneratorTests.cs
 ```
 
 ---
 
 ## SHIP GATE — Urdarbrunnr
 
-**STOP. Do not start Task 6 until this gate is cleared.**
+**STOP. Do not start Task 7 until this gate is cleared.**
 
-1. Commit and push all three Urdarbrunnr projects (`EntityFramework`, `EntityFramework.Migrations`, `EntityFramework.Migrations.Generator`) and their tests.
+1. Commit and push all five Urdarbrunnr projects (`EntityFramework`, `EntityFramework.PostgreSQL`, `EntityFramework.Migrations`, `EntityFramework.Migrations.PostgreSQL`, `EntityFramework.Migrations.PostgreSQL.Generator`) and their tests.
 2. Confirm GitHub CI is green on Urdarbrunnr's repo.
 3. Merge and tag (e.g., `v0.1.0`).
-4. Confirm both `Norse.EntityFramework` and `Norse.EntityFramework.Migrations` are published to the NuGet feed. The generator DLL must be present in the `Norse.EntityFramework.Migrations` package's `analyzers/dotnet/cs/` folder — verify with `dotnet nuget locals all --list` or inspect the `.nupkg` contents with 7-Zip/NuGet Package Explorer before marking this gate clear.
+4. Confirm `Norse.EntityFramework`, `Norse.EntityFramework.PostgreSQL`, `Norse.EntityFramework.Migrations`, and `Norse.EntityFramework.Migrations.PostgreSQL` are all published to the NuGet feed. The generator DLL must be present in the `Norse.EntityFramework.Migrations.PostgreSQL` package's `analyzers/dotnet/cs/` folder — verify with `dotnet nuget locals all --list` or inspect the `.nupkg` contents with 7-Zip/NuGet Package Explorer before marking this gate clear.
 
 ---
 
-## Task 6: Himinbjörg — `Norse.Identity` (entities + DbContext + UserStore)
+## Task 7: Himinbjörg — `Norse.Identity` (entities + DbContext + UserStore)
 
 **Files:**
 - Create: `Himinbjorg/Himinbjorg.slnx`
@@ -1223,7 +1415,7 @@ git -C Urdarbrunnr add \
 - Modify: `Bifrost.slnx`
 
 **Interfaces:**
-- Consumes: `Norse.EntityFramework.NorseModelBuilderExtensions.ApplyNorseConventions` (Task 3)
+- Consumes: `Norse.EntityFramework.NorseDbContextOptionsExtensions.ApplyNorseConventions` (Task 3)
 - Produces:
   - 8 sealed entity types (`NorseUser`, `NorseRole`, `NorseUserClaim`, `NorseUserRole`, `NorseUserLogin`, `NorseUserToken`, `NorseRoleClaim`, `NorseUserPasskey`) — each extending its `IdentityXxx<Guid>` base with no added properties.
   - `NorseIdentityDbContext` — sealed `IdentityDbContext<..., Guid, ...>` with OpenIddict stores; applies `ApplyNorseConventions` in `OnModelCreating`.
@@ -1283,12 +1475,22 @@ git -C Urdarbrunnr add \
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
 	<ItemGroup>
-		<PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="*" />
 		<PackageReference Include="NSubstitute" />
 		<ProjectReference Include="../../src/Identity/Identity.csproj" />
 	</ItemGroup>
+	<ItemGroup>
+		<!--
+			SQLitePCLRaw.lib.e_sqlite3 (transitive via Microsoft.EntityFrameworkCore.Sqlite) has a known
+			high-severity vulnerability with no patched release. Exposure is test-only (in-memory). Revisit
+			when SQLitePCLRaw publishes a fix.
+		-->
+		<NuGetAuditSuppress Include="https://github.com/advisories/GHSA-2m69-gcr7-jv3q" />
+	</ItemGroup>
 </Project>
 ```
+
+Note: SQLite is required here because `NorseIdentityDbContext.OnConfiguring` calls `NorseDbContextOptionsExtensions.ApplyNorseConventions(optionsBuilder)` which calls `UseSnakeCaseNamingConvention()`. The InMemory provider does not support relational naming conventions.
 
 - [ ] **Step 2: Write the failing test**
 
@@ -1297,7 +1499,7 @@ git -C Urdarbrunnr add \
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
-namespace Norse.Identity;
+namespace Norse.Identity.Tests;
 
 public sealed class NorseUserStoreTests
 {
@@ -1338,10 +1540,15 @@ public sealed class NorseUserStoreTests
 		result.Email.ShouldBe("test@example.com");
 	}
 
-	static NorseIdentityDbContext CreateContext() =>
-		new(new DbContextOptionsBuilder<NorseIdentityDbContext>()
-			.UseInMemoryDatabase(Guid.NewGuid().ToString())
-			.Options);
+	static NorseIdentityDbContext CreateContext()
+	{
+		var ctx = new NorseIdentityDbContext(
+			new DbContextOptionsBuilder<NorseIdentityDbContext>()
+				.UseSqlite($"Data Source=:memory:;Mode=Memory;Cache=Shared;URI={Guid.NewGuid()}")
+				.Options);
+		ctx.Database.EnsureCreated();
+		return ctx;
+	}
 }
 ```
 
@@ -1434,7 +1641,6 @@ public sealed class NorseUserPasskey : IdentityUserPasskey<Guid>;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Norse.EntityFramework;
-using OpenIddict.EntityFrameworkCore.Models;
 
 namespace Norse.Identity;
 
@@ -1442,16 +1648,23 @@ public sealed class NorseIdentityDbContext(DbContextOptions<NorseIdentityDbConte
 	: IdentityDbContext<
 		NorseUser, NorseRole, Guid,
 		NorseUserClaim, NorseUserRole, NorseUserLogin,
-		NorseUserToken, NorseRoleClaim, NorseUserPasskey>(options)
+		NorseUserToken, NorseRoleClaim, NorseUserPasskey>(options), INorseDbContext
 {
+	protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+	{
+		base.OnConfiguring(optionsBuilder);
+		NorseDbContextOptionsExtensions.ApplyNorseConventions(optionsBuilder);
+	}
+
 	protected override void OnModelCreating(ModelBuilder builder)
 	{
 		base.OnModelCreating(builder);
-		NorseModelBuilderExtensions.ApplyNorseConventions(builder);
 		builder.UseOpenIddict<Guid>();
 	}
 }
 ```
+
+Note: `NorseIdentityDbContext` cannot inherit `NorseDbContext` (it must inherit `IdentityDbContext`), so it overrides `OnConfiguring` directly to call `ApplyNorseConventions`. This ensures snake_case naming whether the context is constructed via DI, `AddNorsePostgresContext`, or the design-time factory — the factory does not need to call `UseSnakeCaseNamingConvention()` separately.
 
 - [ ] **Step 6: Create `NorseUserStore`**
 
@@ -1590,7 +1803,7 @@ git add Bifrost.slnx
 
 ---
 
-## Task 7: Himinbjörg — `Norse.Identity.Migrations` (contributor + factory + EF migrations)
+## Task 8: Himinbjörg — `Norse.Identity.Migrations` (contributor + factory + EF migrations)
 
 **Files:**
 - Create: `Himinbjorg/src/Identity.Migrations/Identity.Migrations.csproj`
@@ -1601,7 +1814,7 @@ git add Bifrost.slnx
 - Create: `Himinbjorg/tests/Identity.Migrations.Tests/NorseIdentityMigrationContributorTests.cs`
 
 **Interfaces:**
-- Consumes: `NorseIdentityDbContext` (Task 6), `EfMigrationContributor<TContext>` + `MigrationConnectionStringAttribute` (Task 4)
+- Consumes: `NorseIdentityDbContext` (Task 7), `EfMigrationContributor<TContext>` + `MigrationConnectionStringAttribute` (Task 5)
 - Produces:
   - `NorseIdentityMigrationContributor` — `Name = "Norse.Identity"`; decorated with `[MigrationConnectionString("norse_identity")]`; the generator reads this type.
   - `NorseIdentityDbContextFactory` — `IDesignTimeDbContextFactory<NorseIdentityDbContext>` reading `DOTNET_EFTOOLS_CONNECTIONSTRING` env var; used only by `dotnet ef` at design time.
@@ -1646,7 +1859,7 @@ git add Bifrost.slnx
 ```csharp
 using Norse.EntityFramework.Migrations;
 
-namespace Norse.Identity.Migrations;
+namespace Norse.Identity.Migrations.Tests;
 
 public sealed class NorseIdentityMigrationContributorTests
 {
@@ -1778,11 +1991,11 @@ git -C Himinbjorg add \
 3. Merge and tag (e.g., `v0.1.0`).
 4. Confirm both `Norse.Identity` and `Norse.Identity.Migrations` are published to the NuGet feed.
 
-At this point **all four upstream realms have live NuGet packages.** Task 8 (Yggdrasil) and Task 9 (Bifrost) will run in Bifrost with `UseProjectReferences=true` (ProjectReference mode), but every NorseRef now also resolves via PackageReference — the toggle flip in Task 9 step 9 is real verification against the published packages.
+At this point **all four upstream realms have live NuGet packages.** Task 9 (Yggdrasil) and Task 10 (Bifrost) will run in Bifrost with `UseProjectReferences=true` (ProjectReference mode), but every NorseRef now also resolves via PackageReference — the toggle flip in Task 10 step 9 is real verification against the published packages.
 
 ---
 
-## Task 8: Yggdrasil — Wire the Migrations Service
+## Task 9: Yggdrasil — Wire the Migrations Service
 
 **Files:**
 - Modify: `Yggdrasil/src/Hosting.Migrations.Service/Hosting.Migrations.Service.csproj`
@@ -1791,7 +2004,7 @@ At this point **all four upstream realms have live NuGet packages.** Task 8 (Ygg
 - Modify: `Bifrost.slnx` — add Yggdrasil realm folders
 
 **Interfaces:**
-- Consumes: `AddNorseMigrations()` (generated from Tasks 4+5+7), `Norse.Infrastructure` (Task 2), `Norse.Identity.Migrations` (Task 7)
+- Consumes: `AddNorseMigrations()` (generated from Tasks 5+6+8 via `Norse.EntityFramework.Migrations.PostgreSQL`), `Norse.Infrastructure` (Task 2), `Norse.Identity.Migrations` (Task 8)
 - Produces: compilable migrations service with three-line `Program.cs`
 
 - [ ] **Step 1: Update the project file**
@@ -1807,10 +2020,10 @@ At this point **all four upstream realms have live NuGet packages.** Task 8 (Ygg
 		<PackageReference Include="Microsoft.Extensions.Hosting" />
 	</ItemGroup>
 	<ItemGroup>
-		<NorseRef Include="EntityFramework.Migrations">
+		<NorseRef Include="EntityFramework.Migrations.PostgreSQL">
 			<Repo>Urdarbrunnr</Repo>
 		</NorseRef>
-		<NorseRef Include="Infrastructure">
+		<NorseRef Include="Infrastructure.Migrations">
 			<Repo>Midgard</Repo>
 		</NorseRef>
 		<NorseRef Include="Identity.Migrations">
@@ -1842,7 +2055,7 @@ git -C Yggdrasil rm src/Hosting.Migrations.Service/Placeholder.cs
 dotnet build Yggdrasil/src/Hosting.Migrations.Service/Hosting.Migrations.Service.csproj
 ```
 
-Expected: `Build succeeded.` If `AddNorseMigrations` is not found, verify the generator is wired as an analyzer reference and that the NorseRef to `Urdarbrunnr/EntityFramework.Migrations` resolves correctly via the `Bifrost/Directory.Build.targets` Choose block.
+Expected: `Build succeeded.` If `AddNorseMigrations` is not found, verify the generator is wired as an analyzer reference in `Norse.EntityFramework.Migrations.PostgreSQL` and that the NorseRef to `Urdarbrunnr/EntityFramework.Migrations.PostgreSQL` resolves correctly via the `Bifrost/Directory.Build.targets` Choose block.
 
 - [ ] **Step 5: Confirm `Program.cs` contains zero references to Identity or contributor types**
 
@@ -1895,7 +2108,7 @@ git add Bifrost.slnx
 
 ---
 
-## Task 9: Bifrost — Postgres Primary+Replica + AppHost Wiring
+## Task 10: Bifrost — Postgres Primary+Replica + AppHost Wiring
 
 **Files:**
 - Create: `src/Orchestration.AppHost/postgres/replication-hba.sh`
@@ -1905,7 +2118,7 @@ git add Bifrost.slnx
 - Modify: `.gitattributes` (root or AppHost-level)
 
 **Interfaces:**
-- Consumes: Yggdrasil `Norse.Hosting.Migrations.Service` (Task 8), Postgres 19 beta1 container
+- Consumes: Yggdrasil `Norse.Hosting.Migrations.Service` (Task 9), Postgres 19 beta1 container
 - Produces: running Aspire AppHost with `pg-primary` (5432), `pg-replica` (5433), `migrations` service completing and exiting 0; `norse_identity` database with full Identity + OpenIddict schema visible in DataGrip.
 
 - [ ] **Step 1: Add `.sh` eol=lf to `.gitattributes`**
@@ -2064,7 +2277,7 @@ Verify:
 
 - [ ] **Step 9: Verify the `UseProjectReferences=false` toggle**
 
-All four upstream realms are live on NuGet (ship gates cleared before Task 8 started). Restore and build in package mode:
+All four upstream realms are live on NuGet (ship gates cleared before Task 9 started). Restore and build in package mode:
 
 ```bash
 dotnet restore Yggdrasil/src/Hosting.Migrations.Service/Hosting.Migrations.Service.csproj \
@@ -2073,7 +2286,7 @@ dotnet build Yggdrasil/src/Hosting.Migrations.Service/Hosting.Migrations.Service
   -p:UseProjectReferences=false --no-restore
 ```
 
-Expected: `Build succeeded.` — the published `Norse.EntityFramework.Migrations` NuGet package includes the generator in `analyzers/dotnet/cs/`, which runs over the compilation and emits `AddNorseMigrations()` in the same form as the ProjectReference build.
+Expected: `Build succeeded.` — the published `Norse.EntityFramework.Migrations.PostgreSQL` NuGet package includes the generator in `analyzers/dotnet/cs/`, which runs over the compilation and emits `AddNorseMigrations()` in the same form as the ProjectReference build.
 
 Verify the generated source is identical to the ProjectReference build:
 
@@ -2109,22 +2322,22 @@ git add \
 | Spec section | Task |
 |---|---|
 | §2.1 `IMigrationContributor` — no Order, no DependsOn | Task 1 |
-| §2.2 `EfMigrationContributor<TContext>` in `Norse.EntityFramework.Migrations` | Task 4 |
-| §2.3 Source-generated contributor registration; `UseProjectReferences` verification gate | Tasks 5, 9 step 9 |
+| §2.2 `EfMigrationContributor<TContext>` in `Norse.EntityFramework.Migrations` | Task 5 |
+| §2.3 Source-generated contributor registration; `UseProjectReferences` verification gate | Tasks 6, 10 step 9 |
 | §2.4 `MigrationRunnerService`; `AddNorseMigrationsRunner()` | Task 2 |
-| §2.5 Three-line `Program.cs` | Task 8 |
-| §3.1 Eight entity types, `Guid` key, no extra properties | Task 6 |
-| §3.2 `NorseUserStore` with projection overrides | Task 6 |
-| §3.3 `NorseIdentityDbContext` fully generic; OpenIddict registered on same context | Task 6 |
-| §3.5 Himinbjörg split: `Norse.Identity` runtime / `Norse.Identity.Migrations` tooling-only | Tasks 6, 7 |
-| §3.6 `.NET 11` TimeProvider (picked up by `AddDefaultTokenProviders`); passkey type `NorseUserPasskey` included | Task 6 step 4 |
-| §4 Bifrost AppHost: `WaitFor(pgPrimary)`; migrations service; no `CREATE DATABASE` | Task 9 |
-| §6 Success criteria: dashboard exit 0, `norse_identity` schema, replica streaming confirmed | Task 9 steps 7–9 |
-| §6 `UseProjectReferences=false` parity | Task 9 step 9 |
+| §2.5 Three-line `Program.cs` | Task 9 |
+| §3.1 Eight entity types, `Guid` key, no extra properties | Task 7 |
+| §3.2 `NorseUserStore` with projection overrides | Task 7 |
+| §3.3 `NorseIdentityDbContext` fully generic; OpenIddict registered on same context | Task 7 |
+| §3.5 Himinbjörg split: `Norse.Identity` runtime / `Norse.Identity.Migrations` tooling-only | Tasks 7, 8 |
+| §3.6 `.NET 11` TimeProvider (picked up by `AddDefaultTokenProviders`); passkey type `NorseUserPasskey` included | Task 7 step 4 |
+| §4 Bifrost AppHost: `WaitFor(pgPrimary)`; migrations service; no `CREATE DATABASE` | Task 10 |
+| §6 Success criteria: dashboard exit 0, `norse_identity` schema, replica streaming confirmed | Task 10 steps 7–9 |
+| §6 `UseProjectReferences=false` parity | Task 10 step 9 |
 | §7 Open decisions: none | n/a |
-| 2026-06-16 spec: PG primary+replica, pinned tag, scripts, named volumes, unproxied ports | Task 9 |
+| 2026-06-16 spec: PG primary+replica, pinned tag, scripts, named volumes, unproxied ports | Task 10 |
 
-**Placeholder scan:** No TBD, no "implement later", no "similar to" references. The Aspire API note in Task 9 step 5 is a verification instruction, not a deferral. The in-memory provider note in Task 6 step 8 covers a known edge case.
+**Placeholder scan:** No TBD, no "implement later", no "similar to" references. The Aspire API note in Task 10 step 5 is a verification instruction, not a deferral. The in-memory provider note in Task 7 step 8 covers a known edge case.
 
 **Type consistency:**
 - `IMigrationContributor` → `MigrationRunnerService.contributors` ✓
