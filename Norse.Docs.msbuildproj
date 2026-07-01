@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.Build.NoTargets">
+
+	<PropertyGroup>
+		<!-- NoTargets still wants a TFM so MSBuild doesn't complain -->
+		<TargetFramework>net11.0</TargetFramework>
+		<!-- Suppress the "nothing to build" restore noise -->
+		<IsPackable>false</IsPackable>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<!-- Recursive glob — picks up all spec/plan markdown as they land -->
+		<None Include="**/*.md" />
+	</ItemGroup>
+
+</Project>
+
