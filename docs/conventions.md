@@ -18,6 +18,11 @@ Reference detail relocated from `CLAUDE.md` §5 (which keeps the one-line rules 
   - PK: `pk_{table}` · FK: `fk_{table}_{referenced_table}` · Unique: `uq_{table}_{columns}` · Check: `ck_{table}_{rule}` · Index: `ix_{table}_{columns}`
 - **Migrations:** descriptive names, no timestamps in the human-readable part (EF prepends them). Read as a changelog: `AddPolicyCancellationReason`, not `Update3`.
 
+## Entity Framework
+
+- **Navigation and foreign-key properties are always explicit CLR properties, never shadow — audit-stamp columns are the one exception.** Every relationship an entity participates in gets a real property for both the FK scalar (`UserId`) and the navigation (`User` / `ICollection<T>`). Shadow properties are reserved for cross-cutting audit-stamp columns the platform itself injects (`CreatedBy`, `IpAddress`, timestamp columns) — never for a foreign key the domain model declares. A shadow FK is invisible to LINQ, to `Include()`, and to the next developer reading the class — it fails the same "no config archaeology" test explicit-length enforcement exists to pass (`docs/Platform/specs/2026-07-01-ef-explicit-length-colocated-configuration-design.md`).
+- **Many-to-many relationships get an explicit bridge entity, never EF's implicit skip-navigation join table.** An implicit many-to-many hides its join table behind a generated shadow type with no queryable, projectable CLR shape — no filtering, sorting, or projecting the join row itself without raw SQL or a workaround. Every Norse many-to-many is modeled as two one-to-many relationships through a real entity (see `NorseUserRole` in Himinbjörg), even when the join table carries no data beyond its two FKs.
+
 ## Async
 
 - **The elide law.** A method that does no work after its last await neither marks `async` nor awaits — it returns the `Task` directly. `await` exists only when there is work after the resumption. **Exception, load-bearing:** the await stays when the task is produced inside a `try`/`catch`/`finally` or `using` scope — eliding there lets the task escape the scope (the connection disposes before the query completes; exceptions detach from their handlers). Elide only pure tail positions. Enforcement: YGG analyzer bench (editorconfig spec §9); review-enforced until then.
