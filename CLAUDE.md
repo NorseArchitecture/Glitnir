@@ -97,7 +97,7 @@ Full concern table and ownership boundaries: `docs/decomposition.md`. Consult it
 
 **Core domain contexts (insurance):** Product · Distribution · Underwriting · Policy · Billing · Customer · Claims · Reporting.
 
-**Cross-cutting platform services** (not bounded contexts): `Norse.Identity` · `Norse.Access` · `Norse.Observability` · `Norse.AI`. Fraud (Tyr) and triage (Valkyrie) are unplaced — platform-vs-product unsettled.
+**Cross-cutting platform services** (not bounded contexts): `Norse.Identity` · `Norse.Access` · `Norse.ReferenceData` · `Norse.Observability` · `Norse.AI`. Fraud (Tyr) and triage (Valkyrie) are unplaced — platform-vs-product unsettled.
 
 **Integration rules:** contexts publish on their own logical endpoint; subscribers bind queues; publishers don't know who's listening. Events are versioned from day one; breaking changes ship a new type. No synchronous cross-context RPC for writes. Fraud and AI are advisors, not authorities — the originating context retains the decision. Reporting is the only context permitted to maintain denormalized cross-context state. Full design: `docs/Platform/specs/2026-06-03-messaging-foundation-design.md`.
 

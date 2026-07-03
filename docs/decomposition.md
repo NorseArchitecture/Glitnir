@@ -27,8 +27,9 @@ Platform-wide; not bounded contexts. Namespace (code); codename (lore) maps in `
 |---|---|---|
 | `Norse.Identity` | EF persistence for ASP.NET Identity and OpenIddict: entities, conventions, and migrations; sealed server-side, never referenced from WASM or MAUI | Himinbjorg |
 | `Norse.Access` | Auth services on Himinbjorg's identity record: one access ruleset across Blazor Server, WASM, and MAUI, with admin components and the backing gRPC service | Heimdall |
-| `Norse.Observability` | Logs, metrics, traces, alerting, SLO tracking | Gjallarhorn |
-| `Norse.AI` | Model serving, embeddings, RAG over policy/claim docs, decision support | Mimir |
+| `Norse.ReferenceData` | Canonical external-standard reference data — ISO country/currency codes, IANA time zones. `.Data` (entities, view models, TSV seeders, migrations) is one repo; `.Components`/`.Web.Server`/`.Worker` (serving layer) is a second, split for independent release cadence | Mimisbrunnr (data) / Mimir (serving) |
+| `Norse.Observability` | Logs, metrics, traces, alerting, SLO tracking | *(unnamed — no repository yet; name only when real, per `codenames.md` rule #4)* |
+| `Norse.AI` | Model serving, embeddings, RAG over policy/claim docs, decision support | *(unnamed — no repository yet; `Mimir` reassigned to reference data 2026-07-03, see `the-crooked-path.md` #9)* |
 | *(in the ether — unplaced)* | Fraud detection / legal enforcement: signals, case management, SIU referral, recovery — **platform-vs-product placement unsettled** | Tyr |
 | *(in the ether — unplaced)* | Claims triage: routing by severity, complexity, fraud signals — **placement unsettled** | Valkyrie |
 
@@ -46,6 +47,8 @@ Platform-wide; not bounded contexts. Namespace (code); codename (lore) maps in `
 | **Yggdrasil** | `Norse.Hosting.*` | Hosting chassis: server deployables (`Norse.Hosting.Web.Server`, `Norse.Hosting.Worker`, `Norse.Hosting.Migrations.Service`) and client deployables (`Norse.Hosting.Web.Client`, `Norse.Hosting.App`). `Norse.Hosting.DevServer` deleted 2026-06-05 — superseded by `InteractiveServer` render mode on `Norse.Hosting.Web.Server` (UI Composition spec §7.1). |
 | **Himinbjorg** | `Norse.Identity.*` | EF persistence for ASP.NET Identity and OpenIddict: entities, conventions, and migrations; sealed server-side, never referenced from WASM or MAUI. |
 | **Heimdall** | `Norse.Access.*` | Auth services riding on Himinbjorg: one access ruleset across Blazor Server, WASM, and MAUI, with admin components and the backing gRPC service. |
+| **Mimisbrunnr** | `Norse.ReferenceData.Data` | Entities, view models, TSV seeders (nietras Sep), and migrations for canonical reference data: ISO country/currency codes, IANA time zones. |
+| **Mimir** | `Norse.ReferenceData.Components` / `.Web.Server` / `.Worker` | Serving layer on Mimisbrunnr: Blazor components, gRPC service host, and the background worker that keeps reference data current. Split from Mimisbrunnr for independent release cadence, not a distinct bounded context. |
 | **Naglfar** | `Norse.DesignSystem.*` | Design tokens, radii, and component primitives — standalone for now, no declared consumers. |
 | **Bifrost** | `Norse.Orchestration.*` | Local developer meta-repository: the .NET Aspire AppHost composing services, databases, queues, and configuration; carries the realm repos as submodules (relative URLs, tracking `master`). A reference composition — consumers are expected to build their own bridge from the constituent realms. |
 
@@ -53,8 +56,8 @@ Consequences and rulings of the amendment:
 
 - **Law-and-hammer pairs now version across repo boundaries.** The Abstractions + implementation pairs that previously traveled in one submodule (architecture, mediator, persistence, hosting) split as law → Asgard, hammer → Svartalfheim/Midgard. Lockstep mechanics across repos fold into the build-substrate session (reconciliation tracker 4.2).
 - **`ServiceDefaults` (ruled 2026-06-11):** Midgard if possible; Yggdrasil only if it carries shared runtime context that touches all the composition runtimes; never Bifrost. The `AppHost` keeps its Aspire-conventional name as `Norse.Orchestration.AppHost` in Bifrost.
-- **`norse-referencedata` is dissolved (2026-06-11):** temporal contracts (`ITemporalRepository<T>`) → Asgard; implementations → Midgard; universal geographic/world content → a thin library, named when real; vertical reference content is sovereign (`{Company}.ReferenceData.*` — loss costs are insurance's business, transit zones are logistics'). Norns returned to the bench (`docs/codenames.md`).
-- **Future platform realms** (`Norse.Observability`, `Norse.AI`, `Norse.Warehouse`) each get their own lore-named repository when they land; `docs/codenames.md` binds each name.
+- **`norse-referencedata` is dissolved (2026-06-11):** temporal contracts (`ITemporalRepository<T>`) → Asgard; implementations → Midgard; universal geographic/world content → a thin library, named when real; vertical reference content is sovereign (`{Company}.ReferenceData.*` — loss costs are insurance's business, transit zones are logistics'). Norns returned to the bench (`docs/codenames.md`). **The deferred half landed 2026-07-03:** the universal geographic/world-content library is real — Mimisbrunnr (`Norse.ReferenceData.Data`) and Mimir (`Norse.ReferenceData.Components`/`.Web.Server`/`.Worker`), split across two repos for release-cadence reasons, not two bounded contexts.
+- **Future platform realms** (`Norse.Observability`, `Norse.AI`, `Norse.Warehouse`) each get their own lore-named repository when they land, chosen fresh at that time — `Muninn`, `Gjallarhorn`, and `Mimir` were bound to these prematurely and walked back 2026-07-03 (`the-crooked-path.md` #9); none currently reserve a name.
 
 Product realms follow the same pattern under their own roots:
 
