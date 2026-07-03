@@ -4,7 +4,7 @@
 
 **Goal:** Close two gaps in `Norse.EntityFramework` and prove them against Himinbjörg's real Identity/OpenIddict schema before it is migrated for the first time in earnest: (1) no `string`/`byte[]` column reaches the database without an explicit length decision, enforced at model-finalization time; (2) every entity is its own configuration via a compiler-enforced `Configure` method, discovered by a Roslyn source generator, never a reflection scan.
 
-**Architecture:** Two realms, strict dependency order. Urdarbrunnr (`Norse.EntityFramework`) ships the attribute trio, two `IModelFinalizingConvention`s, the `INorseEntity<TSelf>`/`NorseEntityBase<TSelf>` two-tier interface, and `EntityConfigurationApplicationGenerator` (a same-compilation Roslyn `IIncrementalGenerator` in the new `Norse.EntityFramework.Configuration.Generator` project, forwarded via the existing `NorseRef Generator="true"` mechanism — mirrors `EntityFramework.Migrations.PostgreSQL`'s wrapper+generator-sibling shape). Himinbjörg (`Norse.Identity`) is the first consumer: every existing Identity entity gets explicit navigation/FK properties and a colocated `Configure`, four new `NorseOpenIddict*` wrapper entities close OpenIddict's own unbounded-column and shadow-FK gaps, and the Identity migration is regenerated once the model builds clean.
+**Architecture:** Two realms, strict dependency order. Urdarbrunnr (`Norse.EntityFramework`) ships the attribute trio, two `IModelFinalizingConvention`s, the `INorseEntity<TSelf>`/`NorseEntityBase<TSelf>` two-tier interface, and `EntityConfigurationApplicationGenerator` (a same-compilation Roslyn `IIncrementalGenerator` in the `Norse.EntityFramework.Generator` project, forwarded via the existing `NorseRef Generator="true"` mechanism). **Post-ship amendment (see "SHIP GATE — Urdarbrunnr" below):** unlike `EntityFramework.Migrations.PostgreSQL`'s wrapper+generator-sibling shape this was originally modeled on, the generator-forwarding here was folded directly into `Norse.EntityFramework` itself rather than a separate wrapper package — `NorseDbContext` already mandates `INorseEntity<TSelf>` unconditionally, so no consumer would ever want the base package without the generator. Himinbjörg (`Norse.Identity`) is the first consumer: every existing Identity entity gets explicit navigation/FK properties and a colocated `Configure`, four new `NorseOpenIddict*` wrapper entities close OpenIddict's own unbounded-column and shadow-FK gaps, and the Identity migration is regenerated once the model builds clean.
 
 **Tech Stack:** .NET 11 (`net11.0`), C#, EF Core (Npgsql + `EFCore.NamingConventions`), ASP.NET Core Identity v3, OpenIddict, Roslyn `IIncrementalGenerator` (`netstandard2.0`), xUnit v3 + Shouldly, Microsoft.EntityFrameworkCore.Sqlite (finalization-pipeline tests only)
 
@@ -1347,15 +1347,14 @@ git add Bifrost.slnx
 
 ## SHIP GATE — Urdarbrunnr
 
-**STOP. Do not start Task 7 until this gate is cleared.**
+**CLEARED 2026-07-02.** Tasks 1–6 merged via PR #13. Three real bugs in this plan's own literal code were found and fixed during per-task review — not implementer error — see "Post-ship amendments" immediately below before reading anything upstream of this line as gospel.
 
-1. Commit and push all of Tasks 1–6 (`Norse.EntityFramework` changes, the two new `EntityFramework.Configuration*` projects, and their tests).
-2. Open a PR against `master`; confirm GitHub CI (build + test) is green.
-3. Merge the PR.
-4. Push a version tag to trigger the release pipeline.
-5. Confirm `Norse.EntityFramework` (updated), `Norse.EntityFramework.Configuration`, and `Norse.EntityFramework.Configuration.Generator` are published to the NuGet feed.
+**Post-ship amendments (read before starting Task 7):**
 
-Only after the packages are live does Task 7 begin.
+1. **Package structure changed after merge.** The wrapper package `Norse.EntityFramework.Configuration` described throughout Task 6 (and referenced later in Task 14) **no longer exists**. `NorseDbContext` already unconditionally wires in `RequireEntityConfigurationConvention` (Task 4) with no opt-out — every consumer of bare `Norse.EntityFramework` is already committed to writing `INorseEntity<TSelf>`-implementing entities, so there is no real scenario wanting the base package without the generator. The wrapper's analyzer-forwarding and `IncludeGeneratorInPackage` packing target now live directly in `Norse.EntityFramework`'s own `.csproj`. The generator project itself is renamed `Norse.EntityFramework.Generator` (was `Norse.EntityFramework.Configuration.Generator`) — it still must stay a separate `netstandard2.0` project (Roslyn analyzers can never be a normal assembly reference), but there is no third "wrapper" project anymore. **Wherever Task 6's text below or Task 14 references `EntityFramework.Configuration` or `EntityFramework.Configuration.Generator`, read it as `EntityFramework`/`Norse.EntityFramework` and `EntityFramework.Generator`/`Norse.EntityFramework.Generator` respectively** — Task 14's own text has been corrected in place; Task 6's has not (it's the accurate historical record of what was originally built before this follow-up), so map the names yourself if reading Task 6 for reference.
+2. **Task 2 (`RequireExplicitLengthConvention`):** EF Core's stock `MaxLengthAttributeConvention` only applies `HasMaxLength` for `Length > 0` — it silently no-ops for `UnboundedLengthAttribute`'s `Length = -1`. The shipped convention manually reads the attribute for the `Length <= 0` case only, trusting the stock convention for positive lengths.
+3. **Task 3 (`NorseEntityBase<TSelf>`):** the plan's literal code (implementing `INorseEntity<TSelf>` with an unfulfilled `Configure`) does not compile — no legal C# leaves a `static abstract` interface member unfulfilled through an intervening class. Shipped fix: `NorseEntityBase<TSelf>` does **not** implement `INorseEntity<TSelf>` itself, only constrains `TSelf` to it. **Consequence relevant to Himinbjörg:** a concrete Tier-1 entity must declare BOTH `: NorseEntityBase<TSelf>` AND `: INorseEntity<TSelf>` explicitly — not "free by inheritance" as originally framed. Himinbjörg is 100% Tier 2 (every entity implements `INorseEntity<TSelf>` directly per Task 7 onward), so this doesn't block Task 7–15, but don't write Tier-1-style guidance elsewhere assuming the base class alone is sufficient.
+4. **Task 6 (the generator):** the plan's `StripGlobalPrefix` helper only stripped `global::`, never the namespace, so the Tier-1 partial-class emission produced invalid C# for any real namespaced `DbContext`. Fixed by wrapping in a proper `namespace { }` block. Not relevant to Himinbjörg (Tier 2 only), but relevant to any future Tier-1 bounded context.
 
 ---
 
@@ -2411,16 +2410,16 @@ git -C Himinbjorg add \
 - Test: `Himinbjorg/tests/Identity.Tests/NorseIdentityDbContextModelTests.cs`
 
 **Interfaces:**
-- Consumes: `Norse.EntityFramework.Configuration` (Urdarbrunnr, Task 6, published) — new `NorseRef Generator="true"` entry
+- Consumes: `Norse.EntityFramework` (Urdarbrunnr, Task 6, published) — the generator's analyzer-forwarding now lives directly in this package (post-ship amendment 1, above); no separate `.Configuration` package to reference.
 - Produces: `NorseIdentityDbContext.OnModelCreating` calling the newly-generated `builder.ApplyNorseConfigurations()` (same-compilation, Tier 2 explicit-call path — this is the call site that already works correctly per the plan's "Design amendments," point 3); `NorseIdentityDbContext` gets `HasDefaultSchema("identity")` and the fully-specified `UseOpenIddict<NorseOpenIddictApplication, NorseOpenIddictAuthorization, NorseOpenIddictScope, NorseOpenIddictToken, Guid>()`; `AddNorseIdentity` replaces `ReplaceDefaultEntities<Guid>()` with the fully-specified overload naming all four wrapper types.
 
 This is the task where every prior task's work either proves out together or throws — the integration test is the real arbiter for the "already bounded by base config" assumption in Task 9.
 
-- [ ] **Step 1: Add the generator reference**
+- [ ] **Step 1: Enable generator forwarding on the existing `EntityFramework` reference**
 
-Modify `Himinbjorg/src/Identity/Identity.csproj`, adding to the existing `<NorseRef>` item group (alongside `EntityFramework`):
+Himinbjörg's `Identity.csproj` already has a `<NorseRef Include="EntityFramework">` entry (from the migrations-framework plan). Add `Generator="true"` to that existing entry — do NOT add a second `NorseRef` entry; there is no separate `.Configuration` package to point at post-amendment:
 ```xml
-<NorseRef Include="EntityFramework.Configuration">
+<NorseRef Include="EntityFramework">
 	<Repo>Urdarbrunnr</Repo>
 	<Generator>true</Generator>
 </NorseRef>
