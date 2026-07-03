@@ -1,7 +1,10 @@
 # `Norse.EntityFramework` — Provider-Aware Fixed-Length and Naming Conventions
 
 **Date:** 2026-07-03
-**Status:** Design converged, ready for planning
+**Status:** Shipped — Urdarbrunnr PR #15, Himinbjörg PR #16, both merged and released as v0.0.4
+(`Norse.EntityFramework.SqlServer` and `Norse.EntityFramework.Migrations.SqlServer` live on the
+GitHub Packages feed alongside the rest of the trio). Plan:
+`../plans/2026-07-03-provider-aware-length-and-naming-conventions.md`.
 **Owner:** Buvy
 
 ## Finding
@@ -32,6 +35,20 @@ re-commenting it per property, per realm.
 - `NorseIdentityDbContext.cs` — remove its unconditional `ApplyNorseConventions()` call from
   `OnConfiguring`, and update its `NorseModelConventions.Apply(...)` call site for the new required
   parameter. Nothing else in Himinbjörg changes.
+
+**Addendum (found during the final whole-branch review, not anticipated above):** removing
+`OnConfiguring`'s call also silently stripped naming from `NorseIdentityDbContextFactory` (the
+`IDesignTimeDbContextFactory` `dotnet ef migrations add` uses) — it built its own
+`DbContextOptionsBuilder` directly and had never applied naming itself, riding on the very call
+this spec's scope said to remove. Confirmed real, not a false alarm, against the already-committed
+migration snapshot's snake_case OpenIddict columns (proof the factory used to produce that output).
+Fixed at Himinbjörg `10c9eec` with a live-TDD regression test
+(`NorseIdentityDbContextFactoryTests.CreateDbContext_applies_snake_case_naming`). The scope note
+above ("nothing else in Himinbjörg changes") held for everything *this spec* anticipated touching;
+it didn't anticipate a design-time-only consumer depending on the removed call's side effect. Worth
+carrying forward: when a future spec removes an implicit behavior from a shared `OnConfiguring`,
+check design-time factories specifically — they're easy to miss because no test exercises the
+`dotnet ef migrations add` path itself, only the resulting static migration files.
 
 **Out of scope:**
 - Actually proving the bifurcation against a running SQL Server instance ("test the mettle in

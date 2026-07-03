@@ -1,5 +1,11 @@
 # Provider-Aware Length and Naming Conventions Implementation Plan
 
+**Status:** Shipped 2026-07-03 — all 9 tasks complete, final whole-branch review clean (one Important
+finding caught and fixed: see the spec's addendum), Urdarbrunnr PR #15 and Himinbjörg PR #16 both
+merged and released as v0.0.4. Full per-task ledger: `Urdarbrunnr/.superpowers/sdd/progress.md`
+(git-ignored scratch, local to whichever checkout ran the plan — not a durable record; this status
+line is the durable one).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make `[FixedLength(n)]` and table/column naming provider-aware in `Norse.EntityFramework`, ship full SQL Server package parity alongside the existing PostgreSQL packages, and fix the pre-existing bug where snake_case naming was applied to every provider unconditionally.
