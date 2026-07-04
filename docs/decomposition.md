@@ -30,8 +30,8 @@ Platform-wide; not bounded contexts. Namespace (code); codename (lore) maps in `
 | `Norse.ReferenceData` | Canonical external-standard reference data — ISO country/currency codes, IANA time zones. `.Data` (entities, view models, TSV seeders, migrations) is one repo; `.Components`/`.Web.Server`/`.Worker` (serving layer) is a second, split for independent release cadence | Mimisbrunnr (data) / Mimir (serving) |
 | `Norse.Observability` | Logs, metrics, traces, alerting, SLO tracking | *(unnamed — no repository yet; name only when real, per `codenames.md` rule #4)* |
 | `Norse.AI` | Model serving, embeddings, RAG over policy/claim docs, decision support | *(unnamed — no repository yet; `Mimir` reassigned to reference data 2026-07-03, see `the-crooked-path.md` #9)* |
-| *(in the ether — unplaced)* | Fraud detection / legal enforcement: signals, case management, SIU referral, recovery — **platform-vs-product placement unsettled** | Tyr |
-| *(in the ether — unplaced)* | Claims triage: routing by severity, complexity, fraud signals — **placement unsettled** | Valkyrie |
+| *(unplaced)* | Fraud detection / legal enforcement: signals, case management, SIU referral, recovery — **platform-vs-product placement unsettled** | *(unnamed — placement isn't settled and the component isn't real; a codename attached to either half of that uncertainty is the same rule-#4 violation, just dressed as "provisional." `Tyr` and `Valkyrie` returned to the bench 2026-07-03, see `codenames.md`.)* |
+| *(unplaced)* | Claims triage: routing by severity, complexity, fraud signals — **placement unsettled** | *(same as above)* |
 
 ## Repository Map
 

@@ -49,22 +49,17 @@ Separately-capitalized operating entities. Codenamed for the **governing figure 
 |---|---|
 | **Glitnir** | This repo — the design court: specs, proofs of concept, plans, heard and judged before code is the verdict. The shining hall of the Edda — gold pillars, silver roof — where every suit is settled. |
 
-## In the ether — unsettled, revisit when a real domain forces the call
-
-| Codename | Provisional function | Why it's parked |
-|---|---|---|
-| **Tyr** | fraud detection / legal enforcement | Fraud exists in every vertical but is **lifeblood in insurance, minor in energy/logistics** — so its placement (shared `Norse.*` platform service vs. the insurance product's own tier) is unsettled. Don't name until a second product forces it. |
-| **Valkyrie** | claims triage | Same as Tyr — "claims triage" is insurance-shaped; may belong to the insurance product, not the platform. Sent back to the ether 2026-06-07. |
-
 ## The bench — available palette, **no committed meaning**
 
 The Reserved-with-an-intended-use tier was **killed 2026-06-07**: reserving a name for an unbuilt thing is a prediction, and predictions rot (it cost us two reassignments — Glitnir and a name re-judged as a product-realm brand; see `docs/the-crooked-path.md` #1). These names are simply *available*; a name leaves the bench only in the same change that introduces the real component it will narrate:
 
-**Norns** · **Huginn** · **Saga** · **Bragi** · **Var** · **Idunn** · **Vidar** · **Muninn** · **Gjallarhorn**
+**Norns** · **Huginn** · **Saga** · **Bragi** · **Var** · **Idunn** · **Vidar** · **Muninn** · **Gjallarhorn** · **Tyr** · **Valkyrie**
 
 (Bifrost left the bench 2026-06-11 for `Norse.Orchestration`. Norns returned the same day when the ReferenceData realm dissolved; Urd / Verdandi / Skuld are not individually on the bench — the three fates travel with Norns as a unit. Their what-was/is/shall-be essence makes them a natural fit for a genuinely temporal component someday, but that is an observation, not a reservation. **Urdarbrunnr** — the well, not a Norn — was named for `Norse.EntityFramework` later the same day: the well of what-was holds the record the fates read from, so the trio remains intact, benched as a unit, for whenever a genuinely temporal component makes the what-was/is/shall-be essence operational.)
 
 (**Muninn** and **Gjallarhorn** joined the bench 2026-07-03: both had been bound to `Norse.Warehouse` and `Norse.Observability` respectively despite neither component being real — a straight violation of rule #4 caught when the same mistake, repeated for **Mimir**/`Norse.AI`, collided with a name legitimately earned by a real component. All three premature bindings are undone; Muninn and Gjallarhorn are available again, unreserved, and Mimir is spent for real — see `the-crooked-path.md` #9.)
+
+(**Tyr** and **Valkyrie** joined the bench the same day: the former "In the ether" section bound both to a "provisional function" — fraud detection, claims triage — despite neither being real either, the same rule-#4 violation just dressed in honest "unsettled" language instead of a confident-looking table row. A name with no committed meaning and a name with a *provisional* meaning are both still names bound ahead of the thing. The section is gone; if fraud/claims-triage placement questions need tracking, they live in `decomposition.md` on their own merits, with no name attached until a real component earns one.)
 
 > **Umbrella resolved (2026-06-07): Norse wins, flushed through the system.** "Yggdrasil" yields entirely to "Norse Architecture" for every *operational* purpose — the hosting realm is `Norse.Hosting.*`, the meta-repo is **Bifrost** (`Norse.Orchestration.*` — named 2026-06-11, after the cosmos was lifted into lore-named repositories), and the API/brand symbols functionize (`AddYggdrasilWebHost`→`AddNorseWebHost`, `YggdrasilTier`→`NorseTier`, `YggdrasilPrincipal`→`NorsePrincipal` [ruling 1.2's token updates to the new brand], `IYggdrasilWebHostBuilder`→`INorseWebHostBuilder`). **Yggdrasil survives only as pure lore** — the world tree on which the cosmos hangs, told in the README. No codename remains in any operational or realm-actor position anywhere outside this dictionary, the README, and `the-crooked-path.md`; only pure mythological narrative may remain as lore color. (The `YGG` analyzer-diagnostic prefix is a stable ID scheme like `CA`/`IDE` — its rename is a separate decision, not part of this flush.)
 
