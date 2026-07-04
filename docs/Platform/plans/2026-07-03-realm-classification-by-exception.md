@@ -454,7 +454,7 @@ Write-Host 'The runes are scattered.'
 - [ ] **Step 2: Dry-run against the live org and check classification**
 
 Run: `pwsh scripts/scatter-the-runes.ps1 -DryRun`
-Expected: exactly the realms in `Bifrost/.gitmodules` minus none (no `.github` line printed at all), each tagged `(default, 7 files)` except `Yggdrasil (exception, 6 files)`, `Bifrost (exception, 2 files)`, `Naglfar (exception, 3 files)`, `Glitnir (exception, 3 files)`. Compare this list against today's `manifest.psd1` `Realms` table (Task 1's `git show HEAD~1:config/manifest.psd1` for reference) to confirm no realm's file set changed.
+Expected: exactly the realms in `Bifrost/.gitmodules` minus none (no `.github` line printed at all), each tagged `(default, 14 files)` except `Yggdrasil (exception, 10 files)`, `Bifrost (exception, 6 files)`, `Naglfar (exception, 4 files)`, `Glitnir (exception, 4 files)` — these are the deduplicated file counts for each realm's assigned groups (`DefaultGroups` sums to 14 files; group sizes: `git`=2, `universal`=5, `sdk`=1, `dotnet`=1, `nuget`=4, `tests`=1, `ci`=1, `workflows`=1, with no cross-group file overlap for any realm's assignment). Compare this list against today's `manifest.psd1` `Realms` table (Task 1's `git show HEAD~1:config/manifest.psd1` for reference) to confirm no realm's file set changed.
 
 - [ ] **Step 3: Commit**
 
