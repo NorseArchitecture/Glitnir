@@ -49,7 +49,8 @@ Platform-wide; not bounded contexts. Namespace (code); codename (lore) maps in `
 | **Heimdall** | `Norse.AuthN.*` | The authn story riding on Himinbjorg: login, register, forgot-password, 2FA setup, recovery, and reset, uniform across Blazor Server, WASM, and MAUI, with the backing gRPC service. |
 | **Mimisbrunnr** | `Norse.ReferenceData.Data` | Entities, view models, TSV seeders (nietras Sep), and migrations for canonical reference data: ISO country/currency codes, IANA time zones. |
 | **Mimir** | `Norse.ReferenceData.Components` / `.Web.Server` / `.Worker` | Serving layer on Mimisbrunnr: Blazor components, gRPC service host, and the background worker that keeps reference data current. Split from Mimisbrunnr for independent release cadence, not a distinct bounded context. |
-| **Naglfar** | `Norse.DesignSystem.*` | Design tokens, radii, and component primitives — standalone for now, no declared consumers. |
+| **Naglfar** | `Norse.DesignSystem.*` | The token pipeline (design tokens, radii, spacing, typography) — npm-only, no .NET, no declared consumers. `DesignSystem.Stories` split out to Bragi 2026-07-12. |
+| **Bragi** | `Norse.DesignSystem.Stories` | Content-only Razor Class Library of `.stories.razor` catalog pages, split from Naglfar 2026-07-12. Rides `NorseRef` on every realm that publishes Blazor components — Asgard's `Abstractions.Components` today, `AuthN.Components.FluentUI` (Heimdall) and `ReferenceData.Components.FluentUI` (Mimir) as each ships. Hosted at runtime by Yggdrasil's `Hosting.Stories.Client`/`.Server`. |
 | **Bifrost** | `Norse.Orchestration.*` | Local developer meta-repository: the .NET Aspire AppHost composing services, databases, queues, and configuration; carries the realm repos as submodules (relative URLs, tracking `master`). A reference composition — consumers are expected to build their own bridge from the constituent realms. |
 
 Consequences and rulings of the amendment:

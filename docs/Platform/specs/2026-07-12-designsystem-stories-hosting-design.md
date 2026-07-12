@@ -98,3 +98,23 @@ This spec converges shape and CI plumbing, not deploy infrastructure. It is real
 **Scope:** Deliberately shape-and-CI-only. §3 and §7 both state that no deploy target exists yet and that this is intentional, consistent with Buvy's explicit call this session (package and ship to GHCR; no cloud spend until something's worth showing).
 
 **Ambiguity:** §1.1 states which project holds the `NorseRef` (only `Hosting.Stories.Client`) rather than leaving it ambiguous. §1.2's freshness mechanism names the exact missing prerequisite (`sound-gjallarhorn.ps1` throwing without the property) rather than asserting it "should just work." §6's risk is stated as a concrete first task with a concrete verification method, not a hand-wave.
+
+---
+
+## Addendum (2026-07-12, same day): `DesignSystem.Stories` split out of Naglfar into Bragi
+
+**This section supersedes §1.1's "Naglfar owns content" decision, §2.1, and the `Naglfar/README.md` row of §4.** Everything else in this spec — the `Hosting.Stories.Client`/`.Server` split and its compile-target rationale (§1.1), the Gjallarhorn freshness mechanism (§1.2), the GHCR shipping path (§1.3), and the deltas to the 2026-07-11 spec (§5) — stands unchanged. Only *which repo* holds `DesignSystem.Stories` changes.
+
+**Decision:** `DesignSystem.Stories` moves out of Naglfar into a new repo, **Bragi** (`Norse.DesignSystem.Stories`), the same day it landed as a plain RCL. Naglfar keeps the npm/Style Dictionary token pipeline only — no .NET at all. Reasoning: the token pipeline and the story catalog have different publish cadences and toolchains (npm vs. NuGet) and don't need to share a repo just because both narrate "design system." Splitting immediately, before any tag or NuGet publish of `Norse.DesignSystem.Stories` from Naglfar, avoids ever having to migrate a released package's identity.
+
+**What changed mechanically (clean-cut copy, no git history preservation — the moved history was ~10 commits old and never tagged):**
+
+- Naglfar → Bragi: `Naglfar.slnx` → `Bragi.slnx`, `src/DesignSystem.Stories/`, `src/Directory.Build.props`/`.targets`, `tests/Directory.Build.props`/`.targets`, root `Directory.Build.props` (fully .NET-specific, moves wholesale).
+- Naglfar sheds `global.json` and `nuget.config` entirely — no .NET SDK pin, no NuGet restore, needed anymore.
+- Naglfar's `release.yml` now calls `release-npm.yml` (it incorrectly called `release-nuget.yml` before this addendum — a pre-existing gap, since Naglfar had never tagged a release and the npm package's publish path had never actually been wired).
+- Yggdrasil's `Hosting.Stories.Client.csproj` `NorseRef` now points `Repo>Bragi</Repo>`; `Directory.Packages.props`' `NaglfarVersion` property (and the `Norse.DesignSystem.Stories` `PackageVersion` keyed off it) renamed to `BragiVersion`.
+- Ginnungagap's `manifest.psd1`: Naglfar's exception shrinks to `universal, ci, workflows, claude` (npm-only baseline); a new Bragi exception takes Naglfar's former .NET profile verbatim (`universal, sdk, dotnet, nuget, tests, ci, workflows, claude`, ungated).
+- `docs/codenames.md`: Bragi leaves the bench for `Norse.DesignSystem.Stories`.
+- Doc pairs updated in the same change: `Bifrost/CLAUDE.md` §2 and `README.md` realm tables, `Naglfar/README.md`, `Bragi/README.md` + new `Bragi/CLAUDE.md`, Ginnungagap's `CLAUDE.md` (dependency-order list + the now-corrected gated/ungated classification prose — `carve-the-laws.ps1` derives gate status from `manifest.psd1` dynamically, it was never a hardcoded list to begin with as of this pass) and `profile/README.md`, and `docs/decomposition.md`.
+
+**Not revisited:** whether design-system realm-wiring goes through the platform's brainstorm → spec → plan → TDD cycle. It doesn't, per standing precedent — this addendum documents a mechanical split, not a new design.
