@@ -695,33 +695,27 @@ git status
 
 ---
 
-## Task 8: Doc cleanup — remove the stale "Chamber" row
+## Task 8: Doc cleanup — remove the stale "Chamber" row (correction below)
 
-**Files:**
-- Modify: `Bifrost/CLAUDE.md` (§0 platform vocabulary table)
+**Correction, found during execution:** this task's original text named `Bifrost/CLAUDE.md` §0 as the location — that was wrong. `Bifrost/CLAUDE.md` has no platform-vocabulary table and never did; grepping it for "Chamber" during execution returned nothing. The actual "Chamber" row lives in Buvy's personal global `CLAUDE.md` (`~/.claude/CLAUDE.md`, a symlink into his own dotfiles repo) — a file outside every repo this plan otherwise touches, and personal rather than project configuration. Executed directly by the controller rather than as a dispatched subagent task, since it's a one-line removal in a personal settings file, not project doc content. While there, Buvy also asked to remove the same table's other Hadron-specific codenames (Collider, Accelerator, Crucible) and the now-dangling Open Source section sentence referencing them — done in the same pass.
+
+**Files (actual):**
+- Modify: Buvy's personal global `CLAUDE.md` (dotfiles repo, not part of this plan's repo set)
 
 **Interfaces:**
 - Consumes: nothing.
 - Produces: nothing.
 
-Independent of the rename — confirmed directly by Buvy in this session that "Chamber" never existed as a real layer and should be removed.
+- [x] **Step 1: Remove the Chamber row and the other Hadron codenames**
 
-- [ ] **Step 1: Remove the Chamber row**
+Removed the entire `Platform Vocabulary` table (Collider/Accelerator/Crucible/Chamber rows) and its OSS-umbrella follow-up sentence, keeping the `Bounded contexts` line. Removed the Open Source section's now-dangling reference to the same retired codenames.
 
-Current table (in Bifrost's `CLAUDE.md`, platform vocabulary section):
-```
-| **Chamber** | UI/UX frontend layer | C.T.R. Wilson |
-```
-
-Delete this row entirely from the table.
-
-- [ ] **Step 2: Verify no other reference to "Chamber" as a layer remains**
+- [x] **Step 2: Verify no other reference to "Chamber" remains**
 
 ```bash
-cd /home/buvy/code/NorseArchitecture/Bifrost
-grep -n "Chamber" CLAUDE.md README.md
+grep -in chamber /home/buvy/code/buvinghausen/buvinghausen/CLAUDE.md
 ```
-Expected: no output, or only incidental matches unrelated to the UI-layer claim (inspect any hit before treating it as clean).
+Confirmed empty (no match, exit 1).
 
 - [ ] **Step 3: Stage and show the diff**
 
