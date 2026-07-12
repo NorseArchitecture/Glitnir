@@ -26,7 +26,7 @@ Platform-wide; not bounded contexts. Namespace (code); codename (lore) maps in `
 | Namespace | Concern | Codename (lore) |
 |---|---|---|
 | `Norse.Identity` | EF persistence for ASP.NET Identity and OpenIddict: entities, conventions, and migrations; sealed server-side, never referenced from WASM or MAUI | Himinbjorg |
-| `Norse.Access` | Auth services on Himinbjorg's identity record: one access ruleset across Blazor Server, WASM, and MAUI, with admin components and the backing gRPC service | Heimdall |
+| `Norse.AuthN` | The authn story on Himinbjorg's identity record: login, register, forgot-password, 2FA setup, recovery, and reset, uniform across Blazor Server, WASM, and MAUI, with the backing gRPC service | Heimdall |
 | `Norse.ReferenceData` | Canonical external-standard reference data — ISO country/currency codes, IANA time zones. `.Data` (entities, view models, TSV seeders, migrations) is one repo; `.Components`/`.Web.Server`/`.Worker` (serving layer) is a second, split for independent release cadence | Mimisbrunnr (data) / Mimir (serving) |
 | `Norse.Observability` | Logs, metrics, traces, alerting, SLO tracking | *(unnamed — no repository yet; name only when real, per `codenames.md` rule #4)* |
 | `Norse.AI` | Model serving, embeddings, RAG over policy/claim docs, decision support | *(unnamed — no repository yet; `Mimir` reassigned to reference data 2026-07-03, see `the-crooked-path.md` #9)* |
@@ -46,7 +46,7 @@ Platform-wide; not bounded contexts. Namespace (code); codename (lore) maps in `
 | **Ratatoskr** | `Norse.NServiceBus.*` | NServiceBus endpoint configuration, saga infrastructure, message conventions, and transport wiring. Asgard declares the messaging surface; Ratatoskr carries it. |
 | **Yggdrasil** | `Norse.Hosting.*` | Hosting chassis: server deployables (`Norse.Hosting.Web.Server`, `Norse.Hosting.Worker`, `Norse.Hosting.Migrations.Service`) and client deployables (`Norse.Hosting.Web.Client`, `Norse.Hosting.App`). `Norse.Hosting.DevServer` deleted 2026-06-05 — superseded by `InteractiveServer` render mode on `Norse.Hosting.Web.Server` (UI Composition spec §7.1). |
 | **Himinbjorg** | `Norse.Identity.*` | EF persistence for ASP.NET Identity and OpenIddict: entities, conventions, and migrations; sealed server-side, never referenced from WASM or MAUI. |
-| **Heimdall** | `Norse.Access.*` | Auth services riding on Himinbjorg: one access ruleset across Blazor Server, WASM, and MAUI, with admin components and the backing gRPC service. |
+| **Heimdall** | `Norse.AuthN.*` | The authn story riding on Himinbjorg: login, register, forgot-password, 2FA setup, recovery, and reset, uniform across Blazor Server, WASM, and MAUI, with the backing gRPC service. |
 | **Mimisbrunnr** | `Norse.ReferenceData.Data` | Entities, view models, TSV seeders (nietras Sep), and migrations for canonical reference data: ISO country/currency codes, IANA time zones. |
 | **Mimir** | `Norse.ReferenceData.Components` / `.Web.Server` / `.Worker` | Serving layer on Mimisbrunnr: Blazor components, gRPC service host, and the background worker that keeps reference data current. Split from Mimisbrunnr for independent release cadence, not a distinct bounded context. |
 | **Naglfar** | `Norse.DesignSystem.*` | Design tokens, radii, and component primitives — standalone for now, no declared consumers. |
