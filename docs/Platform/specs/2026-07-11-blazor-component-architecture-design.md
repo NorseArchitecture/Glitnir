@@ -207,3 +207,47 @@ Naming rationale: `.Components.FluentUI` was deliberately not reused for the Flu
 **Scope:** Deliberately the theming slice only. "Explicitly Still Deferred" separates a permanently closed door (Asgard) from two open ones (dashboard-widget composition, toggle bridging), rather than flattening all three into one "future work" bucket.
 
 **Ambiguity:** Decision 2 states the exact mechanism (shared version, same CI step) rather than "version them somehow." Decision 5 names the exact wiring point (`App.razor`, wrapping `<BlazingStoryApp>`) rather than "wire it into the client."
+
+---
+
+## Addendum 2 (2026-07-13): FluentUI Blazor v5 Post-Mortem — `FluentDesignTheme` Removed Upstream
+
+**This is a post-mortem, not a redesign.** Buvy converted Yggdrasil's consuming components to FluentUI Blazor v5 (RC4) component-by-component ahead of this record; the fix below is the minimum change to make Addendum 1's theming mechanism compile and run again against what shipped. It does not revisit whether Addendum 1's shape is still the right one — that's explicitly deferred below, pending v5 RTM.
+
+### Why This Comes Up Now
+
+FluentUI Blazor v5 removed `FluentDesignTheme` and `FluentDesignSystemProvider` entirely — confirmed directly against `microsoft/fluentui-blazor`'s `dev-v5` branch at the exact commit NuGet built `5.0.0-rc.4-26180.1` from (`a6ec02a5d26b2c64c68180d8a662736b4cb18e4a`). That component was the literal mechanism Addendum 1's Decision 4 named (`<FluentDesignTheme Mode="DesignThemeModes.System" CustomColor="..." NeutralBaseColor="..." StorageName="..." />`). Theming in v5 is JS-interop/CSS-variable-based, not component-based — the platform's chosen mechanism didn't survive the library's own major-version rewrite (a from-scratch rebuild on an orphaned `dev-v5` branch history, not an incremental refactor of v4).
+
+### What Changed
+
+**1. `NorseFluentDesignTheme`'s internals, not its contract.** The component still exists, is still named `NorseFluentDesignTheme`, and every existing call site (`Hosting.Web.Server/Components/App.razor`, `Hosting.Stories.Client/App.razor`) still just drops `<NorseFluentDesignTheme />` — zero consumer-facing change. What changed is what's inside it: no more markup. It injects `IThemeService` (v5's JS-interop-backed theme API, auto-registered by `AddFluentUIComponents()`) and calls `SetThemeAsync(new ThemeSettings(FluentTokenSeed.AccentBaseColor, Mode: ThemeMode.System))` from `OnAfterRenderAsync(firstRender)` — `IThemeService` cannot be called before the circuit has rendered once, so this can't happen in `OnInitialized`/constructor the way the old declarative markup implicitly could.
+
+**2. `<FluentProviders />` is now required, once per host root.** v5 composes `FluentDialogProvider`/`FluentToastProvider`/`FluentTooltipProvider`/`FluentKeyCodeProvider` behind a single new `FluentProviders` component that didn't exist in v4. Neither Yggdrasil host had it wired. Added as a sibling to the closing `</FluentLayout>` in `Hosting.Web.Components/Layout/MainLayout.razor` (matching the placement convention observed directly in `microsoft/fluentui-blazor`'s own reference layouts) and as a sibling to `<NorseFluentDesignTheme />` in `Hosting.Stories.Client/App.razor` (which has no `FluentLayout` shell of its own).
+
+**3. `FluentTokenSeed.NeutralBaseColor` is now orphaned — not deleted, not silently dropped.** v5's `ThemeSettings` record takes a single `Color` and derives the entire ramp (including neutrals) algorithmically; there is no neutral-color input parameter anywhere in the v5 theme API. Naglfar still generates the constant (nothing here asked Naglfar to stop), and nothing in Midgard consumes it anymore. This is a known, named gap — see Explicitly Deferred below — not an oversight.
+
+### Documentation Consequences (required follow-up, done in this change)
+
+| Document | What changed |
+|---|---|
+| `Naglfar/src/DesignSystem.Tokens/README.md` | "Consumed by" line corrected — only `AccentBaseColor` is consumed post-v5; `NeutralBaseColor` is generated but currently unconsumed. |
+| `Glitnir/docs/Naglfar/specs/2026-07-09-style-dictionary-tokens-design.md` | Own addendum added (§11) — its §5 confirmed v4-specific `FluentDesignTheme`/`DesignThemeModes` source facts that no longer hold for v5; addended rather than rewritten, per this platform's practice of recording supersession rather than erasing what was true when written. |
+
+### Explicitly Still Deferred (not decided here)
+
+- **A considered v5 theme integration, once FluentUI Blazor v5 reaches RTM.** This fix is mechanical — swap the guts, keep the contract, get it compiling and running again. It does not evaluate v5's fuller theme API surface (`CreateCustomThemeAsync`/`GetColorRampAsync` for exposing the computed ramp elsewhere, raw CSS-variable overrides as an alternative to the service call, per-element scoped theming via `SetThemeToElementAsync`) for whether Naglfar's token pipeline should feed more of it through — including giving `NeutralBaseColor` a real home again, or deliberately retiring it from Naglfar if v5's ramp generation makes it permanently redundant. RC-era API surface is a poor foundation for that decision; revisit against the RTM release, not another RC. Tracked as a standing project memory so it isn't lost between now and RTM.
+- **Bridging BlazingStory's own manual dark/light toggle to the new `IThemeService`.** Same deferral as Addendum 1, now against a different underlying API — still not designed here.
+
+### Success Criterion (addendum-specific)
+
+- `Infrastructure.Components.Theme.FluentUI`, `Hosting.Web.Server`, and `Hosting.Stories.Client` all build with `0 Warning(s)`, `0 Error(s)` against `Microsoft.FluentUI.AspNetCore.Components 5.0.0-rc.4-26180.1` — verified directly, not assumed.
+- No remaining reference to `FluentDesignTheme`, `FluentDesignSystemProvider`, or `DesignThemeModes` anywhere in Midgard or Yggdrasil source.
+- `<FluentProviders />` present at both Yggdrasil host roots (`Hosting.Web.Components/Layout/MainLayout.razor`, `Hosting.Stories.Client/App.razor`).
+
+### Self-Review (Addendum 2)
+
+**Placeholder scan:** No TBDs. The RTM re-evaluation is named as a deferred decision with a concrete trigger (v5 RTM ships), not left as an open-ended "revisit later."
+
+**Internal consistency:** This addendum amends Addendum 1's Decision 4 code sample only — Addendum 1's Decisions 1–3 and 5 (naming rationale, data flow shape, wiring-once-at-root) are unaffected; the wiring point named in Decision 5 is exactly where `<FluentProviders />` was added, not a new location.
+
+**Scope:** Deliberately a compile-fix post-mortem, not a re-litigation of Addendum 1's mechanism choice. The orphaned `NeutralBaseColor` is named rather than quietly left to rot, and the RTM re-review is queued as the explicit place that question gets answered.

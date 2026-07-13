@@ -236,3 +236,11 @@ Ships in the same change:
 - The Vite/React app and shadcn/ui component registry this package is *built to eventually feed* — not built here. The `css`/`js`/`json` outputs exist so that future work has something to consume, not because that work is starting now.
 - Resolving Midgard's component-library open question (§9).
 - Full enumeration of every component token/state beyond the button reference pattern (§3.7).
+
+---
+
+## 11. Addendum (2026-07-13): §5 Superseded by FluentUI Blazor v5
+
+§5's source-verified claims about `FluentDesignTheme` — the `DesignThemeModes` enum, `CustomColor`/`NeutralBaseColor` as first-class Razor parameters, `baseLayerLuminance` — were correct when written, against FluentUI Blazor v4. FluentUI Blazor v5 (RC4) removed `FluentDesignTheme` and `FluentDesignSystemProvider` entirely; theming moved to a JS-interop `IThemeService` plus raw CSS custom properties. Full account of what broke and what replaced it: `../Platform/specs/2026-07-11-blazor-component-architecture-design.md`, Addendum 2.
+
+This section is left in place rather than rewritten — it was an accurate record of v4's actual API surface, verified directly from source at the time. `FluentTokenSeed` itself (§4's `csharp` platform, the two constants) is unaffected by this — Naglfar still generates the same two seed colors from the same primitives; only how the *consumer* (Midgard) uses `AccentBaseColor`, and whether anything still uses `NeutralBaseColor` at all, changed. See the referenced addendum for the current state.
