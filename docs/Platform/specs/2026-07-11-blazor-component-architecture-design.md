@@ -142,3 +142,68 @@ This spec converges the **shape**, not the behavior. It is realized when:
 **Scope:** Deliberately shape-only, not behavior. §3 and §7 both make this explicit: Heimdall and Mimir still owe their own converged specs before any code gets written, consistent with their existing CLAUDE.md gates. This document does not attempt to pre-empt those.
 
 **Ambiguity:** The Heimdall rename's blast radius is spelled out as four specific documents with line numbers (§4), not left as "update the docs." The Blazorise escape hatch (§1.1) states exactly what would be added later (a sibling `.Components.Blazorise` project) rather than leaving "swap it out later" vague. Asgard's headless-vs-plugin-interface split within `Abstractions.Components` states exactly which is flat and which is nested (§2.1), and why, rather than leaving the internal folder structure to be improvised at implementation time.
+
+---
+
+## Addendum (2026-07-12): Theme Selection Machinery — `Infrastructure.Components.Theme(.FluentUI)`
+
+**This section amends §1.2's definition of `.Components`, and resolves half of §2.1's deferred forward-pointer to Midgard's "UI composition" charter — specifically, app-wide theme bootstrapping. The other half (the mechanism that composes N registered dashboard widgets into a rendered, user-arranged layout) remains exactly as deferred in §2.1: not designed here.** Everything else in this spec — §1.1 (FluentUI direct, no Blazorise), §1.4 (the `AuthN` rename), Asgard's headless-and-no-`.FluentUI`-sibling exception (§2.1) — stands unchanged.
+
+### Why This Comes Up Now
+
+A dark-theme contrast bug in Asgard's headless `Loader` (its ring uses `currentColor`, deliberately) traced back to a real gap: nothing in the platform sets an ambient theme-aware `color` anywhere, in any host, for any component — headless or FluentUI-skinned. Chasing that surfaced a second, unrelated gap: Naglfar's Style Dictionary pipeline already generates a C# seed (`FluentTokenSeed`, `AccentBaseColor`/`NeutralBaseColor`) explicitly meant to feed FluentUI Blazor's `DesignTokens` (per Naglfar's own README), but nothing anywhere references it — no `.csproj` packs it, no project consumes it. Both gaps have the same root cause: no realm has ever owned "bootstrap the theme once, at the app root." This addendum names that owner.
+
+### Decisions
+
+**1. Amendment to §1.2 — `.Components` may hold headless markup, not just contracts.** §1.2 originally defined `{RootWord}.Components` as strictly the gRPC contract (service interface, DTOs, validators) with all rendering confined to the paired `.FluentUI` project. That's amended: `.Components` may also contain headless, zero-third-party-library Razor markup — the same kind of thing Asgard's `Abstractions.Components` already is. The dividing line is not "does this project render," it's "does this markup reference a specific component library" (FluentUI, Blazorise, MudBlazor, whichever). Only markup that does gets a sibling project named for that library (`.Components.FluentUI` today; `.Components.Blazorise` or `.Components.MudBlazor` if the platform ever adds them, per the escape hatch already named in §1.1). This applies to Heimdall's `AuthN.Components` and Mimir's `ReferenceData.Components` once they exist. Asgard's exception in §2.1 is unaffected — it already followed this shape; the amendment is bringing the other realms' `.Components` definition in line with it, not changing Asgard.
+
+**2. Naglfar packs `FluentTokenSeed` as a NuGet package too — same version as the npm package, same release.** A new, fully generated `.csproj` in Naglfar's `dist/csharp/` output wraps the existing `FluentTokenSeed.g.cs` and packs it as `Norse.DesignSystem.Tokens`. It ships in the same Style Dictionary build/publish step as `@norsearchitecture/design-tokens`, under the same version number — both are 1:1 derivations of the same `tokens/*.json` source and only ever change together, unlike the Naglfar/Bragi split (different repos, different toolchains, different cadences — tokens rev far less often than story content, the reverse of why that split happened). This narrows, rather than breaks, "Naglfar is npm-only, no .NET": the boundary was always about not hand-authoring C# in this repo, and a 100%-generated `.csproj` packing 100%-generated source doesn't cross it. See Documentation Consequences below — every place that currently states Naglfar ships zero .NET needs this caveat.
+
+**3. Naglfar's CSS token output switches from `[data-theme="dark"]` to `@media (prefers-color-scheme: dark)`.** The `css/theme-variables` Style Dictionary format (`style-dictionary.config.js`) currently gates dark values behind a `[data-theme="dark"]` attribute selector — but nothing in the platform has ever set that attribute (zero references, confirmed by search). It's dead weight, and it's the wrong mechanism for the actual requirement: flip the OS/browser color-scheme preference, reload, and have every host — `Hosting.Stories.Server` and `Hosting.Web.Server` alike — follow it, with no manual toggle anywhere yet. The format changes to emit dark overrides under `@media (prefers-color-scheme: dark)` instead. This doesn't foreclose a future manual toggle: a `[data-theme]` attribute override can coexist with the media query later (media query as the default, attribute as an explicit override) without touching this decision.
+
+**4. Midgard gains `Infrastructure.Components.Theme` and `Infrastructure.Components.Theme.FluentUI` — the first concrete slice of its "UI composition" charter.**
+
+- **`Infrastructure.Components.Theme`** — no third-party UI-library dependency. Ships Naglfar's plain semantic CSS custom properties (text/background/border, from `color.semantic.*` in `tokens/color.json`) as a static asset, switched purely by the media query from Decision 3. This is what every headless component — Asgard's `Loader`, and any headless markup living in Heimdall's/Mimir's `.Components` per Decision 1 — implicitly depends on via `currentColor`, without ever referencing this project directly or knowing it exists.
+- **`Infrastructure.Components.Theme.FluentUI`** — references `Infrastructure.Components.Theme` and the new `Norse.DesignSystem.Tokens` package (Decision 2). Wraps `builder.Services.AddFluentUIComponents()` behind `AddNorseFluentUiTheme()`, and provides `<NorseFluentDesignTheme>`, a thin wrapper around `<FluentDesignTheme Mode="DesignThemeModes.System" CustomColor="@FluentTokenSeed.AccentBaseColor" NeutralBaseColor="@FluentTokenSeed.NeutralBaseColor" StorageName="norse-fluent-theme" />`. `Mode="System"` means FluentUI's own light/dark ramp already follows OS preference with zero JS bridging required — consistent with Decision 3's media-query approach on the plain-CSS side.
+
+Naming rationale: `.Components.FluentUI` was deliberately not reused for the FluentUI-bootstrapping project — that suffix (per Decision 1) means "renders domain markup using this library," and theme bootstrapping is a different kind of thing wearing similar clothes. `Theme` / `Theme.FluentUI` mirrors the existing `.Components` / `.Components.FluentUI` split at one layer up: a base project any consumer can use standalone, and a library-specific sibling that opts in.
+
+**5. Both Yggdrasil hosts wire it once, at their root.** `Hosting.Stories.Client` and `Hosting.Web.Client` each take a `PackageReference` on `Infrastructure.Components.Theme.FluentUI`, call `AddNorseFluentUiTheme()` in `Program.cs`, and wrap their root component's content in `<NorseFluentDesignTheme>`. For `Hosting.Stories.Client` specifically, this is `App.razor` wrapping `<BlazingStoryApp>` — the single root both `index.html` and `iframe.html` bootstrap, so one wiring point covers both documents.
+
+### Data Flow
+
+`tokens/*.json` → Style Dictionary → (`@norsearchitecture/design-tokens` npm + `Norse.DesignSystem.Tokens` NuGet, one shared version) → `Infrastructure.Components.Theme` ships the plain CSS half (media-query-driven) → `Infrastructure.Components.Theme.FluentUI` reads `FluentTokenSeed` and bootstraps `<FluentDesignTheme Mode="System">` → FluentUI computes its full light/dark ramp client-side and sets ambient `color` on the page → headless components' `currentColor` resolves correctly in both themes, whether or not FluentUI is even present (the plain-CSS half works standalone).
+
+### Explicitly Still Deferred (not decided here)
+
+- **The dashboard-widget composition/layout mechanism** — the other half of §2.1's original forward-pointer. Still Midgard's, still not designed.
+- **Bridging BlazingStory's own manual dark/light toggle to `FluentDesignTheme`'s `Mode`.** Shipping `Mode="System"` only, per Buvy's explicit call this session (fewer moving parts; OS-level toggle is sufficient for now). Not rejected — queued as the next increment once System-mode is proven, not a closed door.
+- **`Abstractions.Components.FluentUI` in Asgard.** Unlike the above two, this one *is* a closed door, restated explicitly this session: Asgard stays pure BCL Razor over standard HTML, permanently, regardless of what Midgard or Yggdrasil do with FluentUI.
+
+### Documentation Consequences (required follow-up)
+
+| Document | What changes |
+|---|---|
+| `Bifrost/CLAUDE.md` (§2 naming table, Naglfar row) | "**npm-only, no .NET**" needs the Decision 2 caveat — one fully generated `.csproj` packing fully generated C#, nothing hand-authored. |
+| `Naglfar/README.md` | "**Naglfar is now JS-only.**" needs the same caveat. |
+| `Bragi/CLAUDE.md` | "Naglfar keeps the npm/Style Dictionary token pipeline only — no .NET at all" needs the same caveat — this line predates this addendum by hours, from the same day's Bragi split. |
+| `Midgard/CLAUDE.md` §1 | Currently: "the mediator runtime, UI composition — is still a bare shell; no other specs have converged here yet." Update once `Infrastructure.Components.Theme`/`.Theme.FluentUI` land — this addendum is the converged spec for the theming slice specifically; the rest of "UI composition" (dashboard-widget composition) remains unconverged. |
+| `Yggdrasil/CLAUDE.md` §1 | Add `Infrastructure.Components.Theme.FluentUI` as a dependency once `Hosting.Stories.Client`/`Hosting.Web.Client` reference it. |
+
+### Success Criterion (addendum-specific)
+
+- `Norse.DesignSystem.Tokens` exists as a NuGet package, versioned identically to `@norsearchitecture/design-tokens`, publishing from the same Naglfar CI step.
+- Naglfar's `css/theme-variables` format emits dark overrides under `@media (prefers-color-scheme: dark)`; `[data-theme="dark"]` is no longer the only mechanism (or is removed entirely if no override hook is needed yet — an implementation-time call, not a spec-time one).
+- `Infrastructure.Components.Theme` has zero `PackageReference` to any third-party component library. `Infrastructure.Components.Theme.FluentUI` is the only project in Midgard that does.
+- Flipping the OS/browser color-scheme preference and reloading changes the rendered theme in both `Hosting.Stories.Server` and `Hosting.Web.Server`, with no manual toggle involved anywhere in the platform yet.
+- Asgard's `Loader.razor` and `Loader.razor.css` are byte-for-byte unchanged by this work.
+
+### Self-Review (addendum)
+
+**Placeholder scan:** No TBDs. The `[data-theme]` removal-vs-retain question is explicitly flagged as implementation-time, not left ambiguous as a spec gap.
+
+**Internal consistency:** Decision 1's amendment to §1.2 is stated as an amendment, not a silent contradiction — it explains exactly what changes (the dividing line moves from "does it render" to "does it reference a specific library") and confirms Asgard's existing exception is unaffected. Decision 4's naming rationale explicitly addresses why `.Components.FluentUI` wasn't reused, preventing the two different `.FluentUI`-suffixed concerns (domain rendering vs. theme bootstrapping) from being conflated.
+
+**Scope:** Deliberately the theming slice only. "Explicitly Still Deferred" separates a permanently closed door (Asgard) from two open ones (dashboard-widget composition, toggle bridging), rather than flattening all three into one "future work" bucket.
+
+**Ambiguity:** Decision 2 states the exact mechanism (shared version, same CI step) rather than "version them somehow." Decision 5 names the exact wiring point (`App.razor`, wrapping `<BlazingStoryApp>`) rather than "wire it into the client."
