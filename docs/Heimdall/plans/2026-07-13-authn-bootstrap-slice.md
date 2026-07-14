@@ -4,7 +4,7 @@
 
 **Goal:** Prove the whole pipe — gRPC contract, Mediator handler pattern, real Himinbjörg persistence, gRPC client wiring in both Blazor Server and WASM, and Razor UI — end to end, using only the three issuance operations (`Login`, `Register`, `Logout`). Nothing else is in scope; the full `IAccountService` lifecycle surface is deliberately deferred to a follow-on plan once this pipe is proven.
 
-**Architecture:** Six realms, in strict dependency order. Asgard gets a minimal hand-written mediator core (`Outcome`/`Outcome<T>`, `ICommandRequest<T>`, `IRequestHandler<T,T>`) — no source generator yet, that's future work once this pattern proves out. Heimdall's `AuthN.Components` declares `IAuthenticationService` as a protobuf-net.Grpc code-first contract (per the platform-wide reinstatement, `Platform/specs/2026-07-13-protobuf-net-grpc-reinstated-design.md`). Himinbjörg's new `Identity.Web.Server` implements it as a thin forwarder over three `IRequestHandler<,>` implementations that call directly into `UserManager<NorseUser>`/`SignInManager<NorseUser>`. Yggdrasil wires the server side (gRPC hosting + the real `norse_identity` `DbContext`, for the first time) and the client side (a protobuf-net.Grpc client proxy over gRPC-Web, for the first time). Bifrost's AppHost gets `Hosting.Web.Server` wired into the Aspire composition for the first time, referencing the already-provisioned `norse-identity` Postgres database. Heimdall's `AuthN.Components.FluentUI` supplies the three Razor components (FluentUI Blazor v5), rendered `@rendermode InteractiveAuto` so both the Blazor Server and WASM paths are genuinely exercised.
+**Architecture:** Seven realms, in strict dependency order. Asgard gets a minimal hand-written mediator core (`Outcome`/`Outcome<T>`, `ICommandRequest<T>`, `IRequestHandler<T,T>`) — no source generator yet, that's future work once this pattern proves out. Heimdall's `AuthN.Components` declares `IAuthenticationService` as a protobuf-net.Grpc code-first contract (per the platform-wide reinstatement, `Platform/specs/2026-07-13-protobuf-net-grpc-reinstated-design.md`). Himinbjörg's new `Identity.Web.Server` implements it as a thin forwarder over three `IRequestHandler<,>` implementations that call directly into `UserManager<NorseUser>`/`SignInManager<NorseUser>`. Yggdrasil wires the server side (gRPC hosting + the real `norse_identity` `DbContext`, for the first time) and the client side (a protobuf-net.Grpc client proxy over gRPC-Web, for the first time). Bifrost's AppHost gets `Hosting.Web.Server` wired into the Aspire composition for the first time, referencing the already-provisioned `norse-identity` Postgres database. Heimdall's `AuthN.Components.FluentUI` supplies the three Razor components (FluentUI Blazor v5), rendered `@rendermode InteractiveAuto` so both the Blazor Server and WASM paths are genuinely exercised. Bragi picks up a matching story for each of those three components, per the platform-wide rule that every Razor component drop gets a paired Bragi story in the same slice (`[[feedback_every-component-needs-a-bragi-story]]`).
 
 **Tech Stack:** .NET 11, C#, protobuf-net.Grpc + protobuf-net.Grpc.AspNetCore (code-first, per the platform reinstatement), Grpc.Net.Client.Web (gRPC-Web transport), ASP.NET Core Identity v3 (`UserManager<NorseUser>`/`SignInManager<NorseUser>`), Npgsql.EntityFrameworkCore.PostgreSQL, FluentValidation, FluentUI Blazor v5 (RC4), Blazored.FluentValidation, xUnit v3 + Shouldly + NSubstitute, .NET Aspire 13.x
 
@@ -23,6 +23,7 @@
 - `[ServiceContract]`/`[OperationContract]` come from the `protobuf-net.Grpc` package (brings in `System.ServiceModel.Primitives` transitively).
 - Every `[OperationContract]` method has a matching `IRequestHandler<TRequest, TResponse>` — no business logic in the gRPC service class itself, per `Heimdall/specs/2026-07-13-authn-identity-split-design.md` §0/§3.
 - `LoginRequest`/`RegisterRequest` deliberately use mutable (`get; set;`) `[DataMember]` properties, not `init` — they are direct `EditForm` binding targets in Task 6, and introducing a parallel mutable form-model type purely to preserve `init`-only wire records would duplicate the validator for no benefit at this scale. Every other record in this plan (`LoginResponse`, `RegisterResponse`, `LogoutRequest`, `Outcome`, `Outcome<T>`, `Problem`) stays `init`-only as usual.
+- **Every Razor component this plan ships gets a matching Bragi story in the same slice** — a platform-wide rule as of 2026-07-13 (`[[feedback_every-component-needs-a-bragi-story]]`), not specific to AuthN. Two decisions travel together whenever a `.razor` file is created anywhere on the platform: (1) headless-vs-skinned first, per `Platform/specs/2026-07-11-blazor-component-architecture-design.md` Decision 1 — does the markup reference a specific design-system package, or does it stay in `.Components` unstyled; (2) regardless of that answer, a `.stories.razor` catalog page lands in Bragi (`Norse.DesignSystem.Stories`) content-only, no exceptions. See Task 8 below, added specifically to apply this to `Login.razor`/`Register.razor`/`Logout.razor`. Bragi ships no runtime of its own — the story *content* lives there; the app that renders it (`Hosting.Stories.Client`/`Hosting.Stories.Server`) is Yggdrasil's.
 
 ---
 
@@ -90,11 +91,21 @@
 | Modify | `Yggdrasil/src/Hosting.Web.Client/Hosting.Web.Client.csproj` |
 | Modify | `Yggdrasil/src/Hosting.Web.Client/Program.cs` |
 | Create | `Yggdrasil/src/Hosting.Web.Client/BrowserCredentialsHandler.cs` |
+| Create | `Yggdrasil/src/Hosting.Stories.Client/FakeAuthenticationService.cs` |
+| Modify | `Yggdrasil/src/Hosting.Stories.Client/Program.cs` |
 
 ### Bifrost
 | Action | Path |
 |---|---|
 | Modify | `src/Orchestration.AppHost/AppHost.cs` |
+
+### Bragi
+| Action | Path |
+|---|---|
+| Modify | `Bragi/src/DesignSystem.Stories/DesignSystem.Stories.csproj` |
+| Create | `Bragi/src/DesignSystem.Stories/Authentication/Login.stories.razor` |
+| Create | `Bragi/src/DesignSystem.Stories/Authentication/Register.stories.razor` |
+| Create | `Bragi/src/DesignSystem.Stories/Authentication/Logout.stories.razor` |
 
 ---
 
@@ -1158,7 +1169,7 @@ public sealed class LogoutHandler(SignInManager<NorseUser> signInManager)
 Run: `dotnet test Himinbjorg/tests/Identity.Web.Server.Tests/Identity.Web.Server.Tests.csproj`
 Expected: PASS — 8 tests green.
 
-- [ ] **Step 7: Implement the gRPC forwarder (no new test — pure delegation, covered by the handler tests above plus Task 7's end-to-end check)**
+- [ ] **Step 7: Implement the gRPC forwarder (no new test — pure delegation, covered by the handler tests above plus Task 9's end-to-end check)**
 
 `Himinbjorg/src/Identity.Web.Server/AuthenticationService.cs`:
 ```csharp
@@ -1342,7 +1353,7 @@ if (app.Environment.IsDevelopment())
 - [ ] **Step 3: Manually verify the project still builds**
 
 Run: `dotnet build Yggdrasil/src/Hosting.Web.Server/Hosting.Web.Server.csproj`
-Expected: builds clean (0 errors) — there is no automated test for Program.cs wiring; Task 8's end-to-end check (extended below) is the real verification.
+Expected: builds clean (0 errors) — there is no automated test for Program.cs wiring; Task 9's end-to-end check (extended below) is the real verification.
 
 - [ ] **Step 4: Commit**
 
@@ -1431,7 +1442,7 @@ builder.Services.AddSingleton(authNChannel.CreateGrpcService<IAuthenticationServ
 - [ ] **Step 4: Manually verify the project still builds**
 
 Run: `dotnet build Yggdrasil/src/Hosting.Web.Client/Hosting.Web.Client.csproj`
-Expected: builds clean (0 errors). The actual cookie round-trip through the browser can only be confirmed by running the app (Task 7).
+Expected: builds clean (0 errors). The actual cookie round-trip through the browser can only be confirmed by running the app (Task 9).
 
 - [ ] **Step 5: Commit**
 
@@ -1502,7 +1513,7 @@ git commit -m "feat: wire Hosting.Web.Server into the Aspire composition against
 **Interfaces:**
 - Consumes: `IAuthenticationService`, `LoginRequest`, `LoginResponse`, `LoginStatus`, `RegisterRequest`, `LogoutRequest` (Task 2); `ErrorCategory` (Task 1).
 
-No new automated tests in this task — Razor component behavior is verified by the manual end-to-end check in Task 8; this task is TDD-exempt only in the narrow sense that bUnit component tests are deferred to the `IAccountService` follow-on plan once the pattern's proven here, consistent with keeping this bootstrap slim.
+No new automated tests in this task — Razor component behavior is verified by the manual end-to-end check in Task 9; this task is TDD-exempt only in the narrow sense that bUnit component tests are deferred to the `IAccountService` follow-on plan once the pattern's proven here, consistent with keeping this bootstrap slim.
 
 - [ ] **Step 1: Create the project file**
 
@@ -1697,9 +1708,104 @@ git commit -m "chore: wire Heimdall's AuthN.Components.FluentUI into Bifrost.sln
 2. Merge the PR; push a version tag; confirm `Norse.AuthN.Components.FluentUI` is live on the NuGet feed.
 3. Push the Bifrost commit.
 
+Task 8 needs the published `Norse.AuthN.Components.FluentUI` package — that's why it waits for this gate rather than running alongside Task 7.
+
 ---
 
-## Task 8: End-to-end manual verification
+## Task 8: Bragi — stories for `Login`/`Register`/`Logout`
+
+**Files:**
+- Modify: `Bragi/src/DesignSystem.Stories/DesignSystem.Stories.csproj`
+- Create: `Bragi/src/DesignSystem.Stories/Authentication/Login.stories.razor`
+- Create: `Bragi/src/DesignSystem.Stories/Authentication/Register.stories.razor`
+- Create: `Bragi/src/DesignSystem.Stories/Authentication/Logout.stories.razor`
+
+**Interfaces:**
+- Consumes: `Login`, `Register`, `Logout` (Task 7, `Norse.AuthN.Components.FluentUI`, now published per the ship gate above).
+
+This is content, not behavior — Bragi is exempt from the brainstorm→spec→plan→TDD cycle (`Bragi/CLAUDE.md` §1), so there's no failing-test step here. Bragi is its own composition layer purely for Razor components that render with **no server context** — no real backend call, no `HttpContext`, nothing but the component and its inputs. Story files live directly under `DesignSystem.Stories/`, one subfolder per realm-category matching each story's `[Stories("Category/Name")]` attribute — no intermediate `Stories/` folder, that would just be redundant with the project's own name. As of this plan, that convention is: Asgard's headless primitives (`Abstractions.Components`) live under `DesignSystem.Stories/Primitives/` — the existing `Loader.stories.razor` moved there (from a flat `DesignSystem.Stories/Stories/` layout that predates this convention) as part of adopting it — and Heimdall's `AuthN.Components.FluentUI` components live under `DesignSystem.Stories/Authentication/` (the folder name is the domain word, not the realm/namespace abbreviation — "Authentication," not "AuthN"). Every future realm's stories get their own subfolder the same way; there is no ship gate for this task — nothing later in this plan consumes `Norse.DesignSystem.Stories` — but it still goes through the normal PR/merge Buvy runs by hand, same as any other repo change.
+
+**`Login`/`Register` inject `IAuthenticationService`, which normally calls the real gRPC backend — that's a server context, and Bragi's stories don't get one.** Decided this session: the story host mocks the service client-side rather than excluding these components from the catalog or splitting them into presentational sub-components. `Yggdrasil/src/Hosting.Stories.Client` (the DI composition root — Bragi itself stays markup/story-wiring only, per its charter) registers a `FakeAuthenticationService` returning canned `Outcome`/`Outcome<T>` results, so `Login.razor`/`Register.razor`/`Logout.razor` render and are genuinely interactive in the catalog without ever reaching Himinbjörg.
+
+- [ ] **Step 1: Add the `NorseRef` to `AuthN.Components.FluentUI`**
+
+`Bragi/src/DesignSystem.Stories/DesignSystem.Stories.csproj` — add alongside the existing `NorseRef` to Asgard's `Abstractions.Components`:
+```xml
+<NorseRef Include="AuthN.Components.FluentUI">
+	<Repo>Heimdall</Repo>
+</NorseRef>
+```
+
+- [ ] **Step 2: Yggdrasil — add `FakeAuthenticationService` to the story host**
+
+`Yggdrasil/src/Hosting.Stories.Client/FakeAuthenticationService.cs`:
+```csharp
+using Norse.Abstractions.Mediator;
+using Norse.AuthN.Components;
+using ProtoBuf.Grpc;
+
+namespace Norse.Hosting.Stories.Client;
+
+/// <summary>
+/// Story-host-only stand-in for <see cref="IAuthenticationService"/> — never calls Himinbjörg. Exists
+/// so Bragi's Login/Register/Logout stories render and are interactive with no server context, per
+/// Bragi's charter (content/markup only, no real backend calls from the catalog).
+/// </summary>
+sealed class FakeAuthenticationService : IAuthenticationService
+{
+	public Task<Outcome<LoginResponse>> Login(LoginRequest request, CallContext context = default) =>
+		Task.FromResult(Outcome<LoginResponse>.Ok(new LoginResponse { Status = LoginStatus.Succeeded }));
+
+	public Task<Outcome<RegisterResponse>> Register(RegisterRequest request, CallContext context = default) =>
+		Task.FromResult(Outcome<RegisterResponse>.Ok(new RegisterResponse { UserId = Guid.NewGuid() }));
+
+	public Task<Outcome> Logout(LogoutRequest request, CallContext context = default) =>
+		Task.FromResult(Outcome.Ok());
+}
+```
+
+In `Yggdrasil/src/Hosting.Stories.Client/Program.cs`, register it ahead of `BlazingStoryApp`'s own service registration:
+```csharp
+builder.Services.AddScoped<IAuthenticationService, FakeAuthenticationService>();
+```
+
+- [ ] **Step 3: Write the stories**
+
+`Bragi/src/DesignSystem.Stories/Authentication/Login.stories.razor`:
+```razor
+@using Norse.AuthN.Components
+
+@attribute [Stories("Authentication/Login")]
+
+<Stories TComponent="Login">
+	<Story Name="Default">
+		<Template>
+			<Login @attributes="context.Args" />
+		</Template>
+	</Story>
+</Stories>
+```
+
+`Bragi/src/DesignSystem.Stories/Authentication/Register.stories.razor` and `Logout.stories.razor` follow the same shape, `@attribute [Stories("Authentication/Register")]` / `[Stories("Authentication/Logout")]` respectively.
+
+- [ ] **Step 3: Manually verify the story host builds and renders**
+
+Run: `dotnet build Bragi/src/DesignSystem.Stories/DesignSystem.Stories.csproj`
+Expected: builds clean (0 errors).
+
+Run: `dotnet run --project Yggdrasil/src/Hosting.Stories.Client` (or via the Aspire AppHost once `Hosting.Stories.Client` is composed there), open the catalog. Expected: `Authentication/Login`, `Authentication/Register`, `Authentication/Logout` all appear (alongside `Primitives/Loader`) and render without a DI fault.
+
+- [ ] **Step 4: Commit**
+
+```bash
+cd Bragi
+git add src/DesignSystem.Stories/DesignSystem.Stories.csproj src/DesignSystem.Stories/Authentication
+git commit -m "feat: add Login/Register/Logout stories for Heimdall's AuthN.Components.FluentUI"
+```
+
+---
+
+## Task 9: End-to-end manual verification
 
 **Files:** none — this task runs the composed system and exercises it by hand. No shortcuts: this is the step that actually proves the bootstrap, not a formality.
 
