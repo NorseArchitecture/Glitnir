@@ -377,17 +377,21 @@ git commit -m "chore: wire Asgard's Abstractions.Mediator into Bifrost.slnx"
 
 ## SHIP GATE — Asgard
 
-**STOP. Do not start Task 2 until this gate is cleared.**
+**CLEARED 2026-07-14.** `Norse.Abstractions.Web.Server` v0.0.4 live on GitHub Packages (https://github.com/NorseArchitecture/Asgard/releases/tag/v0.0.4, PR #25) — the mediator vocabulary shipped inside the existing `Abstractions.Web.Server` project, not a standalone `Norse.Abstractions.Mediator` package (that project was deleted mid-session; see `Glitnir/docs/Heimdall/specs/2026-07-13-authn-identity-split-design.md` §9.1 for why).
 
-1. Push the Asgard commit; open a PR against `master`; confirm CI is green.
-2. Merge the PR; push a version tag; confirm `Norse.Abstractions.Mediator` is live on the NuGet feed.
-3. Push the Bifrost commit (submodule pointer + `Bifrost.slnx` update).
+**A second Asgard ship gate is required before Task 2 can compile — not yet done.** Per the spec addendum §9.1/§9.4/§9.5, this bootstrap discovered `Abstractions.Web.Server` needs a v0.0.5:
 
-Only after the package is live does Task 2 begin.
+1. Drop `IRequestHandler<TRequest,TResponse>`'s `where TRequest : ICommandRequest<TResponse>` constraint (keeping it would force `AuthN.Components`'s wire DTOs to reference this server-only project — see spec §9.1 for the full reasoning). `ICommandRequest<T>` itself stays, unused, for later.
+2. Add `Abstractions.Web.Server/Mediator/BoolResponse.cs` (spec §9.4).
+3. Add `Abstractions.Web.Server/Mediator/MediatorFailureException.cs` and an `OutcomeExtensions.ThrowIfFailed()` pair (spec §9.5).
+
+**STOP. Do not start Task 2 until this second gate clears** — push, PR, CI green, merge, tag, confirm `Norse.Abstractions.Web.Server` v0.0.5 live on NuGet, same as the first gate.
 
 ---
 
 ## Task 2: Heimdall — `AuthN.Components` (the contract)
+
+**Supersedes the code below — see spec addendum `Glitnir/docs/Heimdall/specs/2026-07-13-authn-identity-split-design.md` §9.2/§9.3/§9.6 for the actual shapes to build.** The interfaces/steps as originally written here (`IAuthenticationService` returning `Outcome<LoginResponse>`, `LoginRequest : ICommandRequest<T>`, a `protobuf-net.Grpc` package reference) reflect the pre-addendum design and are wrong in three ways the addendum corrects: no `Outcome<T>` on the wire, no `CallContext` parameter (drop the `protobuf-net.Grpc` `PackageReference`, keep only `System.ServiceModel.Primitives` + `FluentValidation`), and two new types (`LoginResult`, `ProblemException`) the original brief doesn't mention. Read the spec addendum in full before implementing this task — do not transcribe the code sample below as-is.
 
 **Files:**
 - Create: `Heimdall/Heimdall.slnx`
@@ -793,6 +797,8 @@ git commit -m "chore: wire Heimdall's AuthN.Components into Bifrost.slnx"
 ---
 
 ## Task 3: Himinbjörg — `Identity.Web.Server`
+
+**Supersedes the code below — see spec addendum §9.4/§9.5.** Handlers return `Outcome<BoolResponse>`, not `Outcome<LoginResponse>`/`Outcome<RegisterResponse>` (those response types retire). `RegisterHandler`'s `IdentityResult` → `ErrorCategory` mapping is corrected (only genuine duplicates are `Conflict`; password-policy failures are `Validation`). `AuthenticationService`'s forwarder methods no longer branch on failure at all — they call `.ThrowIfFailed()` and let a new gRPC interceptor (built in Task 4, registered in Yggdrasil's hosting, not in this project) handle the failure path entirely. Read the spec addendum in full before implementing.
 
 **Files:**
 - Create: `Himinbjorg/src/Identity.Web.Server/Identity.Web.Server.csproj`
@@ -1287,6 +1293,8 @@ git commit -m "chore: bump Himinbjorg submodule pointer"
 
 ## Task 4: Yggdrasil — `Hosting.Web.Server` (host the gRPC service)
 
+**Adds two things beyond the code below — see spec addendum §9.5/§9.6/§9.7, not optional:** (1) a `Grpc.Core.Interceptors.Interceptor` that catches `MediatorFailureException` and translates it to `RpcException` + a `problem-bin` trailer, registered once at gRPC hosting setup — auth-agnostic, reusable for any future gRPC-backed mediator handler; (2) a small `IAuthenticationService` decorator for Blazor Server's own in-process Razor components (which never touch gRPC or the interceptor at all, per §2's transport matrix), catching `MediatorFailureException` directly and re-throwing `ProblemException`. Read the spec addendum in full before implementing.
+
 **Files:**
 - Modify: `Yggdrasil/src/Hosting.Web.Server/Hosting.Web.Server.csproj`
 - Modify: `Yggdrasil/src/Hosting.Web.Server/Program.cs`
@@ -1366,6 +1374,8 @@ git commit -m "feat: host Norse.Identity.Web.Server's gRPC endpoints (with dev-o
 ---
 
 ## Task 5: Yggdrasil — `Hosting.Web.Client` (gRPC-Web client wiring)
+
+**Adds one thing beyond the code below — see spec addendum §9.6, not optional:** an `IAuthenticationService` decorator wrapping the real gRPC-Web client proxy, catching `RpcException`, decoding its `problem-bin` trailer back into `ErrorCategory` + field errors, and re-throwing `ProblemException` — the same type Task 4's Blazor Server decorator throws, so `AuthN.Components.FluentUI`'s Razor components (Task 7) have exactly one failure type to catch regardless of host. Read the spec addendum in full before implementing.
 
 **Files:**
 - Modify: `Yggdrasil/src/Hosting.Web.Client/Hosting.Web.Client.csproj`
@@ -1501,6 +1511,8 @@ git commit -m "feat: wire Hosting.Web.Server into the Aspire composition against
 ---
 
 ## Task 7: Heimdall — `AuthN.Components.FluentUI` (the Razor components)
+
+**Supersedes the code below — see spec addendum §9.6.** `Login.razor`/`Register.razor` catch `ProblemException` (one type, regardless of which host is rendering them), not `Outcome<T>`/`ErrorCategory` checks on a returned value — the component never sees `Outcome<T>` at all, that's boxed below it. `Login.razor` awaits `Task<LoginResult>` and reads `.Succeeded`; `Register.razor`/`Logout.razor` just await `Task` — success is silence. Read the spec addendum in full before implementing.
 
 **Files:**
 - Create: `Heimdall/src/AuthN.Components.FluentUI/AuthN.Components.FluentUI.csproj`
