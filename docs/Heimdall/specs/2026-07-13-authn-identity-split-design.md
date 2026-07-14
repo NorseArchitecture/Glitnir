@@ -368,9 +368,160 @@ public static class RpcExceptionExtensions
 | Asgard | `Abstractions.Web.Server/Mediator/BoolResponse.cs` | v0.0.5 follow-up, alongside the `ICommandRequest<T>` constraint fix (§9.1) |
 | Midgard *(new realm for this plan)* | `Infrastructure.Web.Server/Mediator/Grpc/` — `OutcomeFailedException`, `OutcomeExtensions`, `OutcomeServerInterceptor`, `ProblemExtensions` | §9.5 — new task, sequenced before Himinbjörg's handlers |
 | Midgard | `Infrastructure.Web.Client/Grpc/` — `RpcExceptionExtensions` | §9.6 — WASM-friendly sibling, new task, sequenced before Yggdrasil's `Hosting.Web.Client` |
-| Heimdall | `AuthN.Components/LoginResult.cs`, `AuthenticationResult.cs` | wire type + client-safe result, §9.2/§9.6 |
+| Heimdall | `AuthN.Components/LoginResult.cs`, `AuthenticationResult.cs`, `IAuthenticationGateway.cs` | wire type + client-safe result + gateway interface, §9.2/§9.6/§9.8 |
 | Himinbjörg | `AuthenticationService` forwarder — one line per method, `ThrowIfFailed()` | §9.5 |
-| Yggdrasil `Hosting.Web.Server` | Blazor-Server-facing gateway using Midgard's `Infrastructure.Web.Server` transform | Task 4, §9.6 |
-| Yggdrasil `Hosting.Web.Client` | WASM-facing gateway using Midgard's `Infrastructure.Web.Client` interceptor | Task 5, §9.6 |
+| Yggdrasil `Hosting.Web.Server` | `BlazorServerAuthenticationGateway` — calls handlers directly, maps `Outcome<T>` to `AuthenticationResult` inline, no Midgard involvement | Task 5, §9.8 |
+| Yggdrasil `Hosting.Web.Client` | `WasmAuthenticationGateway` — wraps the real gRPC client, uses Midgard's `Infrastructure.Web.Client.DecodeProblem()` for the trailer only | Task 6, §9.8 |
 
 Real, reusable platform infrastructure surfacing for the first time through this bootstrap's three operations — two Midgard projects (`Infrastructure.Web.Server`, `Infrastructure.Web.Client`, both new) any future gRPC-hosted mediator handler (starting with Mímir) references directly, no reinvention. Bigger than "hand-wire three ops, prove the pattern" originally implied, but proven against a real caller (this bootstrap) before any second consumer touches it — and built shared from day one specifically because that second consumer (Mímir/Mímisbrunnr) is already named, not speculative.
+
+### 9.8 Correction (2026-07-14, autonomous run): the `Outcome<T>`-to-`AuthenticationResult` mapping is NOT Midgard's job, and neither host had an actual interface to implement
+
+§9.6's own text says the Blazor Server transform "lives in Midgard's `Infrastructure.Web.Server/Mediator/Grpc/`, alongside the server interceptor." That's wrong, caught while writing Task 5/6's actual code (never built, only described in prose up to this point): mapping `Outcome<BoolResponse>` to `AuthenticationResult` requires knowing what `AuthenticationResult` *is* — a Heimdall type. Midgard building that mapping would mean Midgard referencing Heimdall, which breaks the "zero domain knowledge" property that makes `Infrastructure.Web.Server`/`Infrastructure.Web.Client` genuinely reusable by a future, unrelated gRPC-hosted context (Mímir). Midgard's actual job stays exactly what §9.5/§9.6 already correctly scoped: translating `Outcome<T>` ↔ the *wire's* failure idiom (`RpcException`+trailers). Deciding what a *specific* realm's UI-facing result type looks like, and mapping into it, is that realm's own business — here, Heimdall's/Yggdrasil's.
+
+**New shared interface, Heimdall (`AuthN.Components`) — `IAuthenticationGateway`.** Neither host was ever given something concrete to implement; §9.6 left "what the injected type is called" open and this closes it:
+
+```csharp
+namespace Norse.AuthN.Components;
+
+/// <summary>
+/// The only thing any Razor component injects — never IAuthenticationService directly. Two
+/// implementations exist, one per host: Yggdrasil's Hosting.Web.Server (Blazor Server, wraps the
+/// mediator handlers directly, no wire) and Hosting.Web.Client (WASM, wraps the real gRPC-Web client
+/// proxy). Both produce the same AuthenticationResult shape.
+/// </summary>
+public interface IAuthenticationGateway
+{
+	Task<AuthenticationResult> Login(LoginRequest request);
+	Task<AuthenticationResult> Register(RegisterRequest request);
+	Task<AuthenticationResult> Logout(LogoutRequest request);
+}
+```
+
+**Yggdrasil `Hosting.Web.Server`'s implementation** — calls the handlers directly (registered by Task 4's `AddNorseAuthenticationService`), no wire, no gRPC, maps `Outcome<T>` to `AuthenticationResult` inline (two branches, not a shared helper — this is realm-specific glue, not generic infrastructure):
+
+```csharp
+namespace Norse.Hosting.Web.Server;
+
+using Microsoft.AspNetCore.Http;
+using Norse.Abstractions.Web.Server.Mediator;
+using Norse.AuthN.Components;
+
+internal sealed class BlazorServerAuthenticationGateway(
+	IRequestHandler<LoginRequest, Outcome<BoolResponse>> loginHandler,
+	IRequestHandler<RegisterRequest, Outcome<BoolResponse>> registerHandler,
+	IRequestHandler<LogoutRequest, Outcome> logoutHandler,
+	IHttpContextAccessor httpContextAccessor)
+	: IAuthenticationGateway
+{
+	public async Task<AuthenticationResult> Login(LoginRequest request)
+	{
+		var outcome = await loginHandler.Handle(request, httpContextAccessor.HttpContext!.RequestAborted);
+		return outcome.IsSuccess
+			? new AuthenticationResult { Succeeded = outcome.Value!.Value }
+			: new AuthenticationResult { Succeeded = false, Errors = outcome.Problem!.Errors };
+	}
+
+	public async Task<AuthenticationResult> Register(RegisterRequest request)
+	{
+		var outcome = await registerHandler.Handle(request, httpContextAccessor.HttpContext!.RequestAborted);
+		return new AuthenticationResult { Succeeded = outcome.IsSuccess, Errors = outcome.Problem?.Errors ?? new Dictionary<string, string[]>() };
+	}
+
+	public async Task<AuthenticationResult> Logout(LogoutRequest request)
+	{
+		var outcome = await logoutHandler.Handle(request, httpContextAccessor.HttpContext!.RequestAborted);
+		return new AuthenticationResult { Succeeded = outcome.IsSuccess, Errors = outcome.Problem?.Errors ?? new Dictionary<string, string[]>() };
+	}
+}
+```
+
+**Yggdrasil `Hosting.Web.Client`'s implementation** — wraps the real `IAuthenticationService` gRPC-Web client proxy, using Midgard's `Infrastructure.Web.Client.Grpc.RpcExceptionExtensions.DecodeProblem()` (the one piece of this that IS generic Midgard infrastructure — decoding the wire trailer, not knowing what `AuthenticationResult` is):
+
+```csharp
+namespace Norse.Hosting.Web.Client;
+
+using Grpc.Core;
+using Norse.AuthN.Components;
+using Norse.Infrastructure.Web.Client.Grpc;
+
+internal sealed class WasmAuthenticationGateway(IAuthenticationService authenticationService) : IAuthenticationGateway
+{
+	public async Task<AuthenticationResult> Login(LoginRequest request)
+	{
+		try
+		{
+			var result = await authenticationService.Login(request);
+			return new AuthenticationResult { Succeeded = result.Succeeded };
+		}
+		catch (RpcException ex)
+		{
+			return new AuthenticationResult { Succeeded = false, Errors = ex.DecodeProblem() };
+		}
+	}
+
+	public async Task<AuthenticationResult> Register(RegisterRequest request)
+	{
+		try
+		{
+			await authenticationService.Register(request);
+			return new AuthenticationResult { Succeeded = true };
+		}
+		catch (RpcException ex)
+		{
+			return new AuthenticationResult { Succeeded = false, Errors = ex.DecodeProblem() };
+		}
+	}
+
+	public async Task<AuthenticationResult> Logout(LogoutRequest request)
+	{
+		try
+		{
+			await authenticationService.Logout(request);
+			return new AuthenticationResult { Succeeded = true };
+		}
+		catch (RpcException ex)
+		{
+			return new AuthenticationResult { Succeeded = false, Errors = ex.DecodeProblem() };
+		}
+	}
+}
+```
+
+### 9.9 Correction (2026-07-14, first live E2E run): Blazor Server interactive circuits cannot write auth cookies — `BlazorServerAuthenticationGateway`'s `Login`/`Logout` need a deferred-completion mechanism §9.8's sample code omits
+
+**The defect, as it presented.** The first time this bootstrap slice actually ran end-to-end — Aspire AppHost, real Postgres, a real browser, Docker finally available in the dev environment — `Login.razor`/`Logout.razor` (both `@rendermode InteractiveAuto`) crashed the Blazor Server circuit every time:
+
+```
+System.InvalidOperationException: Headers are read-only, response has already started.
+   at ...CookieAuthenticationHandler.HandleSignInAsync(...)
+   at ...SignInManager<TUser>.PasswordSignInAsync(...)
+```
+
+`Register` never hit this — `RegisterHandler` never calls `SignInManager`, no cookie to write. `Login` and `Logout` both do, unconditionally.
+
+**Root cause.** By the time an `InteractiveAuto` component's event handler runs, the page has already switched from its initial HTTP response to the persistent SignalR circuit — `HttpContext.Response.HasStarted` is already `true`. Writing a `Set-Cookie` header at that point is not merely awkward, it is impossible; ASP.NET Core throws rather than silently failing. `§9.8`'s `BlazorServerAuthenticationGateway` sample code calls `loginHandler.Handle(...)` (which internally reaches `SignInManager.PasswordSignInAsync`) directly, in-process, from whatever request context is live when the component's handler runs — for `InteractiveAuto` after the circuit has taken over, that is always a doomed cookie write. This is not new-to-Norse — it is a well-known ASP.NET Core Blazor Server constraint, which is why Microsoft's own stock ASP.NET Core Identity Razor Components template keeps `Login`/`Register`/`Logout` static-SSR-only (no `@rendermode` at all) even inside an otherwise fully-interactive Blazor Web App.
+
+**The fix is proven prior art, not a new design.** Buvy solved this exact problem years earlier at Assurely (his prior D&O insurance MGA), kept as read-only reference material under `../../Assurely` specifically for pearl-mining into this platform. The mechanism, read directly from `Assurely/Hosting/src/Server/Extensions/HttpContextExtensions.cs` and `Middleware/UserId/UserIdMiddleware.cs`:
+
+1. When a sign-in/out can't complete on the current request (there: `context.WebSockets.IsWebSocketRequest`), stash the pending sign-in (or sign-out) server-side under a short-lived, one-time key instead of throwing.
+2. Hand the key back to the interactive caller, who forces a full page reload (`NavigationManager.NavigateTo(url, forceLoad: true)`) to a small completion endpoint — a real, distinct HTTP request, where headers are writable again.
+3. The completion endpoint consumes the key, performs the actual `HttpContext.SignInAsync`/`SignOutAsync`, and responds with a **meta-refresh HTML page**, not a 302 redirect — Assurely's own comment cites a genuine, long-standing mobile Chrome bug where `Set-Cookie` is silently dropped on a redirect response, looping forever. The mechanism (defer → forced reload → complete on a real request) is what's load-bearing; the specific browser-bug citation is carried forward as cheap insurance, not re-verified.
+
+**The Norse port hooks lower than Assurely's original**, and as a direct consequence needed zero changes to already-shipped, already-tested code. Confirmed via `ilspycmd` against the real installed `Microsoft.AspNetCore.Identity.dll` (not assumed): `SignInManager<TUser>.SignInWithClaimsAsync` (both overloads) and `.SignOutAsync()` are `public virtual` — every one of `PasswordSignInAsync`/`SignInOrTwoFactorAsync`/`SignOutAsync` funnels through them to perform the actual cookie write. Subclassing `SignInManager<NorseUser>` and overriding exactly these three methods intercepts every sign-in/sign-out path uniformly. `LoginHandler.cs`/`LogoutHandler.cs` — Task 4's already-shipped, already-tested handlers — did not change at all; they still call `signInManager.PasswordSignInAsync(...)`/`.SignOutAsync()` exactly as before. All prior lockout/anti-enumeration/2FA-path behavior is untouched by construction, not merely by care.
+
+**New pieces, in dependency order:**
+
+- **Midgard, `Infrastructure.Web.Server/DeferredSignIn/`** — `IDeferredSignIn` (zero domain knowledge: only `ClaimsPrincipal`/`AuthenticationProperties`/`string scheme`, no `NorseUser`, no `Outcome<T>`, reusable by any future realm hosting cookie auth behind an interactive Blazor Server component — same bar as the existing `Mediator/Grpc/` folder), backed by `IMemoryCache` with a 60-second, one-time-use entry; `MapDeferredSignIn()` maps the completion endpoint (a plain minimal-API `MapGet`, meta-refresh response); `AddDeferredSignIn()` registers both.
+- **Himinbjörg, `Norse.Identity`** — `NorseSignInManager : SignInManager<NorseUser>` overrides the three methods above. When `Context.Response.HasStarted`, it builds the principal via the base class's own `CreateUserPrincipalAsync`, stashes it via `IDeferredSignIn`, and records the completion key on `HttpContext.Items[NorseSignInManager.DeferredSignInKeyItemName]` for the caller to read back. Otherwise it calls straight through to the base implementation — zero behavior change for every real HTTP request (WASM/MAUI over gRPC-Web, any static-SSR request). Wired via one line in `IdentityBuilderExtensions.AddNorseIdentity()`: `.AddSignInManager<NorseSignInManager>()`.
+- **Heimdall, `AuthN.Components`** — `AuthenticationResult` gains `string? DeferredCompletionUrl { get; init; }`. Non-null only when the caller must force-navigate there instead of its normal success path. `WasmAuthenticationGateway` never sets it — gRPC-Web calls are always real, distinct HTTP requests, so sign-in/out always completes immediately there; this field exists purely for the Blazor Server path.
+- **Yggdrasil, `Hosting.Web.Server`** — `Program.cs` calls `AddDeferredSignIn()`/`MapDeferredSignIn()`. `BlazorServerAuthenticationGateway.Login`/`.Logout` (not `Register` — nothing to defer there) check `HttpContext.Items[NorseSignInManager.DeferredSignInKeyItemName]` after the handler call and populate `DeferredCompletionUrl` with `$"{DeferredSignInEndpointRouteBuilderExtensions.DefaultPattern}?key={key}&returnUrl=/"` when present. This supersedes §9.8's `BlazorServerAuthenticationGateway` sample for `Login`/`Logout` specifically — `Register`'s branch is unchanged.
+- **Heimdall, `AuthN.Components.FluentUI`** — `Login.razor`/`Logout.razor`'s success navigation becomes `Navigation.NavigateTo(result.DeferredCompletionUrl ?? "/", forceLoad: true)` — the deferred case and the (theoretical, never actually hit today) immediate-success case share one line.
+
+**Deliberately not carried forward from Assurely:** the WebSocket-specific detection (`Context.Response.HasStarted` is the more precise, transport-agnostic signal — Microsoft's own recommended check); the anonymous-cookie/lead-id/partner-code machinery baked into Assurely's `UserIdMiddleware` (no equivalent concept exists on this platform yet); manual `ClaimsIdentity`/claims-list construction (`SignInManager.CreateUserPrincipalAsync` already builds the correct principal from `NorseUser`'s real claims/roles — no need to re-derive it by hand).
+
+**Verified live, not just unit-tested.** Beyond `NorseSignInManagerTests`' real `TestServer`-hosted RED/GREEN proof (unmodified `SignInManager<NorseUser>` throws; `NorseSignInManager` defers cleanly and the non-deferred path still writes a real `Set-Cookie`), the full fix was re-verified against the actual composed system: register → login → real `.AspNetCore.Identity.Application` cookie present and `HttpOnly`; logout → cookie confirmed cleared. The crash reported at the top of this section does not reproduce.
+
+Full working notes, including the live investigation trail and the exact Assurely files read: `Glitnir/docs/Heimdall/plans/2026-07-14-deferred-signin-fix.md`.
+
+This is the one design call in this addendum made without Buvy's live sign-off (autonomous run) — flagged clearly for morning review. The reasoning follows directly from principles he already set (Midgard stays domain-agnostic; each realm's substrate owns its own UI-facing glue) rather than introducing a new one, but the concrete shape (`IAuthenticationGateway`'s exact members, the two implementations above) is new and worth a look before Task 8 builds Razor components against it.

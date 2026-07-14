@@ -387,31 +387,31 @@ Bonus verification: Yggdrasil's CPM auto-bump fan-in fired for real too — `Dir
 
 ## Task 2: Heimdall — `AuthN.Components` (the contract)
 
-**Supersedes the code below — see spec addendum `Glitnir/docs/Heimdall/specs/2026-07-13-authn-identity-split-design.md` §9.2/§9.3/§9.6 for the actual shapes to build.** The interfaces/steps as originally written here (`IAuthenticationService` returning `Outcome<LoginResponse>`, `LoginRequest : ICommandRequest<T>`, a `protobuf-net.Grpc` package reference) reflect the pre-addendum design and are wrong in three ways the addendum corrects: no `Outcome<T>` on the wire, no `CallContext` parameter (drop the `protobuf-net.Grpc` `PackageReference`, keep only `System.ServiceModel.Primitives` + `FluentValidation`), and two new types (`LoginResult`, `AuthenticationResult`) the original brief doesn't mention. Read the spec addendum in full before implementing this task — do not transcribe the code sample below as-is.
+Rewritten in full 2026-07-14 to match spec addendum `Glitnir/docs/Heimdall/specs/2026-07-13-authn-identity-split-design.md` §9.2/§9.3/§9.6 — the pre-addendum version (`Outcome<T>` on the wire, `LoginRequest : ICommandRequest<T>`, `CallContext`, a `protobuf-net.Grpc` package reference) is gone, not just superseded-in-place. This project takes **no `NorseRef` at all** — no cross-realm dependency, plain DataContract DTOs + FluentValidation only.
 
 **Files:**
 - Create: `Heimdall/Heimdall.slnx`
 - Create: `Heimdall/src/AuthN.Components/AuthN.Components.csproj`
 - Create: `Heimdall/src/AuthN.Components/IAuthenticationService.cs`
 - Create: `Heimdall/src/AuthN.Components/LoginRequest.cs`
-- Create: `Heimdall/src/AuthN.Components/LoginResponse.cs`
+- Create: `Heimdall/src/AuthN.Components/LoginResult.cs`
 - Create: `Heimdall/src/AuthN.Components/RegisterRequest.cs`
-- Create: `Heimdall/src/AuthN.Components/RegisterResponse.cs`
 - Create: `Heimdall/src/AuthN.Components/LogoutRequest.cs`
+- Create: `Heimdall/src/AuthN.Components/AuthenticationResult.cs`
 - Create: `Heimdall/src/AuthN.Components/LoginRequestValidator.cs`
 - Create: `Heimdall/src/AuthN.Components/RegisterRequestValidator.cs`
 - Test: `Heimdall/tests/AuthN.Components.Tests/LoginRequestValidatorTests.cs`, `RegisterRequestValidatorTests.cs`
 - Modify: `Bifrost.slnx`
 
 **Interfaces:**
-- Consumes: `Outcome`, `Outcome<T>`, `ICommandRequest<TResponse>` from Task 1 (`Norse.Abstractions.Mediator`).
+- Consumes: nothing cross-realm.
 - Produces:
-  - `Norse.AuthN.Components.IAuthenticationService` — `[ServiceContract]`; `Login`, `Register`, `Logout`.
-  - `Norse.AuthN.Components.LoginRequest` — implements `ICommandRequest<Outcome<LoginResponse>>`; `string Email { get; set; }`, `string Password { get; set; }`, `bool RememberMe { get; set; }`.
-  - `Norse.AuthN.Components.LoginResponse` — `LoginStatus Status { get; init; }` (`Succeeded = 1`, `RequiresTwoFactor = 2`, `RequiresConfirmedEmail = 3`).
-  - `Norse.AuthN.Components.RegisterRequest` — implements `ICommandRequest<Outcome<RegisterResponse>>`; `string Email { get; set; }`, `string Password { get; set; }`.
-  - `Norse.AuthN.Components.RegisterResponse` — `Guid UserId { get; init; }`.
-  - `Norse.AuthN.Components.LogoutRequest` — implements `ICommandRequest<Outcome>`; empty.
+  - `Norse.AuthN.Components.IAuthenticationService` — `[ServiceContract]`; `Login(LoginRequest) -> Task<LoginResult>`, `Register(RegisterRequest) -> Task`, `Logout(LogoutRequest) -> Task`. No `CallContext` parameter.
+  - `Norse.AuthN.Components.LoginRequest` — plain `[DataContract]`; `string Email { get; set; }`, `string Password { get; set; }`, `bool RememberMe { get; set; }`.
+  - `Norse.AuthN.Components.LoginResult` — `bool Succeeded { get; init; }`.
+  - `Norse.AuthN.Components.RegisterRequest` — plain `[DataContract]`; `string Email { get; set; }`, `string Password { get; set; }`.
+  - `Norse.AuthN.Components.LogoutRequest` — plain `[DataContract]`; empty.
+  - `Norse.AuthN.Components.AuthenticationResult` — `bool Succeeded { get; init; }`, `IReadOnlyDictionary<string,string[]> Errors { get; init; }`.
   - `Norse.AuthN.Components.LoginRequestValidator : AbstractValidator<LoginRequest>`, `RegisterRequestValidator : AbstractValidator<RegisterRequest>`.
 
 - [ ] **Step 1: Create `Heimdall.slnx`**
@@ -449,16 +449,11 @@ Bonus verification: Yggdrasil's CPM auto-bump fan-in fired for real too — `Dir
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
-		<Description>Norse.AuthN.Components: the IAuthenticationService gRPC contract (protobuf-net.Grpc code-first), its request/response records, and FluentValidation validators. No implementation.</Description>
+		<Description>Norse.AuthN.Components: the IAuthenticationService gRPC contract, its request/response records, and FluentValidation validators. No implementation. Deliberately references only System.ServiceModel.Primitives (attributes) rather than the full protobuf-net.Grpc package, and takes no NorseRef on Asgard's server-only mediator — Outcome&lt;T&gt; never appears on this wire (see the Heimdall spec §9.1/§9.2). This keeps the widely-shared contract library WASM-thin.</Description>
 	</PropertyGroup>
 	<ItemGroup>
-		<PackageReference Include="protobuf-net.Grpc" Version="*" />
+		<PackageReference Include="System.ServiceModel.Primitives" Version="*" />
 		<PackageReference Include="FluentValidation" Version="*" />
-	</ItemGroup>
-	<ItemGroup>
-		<NorseRef Include="Abstractions.Mediator">
-			<Repo>Asgard</Repo>
-		</NorseRef>
 	</ItemGroup>
 </Project>
 ```
@@ -480,12 +475,12 @@ using Norse.AuthN.Components;
 
 namespace Norse.AuthN.Components.Tests;
 
-public class LoginRequestValidatorTests
+public sealed class LoginRequestValidatorTests
 {
 	private readonly LoginRequestValidator _validator = new();
 
 	[Fact]
-	public void Rejects_empty_email()
+	void Rejects_empty_email()
 	{
 		var request = new LoginRequest { Email = "", Password = "correct-horse" };
 
@@ -495,7 +490,7 @@ public class LoginRequestValidatorTests
 	}
 
 	[Fact]
-	public void Rejects_malformed_email()
+	void Rejects_malformed_email()
 	{
 		var request = new LoginRequest { Email = "not-an-email", Password = "correct-horse" };
 
@@ -505,7 +500,7 @@ public class LoginRequestValidatorTests
 	}
 
 	[Fact]
-	public void Rejects_empty_password()
+	void Rejects_empty_password()
 	{
 		var request = new LoginRequest { Email = "user@example.com", Password = "" };
 
@@ -515,7 +510,7 @@ public class LoginRequestValidatorTests
 	}
 
 	[Fact]
-	public void Accepts_a_well_formed_request()
+	void Accepts_a_well_formed_request()
 	{
 		var request = new LoginRequest { Email = "user@example.com", Password = "correct-horse" };
 
@@ -532,12 +527,12 @@ using Norse.AuthN.Components;
 
 namespace Norse.AuthN.Components.Tests;
 
-public class RegisterRequestValidatorTests
+public sealed class RegisterRequestValidatorTests
 {
 	private readonly RegisterRequestValidator _validator = new();
 
 	[Fact]
-	public void Rejects_malformed_email()
+	void Rejects_malformed_email()
 	{
 		var request = new RegisterRequest { Email = "not-an-email", Password = "correct-horse-battery" };
 
@@ -547,7 +542,7 @@ public class RegisterRequestValidatorTests
 	}
 
 	[Fact]
-	public void Rejects_password_shorter_than_eight_characters()
+	void Rejects_password_shorter_than_eight_characters()
 	{
 		var request = new RegisterRequest { Email = "user@example.com", Password = "short" };
 
@@ -557,7 +552,7 @@ public class RegisterRequestValidatorTests
 	}
 
 	[Fact]
-	public void Accepts_a_well_formed_request()
+	void Accepts_a_well_formed_request()
 	{
 		var request = new RegisterRequest { Email = "user@example.com", Password = "correct-horse-battery" };
 
@@ -578,17 +573,16 @@ Expected: FAIL to compile — none of the contract types exist yet.
 `Heimdall/src/AuthN.Components/LoginRequest.cs`:
 ```csharp
 using System.Runtime.Serialization;
-using Norse.Abstractions.Mediator;
 
 namespace Norse.AuthN.Components;
 
 /// <summary>
 /// Deliberately mutable (not <c>init</c>) — this is the direct two-way <c>EditForm</c> binding target
 /// for <c>AuthN.Components.FluentUI</c>'s <c>Login.razor</c>; every other record in this contract stays
-/// <c>init</c>-only.
+/// <c>init</c>-only. Plain wire DTO — no mediator-law coupling of any kind (spec §9.1/§9.2).
 /// </summary>
 [DataContract]
-public sealed record LoginRequest : ICommandRequest<Outcome<LoginResponse>>
+public sealed record LoginRequest
 {
 	[DataMember(Order = 1)]
 	public required string Email { get; set; }
@@ -601,37 +595,34 @@ public sealed record LoginRequest : ICommandRequest<Outcome<LoginResponse>>
 }
 ```
 
-`Heimdall/src/AuthN.Components/LoginResponse.cs`:
+`Heimdall/src/AuthN.Components/LoginResult.cs`:
 ```csharp
 using System.Runtime.Serialization;
 
 namespace Norse.AuthN.Components;
 
-public enum LoginStatus
-{
-	Succeeded = 1,
-	RequiresTwoFactor = 2,
-	RequiresConfirmedEmail = 3,
-}
-
+/// <summary>
+/// The wire response for <see cref="IAuthenticationService.Login"/>. <c>Succeeded=false</c> is a
+/// legitimate successful credential check (wrong username or password), not a failure — the two are
+/// deliberately never distinguished, see spec §9.3/§9.4.
+/// </summary>
 [DataContract]
-public sealed record LoginResponse
+public sealed record LoginResult
 {
 	[DataMember(Order = 1)]
-	public required LoginStatus Status { get; init; }
+	public required bool Succeeded { get; init; }
 }
 ```
 
 `Heimdall/src/AuthN.Components/RegisterRequest.cs`:
 ```csharp
 using System.Runtime.Serialization;
-using Norse.Abstractions.Mediator;
 
 namespace Norse.AuthN.Components;
 
 /// <summary>Deliberately mutable — see <see cref="LoginRequest"/>'s remark.</summary>
 [DataContract]
-public sealed record RegisterRequest : ICommandRequest<Outcome<RegisterResponse>>
+public sealed record RegisterRequest
 {
 	[DataMember(Order = 1)]
 	public required string Email { get; set; }
@@ -641,24 +632,9 @@ public sealed record RegisterRequest : ICommandRequest<Outcome<RegisterResponse>
 }
 ```
 
-`Heimdall/src/AuthN.Components/RegisterResponse.cs`:
-```csharp
-using System.Runtime.Serialization;
-
-namespace Norse.AuthN.Components;
-
-[DataContract]
-public sealed record RegisterResponse
-{
-	[DataMember(Order = 1)]
-	public required Guid UserId { get; init; }
-}
-```
-
 `Heimdall/src/AuthN.Components/LogoutRequest.cs`:
 ```csharp
 using System.Runtime.Serialization;
-using Norse.Abstractions.Mediator;
 
 namespace Norse.AuthN.Components;
 
@@ -667,7 +643,32 @@ namespace Norse.AuthN.Components;
 /// still exists per operation because protobuf-net.Grpc requires one.
 /// </summary>
 [DataContract]
-public sealed record LogoutRequest : ICommandRequest<Outcome>;
+public sealed record LogoutRequest;
+```
+
+`Heimdall/src/AuthN.Components/AuthenticationResult.cs`:
+```csharp
+using System.Runtime.Serialization;
+
+namespace Norse.AuthN.Components;
+
+/// <summary>
+/// The only thing any Razor component reads — never <see cref="IAuthenticationService"/> directly,
+/// never a caught exception. Produced by a host-specific gateway (Blazor Server or WASM), per spec
+/// §9.6. <c>Errors</c> convention: field name key -&gt; field-level messages; empty string key ("") -&gt;
+/// general/model-level messages (e.g. account locked out) — matches FluentValidation/Blazor's own
+/// convention for a message not tied to a specific property, so both flow into the same
+/// ValidationSummary/ValidationMessageStore with no special-casing in the UI.
+/// </summary>
+[DataContract]
+public sealed record AuthenticationResult
+{
+	[DataMember(Order = 1)]
+	public required bool Succeeded { get; init; }
+
+	[DataMember(Order = 2)]
+	public IReadOnlyDictionary<string, string[]> Errors { get; init; } = new Dictionary<string, string[]>();
+}
 ```
 
 - [ ] **Step 6: Implement the validators**
@@ -712,27 +713,27 @@ public sealed class RegisterRequestValidator : AbstractValidator<RegisterRequest
 
 `Heimdall/src/AuthN.Components/IAuthenticationService.cs`:
 ```csharp
-using Norse.Abstractions.Mediator;
-using ProtoBuf.Grpc;
+using System.ServiceModel;
 
 namespace Norse.AuthN.Components;
 
 /// <summary>
 /// Issuance surface — real, network-callable gRPC methods that mint or clear the authenticated
-/// cookie. Allowed <c>HttpContext</c> coupling in the implementation because minting the credential
-/// is the entire job (<c>Heimdall/specs/2026-07-13-authn-identity-split-design.md</c> §2).
+/// cookie. No <c>CallContext</c> parameter, deliberately — see spec §9.2 for why this contract stays
+/// off the full protobuf-net.Grpc package. Where the implementation needs a cancellation token or
+/// <c>HttpContext</c>, it comes from a directly-injected <c>IHttpContextAccessor</c> instead.
 /// </summary>
 [ServiceContract]
 public interface IAuthenticationService
 {
 	[OperationContract]
-	Task<Outcome<LoginResponse>> Login(LoginRequest request, CallContext context = default);
+	Task<LoginResult> Login(LoginRequest request);
 
 	[OperationContract]
-	Task<Outcome<RegisterResponse>> Register(RegisterRequest request, CallContext context = default);
+	Task Register(RegisterRequest request);
 
 	[OperationContract]
-	Task<Outcome> Logout(LogoutRequest request, CallContext context = default);
+	Task Logout(LogoutRequest request);
 }
 ```
 
@@ -769,15 +770,15 @@ In `Bifrost.slnx`, add a new top-level folder (mirroring the existing `/Abstract
 	</Folder>
 ```
 
-- [ ] **Step 10: Commit**
+**Do NOT `cd` into Bifrost's own root or run any `git checkout`/`git branch` command scoped there — edit `Bifrost.slnx` in place and stage only that one file from the Bifrost repo. Bifrost itself never gets a feature branch for a pointer/solution-wiring change (see `[[feedback_bifrost-stays-on-master]]`); it stays on `master`.**
+
+- [ ] **Step 10: Stage (session policy: stage only, never commit — the human commits everything, on `master` for Bifrost, on the task branch for Heimdall)**
 
 ```bash
 cd Heimdall
 git add Heimdall.slnx src/AuthN.Components tests/AuthN.Components.Tests
-git commit -m "feat: add AuthN.Components — IAuthenticationService contract, DTOs, validators"
 cd ..
 git add Bifrost.slnx
-git commit -m "chore: wire Heimdall's AuthN.Components into Bifrost.slnx"
 ```
 
 ---
@@ -1125,7 +1126,11 @@ Task 4 (Himinbjörg's forwarder, `ThrowIfFailed()`) and Task 6 (Yggdrasil's `Hos
 
 ## Task 4: Himinbjörg — `Identity.Web.Server`
 
-**Supersedes the code below — see spec addendum §9.4/§9.5.** Handlers return `Outcome<BoolResponse>`, not `Outcome<LoginResponse>`/`Outcome<RegisterResponse>` (those response types retire). `RegisterHandler`'s `IdentityResult` → `ErrorCategory` mapping is corrected (only genuine duplicates are `Conflict`; password-policy failures are `Validation`). `AuthenticationService`'s forwarder methods become one line each — `ThrowIfFailed()` (Midgard's `Infrastructure.Web.Server`, Task 3, live before this task starts) throws on failure, `OutcomeServerInterceptor` (also Task 3, registered here in this task's `MapNorseAuthenticationService()`) catches it and produces the `RpcException`. No branching in the forwarder at all. Read the spec addendum in full before implementing.
+Rewritten in full 2026-07-14 to match spec addendum `Glitnir/docs/Heimdall/specs/2026-07-13-authn-identity-split-design.md` §9.3/§9.4/§9.5 — handlers return `Outcome<BoolResponse>` (not `Outcome<LoginResponse>`/`Outcome<RegisterResponse>`, both retired), `RegisterHandler`'s `IdentityResult` → `ErrorCategory` mapping only treats genuine duplicates as `Conflict` (password-policy failures are `Validation`), and the `AuthenticationService` forwarder becomes one line per method via `ThrowIfFailed()` — no branching, no `CallContext`, cancellation comes from a directly-injected `IHttpContextAccessor`. `LoginHandler`'s shape was confirmed verbatim by Buvy against his own independent expectation before this rewrite — implement it exactly as given, no further negotiation needed on that one file.
+
+**This project takes explicit NorseRefs on all three of its actual dependencies** — Heimdall's `AuthN.Components` (the wire contract), Asgard's `Abstractions.Web.Server` (the mediator vocabulary the handlers work in directly), and Midgard's `Infrastructure.Web.Server` (`ThrowIfFailed()`/`OutcomeServerInterceptor`) — rather than relying on any transitive exposure through one of the others.
+
+**Autonomous-run note: `Norse.AuthN.Components` (Task 2) is not live on NuGet yet.** Build/test this task with `-p:UseProjectReferences=true` so its `NorseRef` resolves to a local `ProjectReference` at `Heimdall/src/AuthN.Components/AuthN.Components.csproj` instead of failing to restore. Midgard's and Asgard's NorseRefs resolve normally either way — both are genuinely live.
 
 **Files:**
 - Create: `Himinbjorg/src/Identity.Web.Server/Identity.Web.Server.csproj`
@@ -1137,15 +1142,16 @@ Task 4 (Himinbjörg's forwarder, `ThrowIfFailed()`) and Task 6 (Yggdrasil's `Hos
 - Create: `Himinbjorg/src/Identity.Web.Server/WebApplicationExtensions.cs`
 - Test: `Himinbjorg/tests/Identity.Web.Server.Tests/*`
 - Modify: `Himinbjorg/Himinbjorg.slnx`, `Himinbjorg/src/Identity/Identity.csproj` (stale comment fix)
+- Modify: `Bifrost.slnx` (wire the two new projects into the existing Himinbjörg folders — edit the file directly, do **not** `cd` into Bifrost's own root or run any `git checkout`/`git branch` there; Bifrost stays on `master`, no feature branch)
 
 **Interfaces:**
-- Consumes: `IAuthenticationService`, `LoginRequest`, `LoginResponse`, `RegisterRequest`, `RegisterResponse`, `LogoutRequest` (Task 2, `Norse.AuthN.Components`); `Outcome`, `Outcome<T>`, `ErrorCategory`, `IRequestHandler<,>` (Task 1); `NorseUser`, `NorseIdentityDbContext`, `AddNorseIdentity()` (existing `Norse.Identity`).
+- Consumes: `IAuthenticationService`, `LoginRequest`, `LoginResult`, `RegisterRequest`, `LogoutRequest` (Task 2, `Norse.AuthN.Components`); `Outcome`, `Outcome<T>`, `ErrorCategory`, `BoolResponse`, `IRequestHandler<,>` (Task 1, `Norse.Abstractions.Web.Server`); `OutcomeExtensions.ThrowIfFailed`, `OutcomeServerInterceptor` (Task 3, `Norse.Infrastructure.Web.Server`); `NorseUser`, `NorseIdentityDbContext`, `AddNorseIdentity()` (existing `Norse.Identity`).
 - Produces:
-  - `Norse.Identity.Web.Server.LoginHandler : IRequestHandler<LoginRequest, Outcome<LoginResponse>>`
-  - `Norse.Identity.Web.Server.RegisterHandler : IRequestHandler<RegisterRequest, Outcome<RegisterResponse>>`
+  - `Norse.Identity.Web.Server.LoginHandler : IRequestHandler<LoginRequest, Outcome<BoolResponse>>`
+  - `Norse.Identity.Web.Server.RegisterHandler : IRequestHandler<RegisterRequest, Outcome<BoolResponse>>`
   - `Norse.Identity.Web.Server.LogoutHandler : IRequestHandler<LogoutRequest, Outcome>`
   - `Norse.Identity.Web.Server.AuthenticationService : IAuthenticationService` (internal, thin forwarder)
-  - `IServiceCollectionExtensions.AddNorseAuthenticationService(this IServiceCollection, string connectionString)`
+  - `IServiceCollectionExtensions.AddNorseAuthenticationService(this IServiceCollection, string connectionString)` — also registers `OutcomeServerInterceptor`.
   - `IApplicationBuilderExtensions.MapNorseAuthenticationService(this WebApplication)`
 
 - [ ] **Step 1: Fix the stale comment in `Identity.csproj` first**
@@ -1161,7 +1167,7 @@ Task 4 (Himinbjörg's forwarder, `ThrowIfFailed()`) and Task 6 (Yggdrasil's `Hos
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
-		<Description>Norse.Identity.Web.Server: IAuthenticationService's gRPC implementation over NorseUserStore. Always runs inside an HTTP context, bound into Yggdrasil's Hosting.Web.Server process.</Description>
+		<Description>Norse.Identity.Web.Server: IAuthenticationService's gRPC implementation over NorseUserStore. Handlers work entirely in Outcome&lt;T&gt; (Asgard's mediator law); the forwarder decomposes failure via Midgard's Infrastructure.Web.Server, never by hand. Always runs inside an HTTP context, bound into Yggdrasil's Hosting.Web.Server process.</Description>
 	</PropertyGroup>
 	<ItemGroup>
 		<FrameworkReference Include="Microsoft.AspNetCore.App" />
@@ -1176,6 +1182,12 @@ Task 4 (Himinbjörg's forwarder, `ThrowIfFailed()`) and Task 6 (Yggdrasil's `Hos
 	<ItemGroup>
 		<NorseRef Include="AuthN.Components">
 			<Repo>Heimdall</Repo>
+		</NorseRef>
+		<NorseRef Include="Abstractions.Web.Server">
+			<Repo>Asgard</Repo>
+		</NorseRef>
+		<NorseRef Include="Infrastructure.Web.Server">
+			<Repo>Midgard</Repo>
 		</NorseRef>
 	</ItemGroup>
 </Project>
@@ -1199,14 +1211,15 @@ Task 4 (Himinbjörg's forwarder, `ThrowIfFailed()`) and Task 6 (Yggdrasil's `Hos
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Norse.Abstractions.Web.Server.Mediator;
 using Norse.AuthN.Components;
 using Norse.Identity;
 
 namespace Norse.Identity.Web.Server.Tests;
 
-public class RegisterHandlerTests
+public sealed class RegisterHandlerTests
 {
-	private static NorseIdentityDbContext CreateContext()
+	static NorseIdentityDbContext CreateContext()
 	{
 		var options = new DbContextOptionsBuilder<NorseIdentityDbContext>()
 			.UseSqlite("DataSource=:memory:")
@@ -1217,16 +1230,19 @@ public class RegisterHandlerTests
 		return context;
 	}
 
-	private static UserManager<NorseUser> CreateUserManager(NorseIdentityDbContext context)
+	// Real PasswordValidator<NorseUser> wired in (not an empty array) so a weak-but-non-duplicate
+	// password actually produces IdentityResult errors — needed to test the Validation-vs-Conflict
+	// categorization below meaningfully, not just narrate it in a comment.
+	static UserManager<NorseUser> CreateUserManager(NorseIdentityDbContext context)
 	{
 		var store = new NorseUserStore(context, new IdentityErrorDescriber());
 		return new UserManager<NorseUser>(
-			store, null, new PasswordHasher<NorseUser>(), [], [],
+			store, null, new PasswordHasher<NorseUser>(), [], [new PasswordValidator<NorseUser>()],
 			new UpperInvariantLookupNormalizer(), new IdentityErrorDescriber(), null, NullLogger<UserManager<NorseUser>>.Instance);
 	}
 
 	[Fact]
-	public async Task Rejects_an_invalid_request_without_touching_the_store()
+	async Task Rejects_an_invalid_request_without_touching_the_store()
 	{
 		using var context = CreateContext();
 		var handler = new RegisterHandler(CreateUserManager(context), new RegisterRequestValidator());
@@ -1240,26 +1256,26 @@ public class RegisterHandlerTests
 	}
 
 	[Fact]
-	public async Task Creates_a_NorseUser_for_a_valid_request()
+	async Task Creates_a_NorseUser_for_a_valid_request()
 	{
 		using var context = CreateContext();
 		var handler = new RegisterHandler(CreateUserManager(context), new RegisterRequestValidator());
-		var request = new RegisterRequest { Email = "user@example.com", Password = "correct-horse-battery" };
+		var request = new RegisterRequest { Email = "user@example.com", Password = "correct-horse-battery-1A!" };
 
 		var outcome = await handler.Handle(request, CancellationToken.None);
 
 		outcome.IsSuccess.ShouldBeTrue();
-		outcome.Value!.UserId.ShouldNotBe(Guid.Empty);
+		outcome.Value!.Value.ShouldBeTrue();
 		(await context.Users.SingleAsync()).Email.ShouldBe("user@example.com");
 	}
 
 	[Fact]
-	public async Task Rejects_a_duplicate_email()
+	async Task Rejects_a_duplicate_email_as_Conflict()
 	{
 		using var context = CreateContext();
 		var userManager = CreateUserManager(context);
 		var handler = new RegisterHandler(userManager, new RegisterRequestValidator());
-		var request = new RegisterRequest { Email = "user@example.com", Password = "correct-horse-battery" };
+		var request = new RegisterRequest { Email = "user@example.com", Password = "correct-horse-battery-1A!" };
 		await handler.Handle(request, CancellationToken.None);
 
 		var outcome = await handler.Handle(request, CancellationToken.None);
@@ -1267,21 +1283,37 @@ public class RegisterHandlerTests
 		outcome.IsSuccess.ShouldBeFalse();
 		outcome.Problem!.Category.ShouldBe(ErrorCategory.Conflict);
 	}
+
+	[Fact]
+	async Task Rejects_a_weak_but_non_duplicate_password_as_Validation_not_Conflict()
+	{
+		using var context = CreateContext();
+		var handler = new RegisterHandler(CreateUserManager(context), new RegisterRequestValidator());
+		// Passes FluentValidation's client-side MinimumLength(8) but fails ASP.NET Identity's default
+		// password-complexity rules (needs a digit, an uppercase letter, a non-alphanumeric char) —
+		// exercises the corrected mapping: this must be Validation, never Conflict.
+		var request = new RegisterRequest { Email = "user2@example.com", Password = "aaaaaaaa" };
+
+		var outcome = await handler.Handle(request, CancellationToken.None);
+
+		outcome.IsSuccess.ShouldBeFalse();
+		outcome.Problem!.Category.ShouldBe(ErrorCategory.Validation);
+	}
 }
 ```
 
 `Himinbjorg/tests/Identity.Web.Server.Tests/LogoutHandlerTests.cs`:
 ```csharp
-using Norse.Abstractions.Mediator;
+using Norse.Abstractions.Web.Server.Mediator;
 using Norse.AuthN.Components;
 using NSubstitute;
 
 namespace Norse.Identity.Web.Server.Tests;
 
-public class LogoutHandlerTests
+public sealed class LogoutHandlerTests
 {
 	[Fact]
-	public async Task Always_returns_a_successful_outcome()
+	async Task Always_returns_a_successful_outcome()
 	{
 		var signInManager = MockSignInManager.Create();
 		var handler = new LogoutHandler(signInManager);
@@ -1307,7 +1339,7 @@ using NSubstitute;
 
 namespace Norse.Identity.Web.Server.Tests;
 
-internal static class MockSignInManager
+static class MockSignInManager
 {
 	public static SignInManager<NorseUser> Create()
 	{
@@ -1329,17 +1361,17 @@ internal static class MockSignInManager
 
 `Himinbjorg/tests/Identity.Web.Server.Tests/LoginHandlerTests.cs`:
 ```csharp
-using Norse.Abstractions.Mediator;
+using Norse.Abstractions.Web.Server.Mediator;
 using Norse.AuthN.Components;
 using Norse.Identity;
 using NSubstitute;
 
 namespace Norse.Identity.Web.Server.Tests;
 
-public class LoginHandlerTests
+public sealed class LoginHandlerTests
 {
 	[Fact]
-	public async Task Rejects_an_invalid_request_without_attempting_sign_in()
+	async Task Rejects_an_invalid_request_without_attempting_sign_in()
 	{
 		var signInManager = MockSignInManager.Create();
 		var handler = new LoginHandler(signInManager, new LoginRequestValidator());
@@ -1353,7 +1385,7 @@ public class LoginHandlerTests
 	}
 
 	[Fact]
-	public async Task Returns_LockedOut_when_the_store_reports_lockout()
+	async Task Returns_LockedOut_when_the_store_reports_lockout()
 	{
 		var signInManager = MockSignInManager.Create();
 		signInManager.PasswordSignInAsync("user@example.com", "wrong", false, true)
@@ -1368,7 +1400,7 @@ public class LoginHandlerTests
 	}
 
 	[Fact]
-	public async Task Returns_Succeeded_when_the_store_signs_in()
+	async Task Returns_Succeeded_true_when_the_store_signs_in()
 	{
 		var signInManager = MockSignInManager.Create();
 		signInManager.PasswordSignInAsync("user@example.com", "correct-horse", false, true)
@@ -1379,14 +1411,31 @@ public class LoginHandlerTests
 		var outcome = await handler.Handle(request, CancellationToken.None);
 
 		outcome.IsSuccess.ShouldBeTrue();
-		outcome.Value!.Status.ShouldBe(LoginStatus.Succeeded);
+		outcome.Value!.Value.ShouldBeTrue();
+	}
+
+	[Fact]
+	async Task Returns_Succeeded_false_never_an_error_when_credentials_are_wrong()
+	{
+		// The whole point of §9.3's anti-enumeration collapse: wrong username and wrong password both
+		// land here, as a successful check that returned false — never Outcome.Err(InvalidCredentials).
+		var signInManager = MockSignInManager.Create();
+		signInManager.PasswordSignInAsync("user@example.com", "wrong", false, true)
+			.Returns(Microsoft.AspNetCore.Identity.SignInResult.Failed);
+		var handler = new LoginHandler(signInManager, new LoginRequestValidator());
+		var request = new LoginRequest { Email = "user@example.com", Password = "wrong" };
+
+		var outcome = await handler.Handle(request, CancellationToken.None);
+
+		outcome.IsSuccess.ShouldBeTrue();
+		outcome.Value!.Value.ShouldBeFalse();
 	}
 }
 ```
 
 - [ ] **Step 4: Run the tests to verify they fail**
 
-Run: `dotnet test Himinbjorg/tests/Identity.Web.Server.Tests/Identity.Web.Server.Tests.csproj`
+Run: `dotnet test Himinbjorg/tests/Identity.Web.Server.Tests/Identity.Web.Server.Tests.csproj` (add `-p:UseProjectReferences=true`, per the autonomous-run note above)
 Expected: FAIL to compile — `LoginHandler`, `RegisterHandler`, `LogoutHandler` don't exist yet.
 
 - [ ] **Step 5: Implement the handlers**
@@ -1394,49 +1443,32 @@ Expected: FAIL to compile — `LoginHandler`, `RegisterHandler`, `LogoutHandler`
 `Himinbjorg/src/Identity.Web.Server/LoginHandler.cs`:
 ```csharp
 using Microsoft.AspNetCore.Identity;
-using Norse.Abstractions.Mediator;
+using Norse.Abstractions.Web.Server.Mediator;
 using Norse.AuthN.Components;
 using Norse.Identity;
 
 namespace Norse.Identity.Web.Server;
 
 public sealed class LoginHandler(SignInManager<NorseUser> signInManager, LoginRequestValidator validator)
-	: IRequestHandler<LoginRequest, Outcome<LoginResponse>>
+	: IRequestHandler<LoginRequest, Outcome<BoolResponse>>
 {
-	public async ValueTask<Outcome<LoginResponse>> Handle(LoginRequest request, CancellationToken cancellationToken)
+	public async ValueTask<Outcome<BoolResponse>> Handle(LoginRequest request, CancellationToken cancellationToken)
 	{
 		var validation = await validator.ValidateAsync(request, cancellationToken);
 		if (!validation.IsValid)
-		{
-			return Outcome<LoginResponse>.Err(ErrorCategory.Validation, validation.ToDictionary());
-		}
+			return Outcome<BoolResponse>.Err(ErrorCategory.Validation, validation.ToDictionary());
 
 		// SignInManager mints/clears the cookie itself via its own IHttpContextAccessor dependency —
 		// no manual HttpContext.SignInAsync call needed here (must register AddHttpContextAccessor()).
 		var result = await signInManager.PasswordSignInAsync(
 			request.Email, request.Password, request.RememberMe, lockoutOnFailure: true);
 
-		if (result.IsLockedOut)
-		{
-			return Outcome<LoginResponse>.Err(ErrorCategory.LockedOut);
-		}
+		if (result.IsLockedOut) return Outcome<BoolResponse>.Err(ErrorCategory.LockedOut);
+		if (result.IsNotAllowed) return Outcome<BoolResponse>.Err(ErrorCategory.NotAllowed);
 
-		if (result.IsNotAllowed)
-		{
-			return Outcome<LoginResponse>.Err(ErrorCategory.NotAllowed);
-		}
-
-		if (result.RequiresTwoFactor)
-		{
-			return Outcome<LoginResponse>.Ok(new LoginResponse { Status = LoginStatus.RequiresTwoFactor });
-		}
-
-		if (!result.Succeeded)
-		{
-			return Outcome<LoginResponse>.Err(ErrorCategory.InvalidCredentials);
-		}
-
-		return Outcome<LoginResponse>.Ok(new LoginResponse { Status = LoginStatus.Succeeded });
+		// Succeeded=false covers "no such user" and "wrong password" identically — deliberate,
+		// anti-enumeration, see spec §9.3. Never Outcome.Err(InvalidCredentials).
+		return Outcome<BoolResponse>.Ok(new BoolResponse { Value = result.Succeeded });
 	}
 }
 ```
@@ -1444,35 +1476,38 @@ public sealed class LoginHandler(SignInManager<NorseUser> signInManager, LoginRe
 `Himinbjorg/src/Identity.Web.Server/RegisterHandler.cs`:
 ```csharp
 using Microsoft.AspNetCore.Identity;
-using Norse.Abstractions.Mediator;
+using Norse.Abstractions.Web.Server.Mediator;
 using Norse.AuthN.Components;
 using Norse.Identity;
 
 namespace Norse.Identity.Web.Server;
 
 public sealed class RegisterHandler(UserManager<NorseUser> userManager, RegisterRequestValidator validator)
-	: IRequestHandler<RegisterRequest, Outcome<RegisterResponse>>
+	: IRequestHandler<RegisterRequest, Outcome<BoolResponse>>
 {
-	public async ValueTask<Outcome<RegisterResponse>> Handle(RegisterRequest request, CancellationToken cancellationToken)
+	public async ValueTask<Outcome<BoolResponse>> Handle(RegisterRequest request, CancellationToken cancellationToken)
 	{
 		var validation = await validator.ValidateAsync(request, cancellationToken);
 		if (!validation.IsValid)
-		{
-			return Outcome<RegisterResponse>.Err(ErrorCategory.Validation, validation.ToDictionary());
-		}
+			return Outcome<BoolResponse>.Err(ErrorCategory.Validation, validation.ToDictionary());
 
 		var user = new NorseUser { UserName = request.Email, Email = request.Email };
 		var result = await userManager.CreateAsync(user, request.Password);
 
 		if (!result.Succeeded)
 		{
+			// Only a genuine duplicate is Conflict — Buvy's explicit call, so a legitimate user sees
+			// "that email's taken" and doesn't retry a doomed registration 10,000 times (spec §9.3).
+			// Everything else (password-policy codes) is Validation — a rejected password isn't a conflict.
+			var isDuplicate = result.Errors.Any(e => e.Code is "DuplicateUserName" or "DuplicateEmail");
+			var category = isDuplicate ? ErrorCategory.Conflict : ErrorCategory.Validation;
 			var errors = result.Errors
 				.GroupBy(e => e.Code)
 				.ToDictionary(g => g.Key, g => g.Select(e => e.Description).ToArray());
-			return Outcome<RegisterResponse>.Err(ErrorCategory.Conflict, errors);
+			return Outcome<BoolResponse>.Err(category, errors);
 		}
 
-		return Outcome<RegisterResponse>.Ok(new RegisterResponse { UserId = user.Id });
+		return Outcome<BoolResponse>.Ok(new BoolResponse { Value = true });
 	}
 }
 ```
@@ -1480,7 +1515,7 @@ public sealed class RegisterHandler(UserManager<NorseUser> userManager, Register
 `Himinbjorg/src/Identity.Web.Server/LogoutHandler.cs`:
 ```csharp
 using Microsoft.AspNetCore.Identity;
-using Norse.Abstractions.Mediator;
+using Norse.Abstractions.Web.Server.Mediator;
 using Norse.AuthN.Components;
 using Norse.Identity;
 
@@ -1499,49 +1534,54 @@ public sealed class LogoutHandler(SignInManager<NorseUser> signInManager)
 
 - [ ] **Step 6: Run the tests to verify they pass**
 
-Run: `dotnet test Himinbjorg/tests/Identity.Web.Server.Tests/Identity.Web.Server.Tests.csproj`
-Expected: PASS — 8 tests green.
+Run: `dotnet test Himinbjorg/tests/Identity.Web.Server.Tests/Identity.Web.Server.Tests.csproj -p:UseProjectReferences=true`
+Expected: PASS — 9 tests green (4 `RegisterHandlerTests` + 1 `LogoutHandlerTests` + 4 `LoginHandlerTests` — note the two new tests beyond the original brief: the weak-password-is-Validation case and the explicit "Succeeded=false is not an error" case).
 
-- [ ] **Step 7: Implement the gRPC forwarder (no new test — pure delegation, covered by the handler tests above plus Task 10's end-to-end check)**
+- [ ] **Step 7: Implement the gRPC forwarder — one line per method, no branching**
 
 `Himinbjorg/src/Identity.Web.Server/AuthenticationService.cs`:
 ```csharp
-using Norse.Abstractions.Mediator;
+using Microsoft.AspNetCore.Http;
+using Norse.Abstractions.Web.Server.Mediator;
 using Norse.AuthN.Components;
-using ProtoBuf.Grpc;
+using Norse.Infrastructure.Web.Server.Mediator.Grpc;
 
 namespace Norse.Identity.Web.Server;
 
 /// <summary>
-/// Thin forwarder — every method delegates to its matching <see cref="IRequestHandler{TRequest,TResponse}"/>.
-/// No business logic lives here (<c>Heimdall/specs/2026-07-13-authn-identity-split-design.md</c> §0/§3).
+/// Thin forwarder — every method delegates to its matching <see cref="IRequestHandler{TRequest,TResponse}"/>
+/// and calls <see cref="OutcomeExtensions.ThrowIfFailed{T}"/>; <see cref="OutcomeServerInterceptor"/>
+/// (registered in <see cref="ServiceCollectionExtensions.AddNorseAuthenticationService"/>) does the actual
+/// failure translation. No branching, no business logic lives here — spec §9.4/§9.5.
 /// </summary>
 internal sealed class AuthenticationService(
-	IRequestHandler<LoginRequest, Outcome<LoginResponse>> loginHandler,
-	IRequestHandler<RegisterRequest, Outcome<RegisterResponse>> registerHandler,
-	IRequestHandler<LogoutRequest, Outcome> logoutHandler)
+	IRequestHandler<LoginRequest, Outcome<BoolResponse>> loginHandler,
+	IRequestHandler<RegisterRequest, Outcome<BoolResponse>> registerHandler,
+	IRequestHandler<LogoutRequest, Outcome> logoutHandler,
+	IHttpContextAccessor httpContextAccessor)
 	: IAuthenticationService
 {
-	public async Task<Outcome<LoginResponse>> Login(LoginRequest request, CallContext context = default) =>
-		await loginHandler.Handle(request, context.CancellationToken);
+	public async Task<LoginResult> Login(LoginRequest request) =>
+		new() { Succeeded = (await loginHandler.Handle(request, httpContextAccessor.HttpContext!.RequestAborted)).ThrowIfFailed().Value };
 
-	public async Task<Outcome<RegisterResponse>> Register(RegisterRequest request, CallContext context = default) =>
-		await registerHandler.Handle(request, context.CancellationToken);
+	public async Task Register(RegisterRequest request) =>
+		(await registerHandler.Handle(request, httpContextAccessor.HttpContext!.RequestAborted)).ThrowIfFailed();
 
-	public async Task<Outcome> Logout(LogoutRequest request, CallContext context = default) =>
-		await logoutHandler.Handle(request, context.CancellationToken);
+	public async Task Logout(LogoutRequest request) =>
+		(await logoutHandler.Handle(request, httpContextAccessor.HttpContext!.RequestAborted)).ThrowIfFailed();
 }
 ```
 
-- [ ] **Step 8: Implement the DI/hosting wiring**
+- [ ] **Step 8: Implement the DI/hosting wiring — registers the Midgard interceptor**
 
 `Himinbjorg/src/Identity.Web.Server/ServiceCollectionExtensions.cs`:
 ```csharp
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Norse.Abstractions.Mediator;
+using Norse.Abstractions.Web.Server.Mediator;
 using Norse.AuthN.Components;
 using Norse.Identity;
+using Norse.Infrastructure.Web.Server.Mediator.Grpc;
 
 namespace Norse.Identity.Web.Server;
 
@@ -1552,13 +1592,13 @@ public static class ServiceCollectionExtensions
 		services.AddDbContext<NorseIdentityDbContext>(o => o.UseNpgsql(connectionString));
 		services.AddNorseIdentity();
 		services.AddHttpContextAccessor();
-		services.AddCodeFirstGrpc();
+		services.AddCodeFirstGrpc(o => o.Interceptors.Add<OutcomeServerInterceptor>());
 
 		services.AddScoped<LoginRequestValidator>();
 		services.AddScoped<RegisterRequestValidator>();
 
-		services.AddScoped<IRequestHandler<LoginRequest, Outcome<LoginResponse>>, LoginHandler>();
-		services.AddScoped<IRequestHandler<RegisterRequest, Outcome<RegisterResponse>>, RegisterHandler>();
+		services.AddScoped<IRequestHandler<LoginRequest, Outcome<BoolResponse>>, LoginHandler>();
+		services.AddScoped<IRequestHandler<RegisterRequest, Outcome<BoolResponse>>, RegisterHandler>();
 		services.AddScoped<IRequestHandler<LogoutRequest, Outcome>, LogoutHandler>();
 
 		services.AddScoped<IAuthenticationService, AuthenticationService>();
@@ -1584,9 +1624,9 @@ public static class WebApplicationExtensions
 }
 ```
 
-- [ ] **Step 9: Wire the new projects into `Himinbjorg.slnx`**
+- [ ] **Step 9: Wire the new projects into `Himinbjorg.slnx` and `Bifrost.slnx`**
 
-Add under `/src/`:
+In `Himinbjorg/Himinbjorg.slnx`, add under `/src/`:
 ```xml
 		<Project Path="src/Identity.Web.Server/Identity.Web.Server.csproj" />
 ```
@@ -1595,15 +1635,15 @@ and under `/tests/`:
 		<Project Path="tests/Identity.Web.Server.Tests/Identity.Web.Server.Tests.csproj" />
 ```
 
-- [ ] **Step 10: Commit**
+In `Bifrost.slnx`, under the existing Himinbjörg `/src/` and `/tests/` solution folders (search for `Himinbjorg/src/Identity/Identity.csproj` to find them), add the same two entries with the `Himinbjorg/` path prefix. **Edit the file directly — do not `cd` into Bifrost's root, do not run any `git checkout`/`git branch` scoped to Bifrost.**
+
+- [ ] **Step 10: Stage (session policy: stage only, never commit)**
 
 ```bash
 cd Himinbjorg
 git add src/Identity.Web.Server tests/Identity.Web.Server.Tests Himinbjorg.slnx src/Identity/Identity.csproj
-git commit -m "feat: add Identity.Web.Server — LoginHandler/RegisterHandler/LogoutHandler and the gRPC forwarder"
 cd ..
 git add Bifrost.slnx
-git commit -m "chore: bump Himinbjorg submodule pointer"
 ```
 
 ---
@@ -1620,14 +1660,44 @@ git commit -m "chore: bump Himinbjorg submodule pointer"
 
 ## Task 5: Yggdrasil — `Hosting.Web.Server` (host the gRPC service)
 
-**Adds one thing beyond the code below — see spec addendum §9.5/§9.6/§9.7, not optional:** for Blazor Server's own in-process Razor components (which never touch gRPC at all, per §2's transport matrix) — a small gateway that calls the handler directly, gets `Outcome<BoolResponse>` back, and maps it to `AuthenticationResult` using Midgard's `Infrastructure.Web.Server/Mediator/Grpc/` transform (Task 3, already live) — no exception anywhere in this path. The gRPC interceptor itself is Midgard's, registered in this task via `MapNorseAuthenticationService()` (Task 4, Himinbjörg's own extension method) — Yggdrasil doesn't author any interceptor code, just calls what Task 4 already wired up. Read the spec addendum in full before implementing.
+Rewritten in full 2026-07-14 — see spec addendum §9.8 for a correction discovered while writing this task's actual code: the plan previously described a "Blazor Server gateway using Midgard's transform" that was never given a concrete shape, and wrongly implied Midgard would provide the `Outcome<T>`-to-`AuthenticationResult` mapping. It can't — that mapping requires knowing what `AuthenticationResult` is, a Heimdall type, and Midgard staying domain-agnostic is the whole point of building it there. §9.8 introduces the actual shared interface (`IAuthenticationGateway`, new addition to Heimdall's `AuthN.Components`) and this task's own concrete implementation of it — read §9.8 in full before implementing.
+
+**Autonomous-run note:** Himinbjörg's `Identity.Web.Server` (Task 4) is not live on NuGet — build/test with `-p:UseProjectReferences=true`.
 
 **Files:**
 - Modify: `Yggdrasil/src/Hosting.Web.Server/Hosting.Web.Server.csproj`
 - Modify: `Yggdrasil/src/Hosting.Web.Server/Program.cs`
+- Create: `Yggdrasil/src/Hosting.Web.Server/BlazorServerAuthenticationGateway.cs`
+- Modify: `Heimdall/src/AuthN.Components/AuthN.Components.csproj` *(no new package — just a new file)*
+- Create: `Heimdall/src/AuthN.Components/IAuthenticationGateway.cs`
 
 **Interfaces:**
-- Consumes: `AddNorseAuthenticationService(this IServiceCollection, string)`, `MapNorseAuthenticationService(this WebApplication)` (Task 4, `Norse.Identity.Web.Server`).
+- Consumes: `AddNorseAuthenticationService(this IServiceCollection, string)`, `MapNorseAuthenticationService(this WebApplication)` (Task 4, `Norse.Identity.Web.Server`); `IRequestHandler<,>`, `Outcome`, `Outcome<T>`, `BoolResponse` (Task 1, `Norse.Abstractions.Web.Server`); `LoginRequest`, `RegisterRequest`, `LogoutRequest`, `AuthenticationResult` (Task 2, `Norse.AuthN.Components`).
+- Produces: `Norse.AuthN.Components.IAuthenticationGateway` (new shared interface — first implementation is this task's); `Norse.Hosting.Web.Server.BlazorServerAuthenticationGateway : IAuthenticationGateway`, registered in DI.
+
+- [ ] **Step 0: Add `IAuthenticationGateway` to Heimdall's `AuthN.Components`**
+
+This is the interface both this task and Task 6 implement — lands in the shared contract project since Task 8's Razor components need to inject it uniformly regardless of host. No new package reference needed.
+
+`Heimdall/src/AuthN.Components/IAuthenticationGateway.cs`:
+```csharp
+namespace Norse.AuthN.Components;
+
+/// <summary>
+/// The only thing any Razor component injects — never <see cref="IAuthenticationService"/> directly.
+/// Two implementations exist, one per host: Yggdrasil's Hosting.Web.Server (Blazor Server, wraps the
+/// mediator handlers directly, no wire) and Hosting.Web.Client (WASM, wraps the real gRPC-Web client
+/// proxy). Both produce the same <see cref="AuthenticationResult"/> shape.
+/// </summary>
+public interface IAuthenticationGateway
+{
+	Task<AuthenticationResult> Login(LoginRequest request);
+	Task<AuthenticationResult> Register(RegisterRequest request);
+	Task<AuthenticationResult> Logout(LogoutRequest request);
+}
+```
+
+Build/test `Heimdall/tests/AuthN.Components.Tests` to confirm this compiles cleanly alongside the existing Task 2 work (no test needed for a plain interface declaration).
 
 - [ ] **Step 1: Add the `NorseRef`s and the reflection package**
 
@@ -1638,23 +1708,72 @@ In `Yggdrasil/src/Hosting.Web.Server/Hosting.Web.Server.csproj`, add to the exis
 		<NorseRef Include="Identity.Web.Server">
 			<Repo>Himinbjorg</Repo>
 		</NorseRef>
-		<NorseRef Include="AuthN.Components.FluentUI">
+		<NorseRef Include="AuthN.Components">
 			<Repo>Heimdall</Repo>
 		</NorseRef>
+		<NorseRef Include="Abstractions.Web.Server">
+			<Repo>Asgard</Repo>
+		</NorseRef>
 ```
-and add a new `ItemGroup`:
+(`AuthN.Components.FluentUI` is **not** referenced here — that's Task 8's Razor markup, not needed to host the gRPC service or the Blazor Server gateway.) Add a new `ItemGroup`:
 ```xml
 	<ItemGroup>
 		<PackageReference Include="Grpc.AspNetCore.Server.Reflection" Version="*" />
 	</ItemGroup>
 ```
 
-- [ ] **Step 2: Wire `Program.cs`**
+- [ ] **Step 2: Implement the Blazor Server gateway**
 
-In `Yggdrasil/src/Hosting.Web.Server/Program.cs`, add `using Norse.Identity.Web.Server;` to the top, and register the new service (this coexists with the existing `ApplicationUser`/`PlaceholderUserStore` wiring — that scaffold is untouched until the Task-7-and-later cutover plan):
+`Yggdrasil/src/Hosting.Web.Server/BlazorServerAuthenticationGateway.cs`:
+```csharp
+using Microsoft.AspNetCore.Http;
+using Norse.Abstractions.Web.Server.Mediator;
+using Norse.AuthN.Components;
+
+namespace Norse.Hosting.Web.Server;
+
+/// <summary>
+/// Blazor Server's own <see cref="IAuthenticationGateway"/> — calls the mediator handlers directly,
+/// in-process, no gRPC involved at all (per §2's transport matrix). Maps <c>Outcome&lt;T&gt;</c> to
+/// <see cref="AuthenticationResult"/> inline — this glue is realm-specific, not generic Midgard
+/// infrastructure (spec §9.8).
+/// </summary>
+internal sealed class BlazorServerAuthenticationGateway(
+	IRequestHandler<LoginRequest, Outcome<BoolResponse>> loginHandler,
+	IRequestHandler<RegisterRequest, Outcome<BoolResponse>> registerHandler,
+	IRequestHandler<LogoutRequest, Outcome> logoutHandler,
+	IHttpContextAccessor httpContextAccessor)
+	: IAuthenticationGateway
+{
+	public async Task<AuthenticationResult> Login(LoginRequest request)
+	{
+		var outcome = await loginHandler.Handle(request, httpContextAccessor.HttpContext!.RequestAborted);
+		return outcome.IsSuccess
+			? new AuthenticationResult { Succeeded = outcome.Value!.Value }
+			: new AuthenticationResult { Succeeded = false, Errors = outcome.Problem!.Errors };
+	}
+
+	public async Task<AuthenticationResult> Register(RegisterRequest request)
+	{
+		var outcome = await registerHandler.Handle(request, httpContextAccessor.HttpContext!.RequestAborted);
+		return new AuthenticationResult { Succeeded = outcome.IsSuccess, Errors = outcome.Problem?.Errors ?? new Dictionary<string, string[]>() };
+	}
+
+	public async Task<AuthenticationResult> Logout(LogoutRequest request)
+	{
+		var outcome = await logoutHandler.Handle(request, httpContextAccessor.HttpContext!.RequestAborted);
+		return new AuthenticationResult { Succeeded = outcome.IsSuccess, Errors = outcome.Problem?.Errors ?? new Dictionary<string, string[]>() };
+	}
+}
+```
+
+- [ ] **Step 3: Wire `Program.cs`**
+
+In `Yggdrasil/src/Hosting.Web.Server/Program.cs`, add `using Norse.Identity.Web.Server;` and `using Norse.AuthN.Components;` to the top, and register the new service (this coexists with the existing `ApplicationUser`/`PlaceholderUserStore` wiring — that scaffold is untouched until the Task-8-and-later cutover plan):
 ```csharp
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
+using Norse.AuthN.Components;
 using Norse.Hosting.Web.Components;
 using Norse.Hosting.Web.Server.Components;
 using Norse.Hosting.Web.Server.Components.Account;
@@ -1668,6 +1787,7 @@ Immediately after the existing `builder.Services.AddSingleton<IEmailSender<Appli
 var norseIdentityConnectionString = builder.Configuration.GetConnectionString("norse_identity")
 	?? throw new InvalidOperationException("Connection string 'norse_identity' is not configured.");
 builder.Services.AddNorseAuthenticationService(norseIdentityConnectionString);
+builder.Services.AddScoped<IAuthenticationGateway, BlazorServerAuthenticationGateway>();
 
 // Dev-only: lets Postman/grpcurl discover IAuthenticationService and call it directly, proving the
 // protobuf-net.Grpc wire lifecycle independent of the Blazor UI. Never mapped outside Development —
@@ -1685,33 +1805,37 @@ if (app.Environment.IsDevelopment())
 }
 ```
 
-- [ ] **Step 3: Manually verify the project still builds**
+- [ ] **Step 4: Manually verify the project still builds**
 
-Run: `dotnet build Yggdrasil/src/Hosting.Web.Server/Hosting.Web.Server.csproj`
-Expected: builds clean (0 errors) — there is no automated test for Program.cs wiring; Task 10's end-to-end check (extended below) is the real verification.
+Run: `dotnet build Yggdrasil/src/Hosting.Web.Server/Hosting.Web.Server.csproj -p:UseProjectReferences=true`
+Expected: builds clean (0 errors) — there is no automated test for `Program.cs` wiring; Task 10's end-to-end check is the real verification. `BlazorServerAuthenticationGateway`'s mapping logic is straightforward enough that a unit test isn't required here either — it's exercised for real by Task 10.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Stage (session policy: stage only, never commit)**
 
 ```bash
-cd Yggdrasil
-git add src/Hosting.Web.Server/Hosting.Web.Server.csproj src/Hosting.Web.Server/Program.cs
-git commit -m "feat: host Norse.Identity.Web.Server's gRPC endpoints (with dev-only reflection) in Hosting.Web.Server"
+cd Heimdall
+git add src/AuthN.Components/IAuthenticationGateway.cs
+cd ../Yggdrasil
+git add src/Hosting.Web.Server/Hosting.Web.Server.csproj src/Hosting.Web.Server/Program.cs src/Hosting.Web.Server/BlazorServerAuthenticationGateway.cs
 ```
 
 ---
 
 ## Task 6: Yggdrasil — `Hosting.Web.Client` (gRPC-Web client wiring)
 
-**Adds one thing beyond the code below — see spec addendum §9.6, not optional:** an `IAuthenticationService` gateway wrapping the real gRPC-Web client proxy, catching `RpcException`, decoding its `problem-bin` trailer via Midgard's `Infrastructure.Web.Client/Grpc/RpcExceptionExtensions.DecodeProblem()` (Task 3, already live), and mapping to `AuthenticationResult` — the same type Task 5's Blazor Server gateway produces, so `AuthN.Components.FluentUI`'s Razor components (Task 8) read exactly one result shape regardless of host, never a caught exception. Read the spec addendum in full before implementing.
+Rewritten in full 2026-07-14 alongside Task 5 — see spec addendum §9.8. This is `IAuthenticationGateway`'s second implementation, wrapping the real gRPC-Web client proxy. `RpcException` here is unavoidable (it's what the underlying client library itself throws) — this is the one place in this whole design a `try`/`catch` is genuine infrastructure, not an authored shortcut.
+
+**Autonomous-run note:** `Norse.AuthN.Components` (Task 2/5) is not live on NuGet — build with `-p:UseProjectReferences=true`. `Norse.Infrastructure.Web.Client` (Task 3) genuinely is live.
 
 **Files:**
 - Modify: `Yggdrasil/src/Hosting.Web.Client/Hosting.Web.Client.csproj`
 - Modify: `Yggdrasil/src/Hosting.Web.Client/Program.cs`
 - Create: `Yggdrasil/src/Hosting.Web.Client/BrowserCredentialsHandler.cs`
+- Create: `Yggdrasil/src/Hosting.Web.Client/WasmAuthenticationGateway.cs`
 
 **Interfaces:**
-- Consumes: `IAuthenticationService` (Task 2, `Norse.AuthN.Components`).
-- Produces: `IAuthenticationService` registered in the WASM container as a real gRPC-Web client proxy.
+- Consumes: `IAuthenticationService`, `IAuthenticationGateway`, `AuthenticationResult` (Task 2/5, `Norse.AuthN.Components`); `RpcExceptionExtensions.DecodeProblem` (Task 3, `Norse.Infrastructure.Web.Client`).
+- Produces: `Norse.Hosting.Web.Client.WasmAuthenticationGateway : IAuthenticationGateway`, registered in the WASM container; `IAuthenticationService` registered as a real gRPC-Web client proxy (internal to the gateway, not injected directly by any component).
 
 - [ ] **Step 1: Add package references and `NorseRef`s**
 
@@ -1727,10 +1851,11 @@ and add to the existing `NorseRef` `ItemGroup`:
 		<NorseRef Include="AuthN.Components">
 			<Repo>Heimdall</Repo>
 		</NorseRef>
-		<NorseRef Include="AuthN.Components.FluentUI">
-			<Repo>Heimdall</Repo>
+		<NorseRef Include="Infrastructure.Web.Client">
+			<Repo>Midgard</Repo>
 		</NorseRef>
 ```
+(`AuthN.Components.FluentUI` is **not** referenced here either — Task 8's concern, not the client wiring's.)
 
 - [ ] **Step 2: Implement the browser-credentials handler**
 
@@ -1756,7 +1881,67 @@ internal sealed class BrowserCredentialsHandler : DelegatingHandler
 }
 ```
 
-- [ ] **Step 3: Wire the client proxy in `Program.cs`**
+- [ ] **Step 3: Implement the WASM gateway**
+
+`Yggdrasil/src/Hosting.Web.Client/WasmAuthenticationGateway.cs`:
+```csharp
+using Grpc.Core;
+using Norse.AuthN.Components;
+using Norse.Infrastructure.Web.Client.Grpc;
+
+namespace Norse.Hosting.Web.Client;
+
+/// <summary>
+/// WASM's <see cref="IAuthenticationGateway"/> — wraps the real gRPC-Web client proxy. Catches
+/// <see cref="RpcException"/> (the underlying client library's own failure signal, not this platform's
+/// choice) and decodes it via Midgard's <see cref="RpcExceptionExtensions.DecodeProblem"/> — the one
+/// piece of this that's genuine shared infrastructure, since it only ever touches the wire trailer,
+/// never <see cref="AuthenticationResult"/> itself (spec §9.8).
+/// </summary>
+internal sealed class WasmAuthenticationGateway(IAuthenticationService authenticationService) : IAuthenticationGateway
+{
+	public async Task<AuthenticationResult> Login(LoginRequest request)
+	{
+		try
+		{
+			var result = await authenticationService.Login(request);
+			return new AuthenticationResult { Succeeded = result.Succeeded };
+		}
+		catch (RpcException ex)
+		{
+			return new AuthenticationResult { Succeeded = false, Errors = ex.DecodeProblem() };
+		}
+	}
+
+	public async Task<AuthenticationResult> Register(RegisterRequest request)
+	{
+		try
+		{
+			await authenticationService.Register(request);
+			return new AuthenticationResult { Succeeded = true };
+		}
+		catch (RpcException ex)
+		{
+			return new AuthenticationResult { Succeeded = false, Errors = ex.DecodeProblem() };
+		}
+	}
+
+	public async Task<AuthenticationResult> Logout(LogoutRequest request)
+	{
+		try
+		{
+			await authenticationService.Logout(request);
+			return new AuthenticationResult { Succeeded = true };
+		}
+		catch (RpcException ex)
+		{
+			return new AuthenticationResult { Succeeded = false, Errors = ex.DecodeProblem() };
+		}
+	}
+}
+```
+
+- [ ] **Step 4: Wire the client proxy and gateway in `Program.cs`**
 
 In `Yggdrasil/src/Hosting.Web.Client/Program.cs`, add:
 ```csharp
@@ -1774,20 +1959,18 @@ var authNChannel = GrpcChannel.ForAddress(builder.HostEnvironment.BaseAddress, n
 	HttpHandler = new GrpcWebHandler(new BrowserCredentialsHandler { InnerHandler = new HttpClientHandler() }),
 });
 builder.Services.AddSingleton(authNChannel.CreateGrpcService<IAuthenticationService>());
+builder.Services.AddScoped<IAuthenticationGateway, WasmAuthenticationGateway>();
 ```
 
-- [ ] **Step 4: Manually verify the project still builds**
+- [ ] **Step 5: Manually verify the project still builds**
 
-Run: `dotnet build Yggdrasil/src/Hosting.Web.Client/Hosting.Web.Client.csproj`
+Run: `dotnet build Yggdrasil/src/Hosting.Web.Client/Hosting.Web.Client.csproj -p:UseProjectReferences=true`
 Expected: builds clean (0 errors). The actual cookie round-trip through the browser can only be confirmed by running the app (Task 10).
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Stage (session policy: stage only, never commit)**
 
 ```bash
-git add src/Hosting.Web.Client/Hosting.Web.Client.csproj src/Hosting.Web.Client/Program.cs src/Hosting.Web.Client/BrowserCredentialsHandler.cs
-git commit -m "feat: wire a gRPC-Web IAuthenticationService client proxy in Hosting.Web.Client"
-cd ..
-git add Bifrost.slnx
+git add src/Hosting.Web.Client/Hosting.Web.Client.csproj src/Hosting.Web.Client/Program.cs src/Hosting.Web.Client/BrowserCredentialsHandler.cs src/Hosting.Web.Client/WasmAuthenticationGateway.cs
 ```
 
 ---
@@ -1796,13 +1979,15 @@ git add Bifrost.slnx
 
 **STOP. Do not start Task 7 until this gate is cleared.**
 
-1. Push the Yggdrasil commits (Tasks 4 and 5); open a PR against `master`; confirm CI is green.
+1. Push the Yggdrasil commits (Tasks 5 and 6, same branch — `Hosting.Web.Server` + `Hosting.Web.Client`); open a PR against `master`; confirm CI is green.
 2. Merge the PR. `Hosting.Web.Server`/`Hosting.Web.Client` are deployables, not NuGet-published libraries — no version tag/publish step applies here, unlike the library-producing realms above.
-3. Push the Bifrost submodule-pointer commit.
+3. Push the Bifrost submodule-pointer commit (`master`, no branch — pointer bumps only, per `[[feedback_bifrost-stays-on-master]]`).
 
 ---
 
 ## Task 7: Bifrost — wire `Hosting.Web.Server` into the Aspire AppHost
+
+**This is the one task in this whole plan where a Bifrost feature branch is actually warranted** — `AppHost.cs` is Bifrost's own code (`Orchestration.AppHost`), not a submodule-pointer bump or a `.slnx` wiring change. Per `[[feedback_bifrost-stays-on-master]]`'s own stated carve-out ("unless the feature being built genuinely lives in Bifrost"), branch here.
 
 **Files:**
 - Modify: `src/Orchestration.AppHost/AppHost.cs`
@@ -1825,21 +2010,22 @@ builder
 
 - [ ] **Step 2: Manually verify the AppHost builds and the dashboard shows the new resource**
 
-Run: `dotnet run --project src/Orchestration.AppHost`
+Run: `dotnet run --project src/Orchestration.AppHost -p:UseProjectReferences=true` (autonomous-run note: `Hosting.Web.Server` transitively needs Heimdall's/Himinbjörg's not-yet-published packages)
 Expected: the Aspire dashboard shows `web` alongside `pg-primary`, `pg-replica`, and `migrations`; `web` starts only after `migrations` exits 0.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 3: Stage (session policy: stage only, never commit)**
 
 ```bash
 git add src/Orchestration.AppHost/AppHost.cs
-git commit -m "feat: wire Hosting.Web.Server into the Aspire composition against norse_identity"
 ```
 
 ---
 
 ## Task 8: Heimdall — `AuthN.Components.FluentUI` (the Razor components)
 
-**Supersedes the code below — see spec addendum §9.6.** `Login.razor`/`Register.razor`/`Logout.razor` read `AuthenticationResult { bool Succeeded; IReadOnlyDictionary<string,string[]> Errors }` from whichever host-specific gateway they inject (Task 4's Blazor Server gateway or Task 6's WASM gateway) — no `try`/`catch` anywhere, the component never sees `Outcome<T>`, `RpcException`, or any exception at all, that's boxed below it in both hosts. `Errors[""]` (empty-string key) renders as a model-level message in the same `ValidationSummary`/`ValidationMessageStore` as field-keyed errors — `LockedOut`/`NotAllowed`/`Conflict` all use this convention, per spec §9.6. Read the spec addendum in full before implementing.
+Rewritten in full 2026-07-14 — the previous version predates `IAuthenticationGateway`/`AuthenticationResult` entirely and was never reconciled with spec §9.6/§9.8. This is also the first place the `Errors[""]` model-level convention actually gets consumed — working out the concrete `ValidationMessageStore` wiring is new design, not just a rename, since nothing before this task ever needed to populate one from a plain dictionary. Read spec §9.6/§9.8 in full before implementing.
+
+**One non-obvious asymmetry, worth understanding before writing `Login.razor`:** `Login`'s anti-enumeration collapse (spec §9.3) means a failed login can have `Succeeded = false` **and an empty `Errors` dictionary** — there's deliberately nothing more specific to say for a wrong username/password. `Register`/`Logout` never produce that shape — every one of their failures has a populated `Errors` dictionary (`Conflict`/`Validation`). `Login.razor`'s handler needs an explicit fallback for the empty-`Errors` case; `Register.razor` doesn't.
 
 **Files:**
 - Create: `Heimdall/src/AuthN.Components.FluentUI/AuthN.Components.FluentUI.csproj`
@@ -1850,7 +2036,7 @@ git commit -m "feat: wire Hosting.Web.Server into the Aspire composition against
 - Modify: `Bifrost.slnx`
 
 **Interfaces:**
-- Consumes: `IAuthenticationService`, `LoginRequest`, `LoginResponse`, `LoginStatus`, `RegisterRequest`, `LogoutRequest` (Task 2); `ErrorCategory` (Task 1).
+- Consumes: `IAuthenticationGateway`, `LoginRequest`, `RegisterRequest`, `LogoutRequest`, `AuthenticationResult`, `LoginRequestValidator`, `RegisterRequestValidator` (Task 2/5, `Norse.AuthN.Components`). **Never** `IAuthenticationService`, `Outcome<T>`, or `ErrorCategory` directly — all boxed below the gateway, per §9.8.
 
 No new automated tests in this task — Razor component behavior is verified by the manual end-to-end check in Task 10; this task is TDD-exempt only in the narrow sense that bUnit component tests are deferred to the `IAccountService` follow-on plan once the pattern's proven here, consistent with keeping this bootstrap slim.
 
@@ -1860,7 +2046,7 @@ No new automated tests in this task — Razor component behavior is verified by 
 ```xml
 <Project Sdk="Microsoft.NET.Sdk.Razor">
 	<PropertyGroup>
-		<Description>Norse.AuthN.Components.FluentUI: Login/Register/Logout Razor components, FluentUI Blazor v5, wired against AuthN.Components' gRPC contract.</Description>
+		<Description>Norse.AuthN.Components.FluentUI: Login/Register/Logout Razor components, FluentUI Blazor v5, wired against AuthN.Components' IAuthenticationGateway — never IAuthenticationService directly, never Outcome&lt;T&gt;, never a caught exception (spec §9.6/§9.8).</Description>
 	</PropertyGroup>
 	<ItemGroup>
 		<PackageReference Include="Microsoft.FluentUI.AspNetCore.Components" Version="5.*" />
@@ -1880,60 +2066,67 @@ No new automated tests in this task — Razor component behavior is verified by 
 @using Microsoft.AspNetCore.Components.Web
 @using Microsoft.FluentUI.AspNetCore.Components
 @using Blazored.FluentValidation
-@using Norse.Abstractions.Mediator
 @using Norse.AuthN.Components
 ```
 
 - [ ] **Step 3: `Login.razor`**
 
+Uses a manually-constructed `EditContext`/`ValidationMessageStore` (not the simpler `Model="..."` form) specifically so `AuthenticationResult.Errors` can populate it after the async call returns — `<ValidationSummary />` (the standard framework component, not a FluentUI-specific one; it reads any `EditContext`'s message store regardless of which component library styled the form around it) then renders every message, field-keyed or model-level, in one place.
+
 `Heimdall/src/AuthN.Components.FluentUI/Login.razor`:
 ```razor
 @page "/authn/login"
 @rendermode InteractiveAuto
-@inject IAuthenticationService AuthenticationService
+@inject IAuthenticationGateway AuthenticationGateway
 @inject NavigationManager Navigation
 
 <PageTitle>Log in</PageTitle>
 
 <h1>Log in</h1>
 
-<EditForm Model="_request" OnValidSubmit="HandleLoginAsync" FormName="authn-login">
+<EditForm EditContext="_editContext" OnValidSubmit="HandleLoginAsync" FormName="authn-login">
 	<FluentValidationValidator />
+	<ValidationSummary />
 	<FluentTextField @bind-Value="_request.Email" Label="Email" Required="true" />
 	<FluentTextField @bind-Value="_request.Password" TextFieldType="TextFieldType.Password" Label="Password" Required="true" />
 	<FluentCheckbox @bind-Value="_request.RememberMe" Label="Remember me" />
 	<FluentButton Type="ButtonType.Submit" Appearance="Appearance.Accent">Log in</FluentButton>
 </EditForm>
 
-@if (_errorMessage is not null)
-{
-	<FluentMessageBar Intent="MessageIntent.Error">@_errorMessage</FluentMessageBar>
-}
-
 @code {
-	private LoginRequest _request = new() { Email = "", Password = "" };
-	private string? _errorMessage;
+	readonly LoginRequest _request = new() { Email = "", Password = "" };
+	EditContext _editContext = default!;
+	ValidationMessageStore _messageStore = default!;
 
-	private async Task HandleLoginAsync()
+	protected override void OnInitialized()
 	{
-		_errorMessage = null;
-		var outcome = await AuthenticationService.Login(_request);
+		_editContext = new EditContext(_request);
+		_messageStore = new ValidationMessageStore(_editContext);
+	}
 
-		if (!outcome.IsSuccess)
+	async Task HandleLoginAsync()
+	{
+		_messageStore.Clear();
+		var result = await AuthenticationGateway.Login(_request);
+
+		if (!result.Succeeded)
 		{
-			_errorMessage = outcome.Problem!.Category switch
+			// Succeeded=false with an EMPTY Errors dictionary is the deliberate anti-enumeration
+			// collapse (spec §9.3) — wrong username and wrong password both land here with nothing
+			// more specific the server is willing to say. Synthesize one generic message for that
+			// case; LockedOut/NotAllowed/Validation always arrive with Errors already populated.
+			var errors = result.Errors.Count > 0
+				? result.Errors
+				: new Dictionary<string, string[]> { [""] = ["Invalid email or password."] };
+
+			foreach (var (field, messages) in errors)
 			{
-				ErrorCategory.LockedOut => "This account is locked out. Try again later.",
-				ErrorCategory.InvalidCredentials => "Invalid email or password.",
-				ErrorCategory.NotAllowed => "Sign-in is not allowed for this account.",
-				_ => "Something went wrong. Please try again.",
-			};
-			return;
-		}
+				var identifier = new FieldIdentifier(_request, field);
+				foreach (var message in messages)
+					_messageStore.Add(identifier, message);
+			}
 
-		if (outcome.Value!.Status == LoginStatus.RequiresTwoFactor)
-		{
-			_errorMessage = "Two-factor authentication is required but not yet supported here.";
+			_editContext.NotifyValidationStateChanged();
 			return;
 		}
 
@@ -1948,41 +2141,49 @@ No new automated tests in this task — Razor component behavior is verified by 
 ```razor
 @page "/authn/register"
 @rendermode InteractiveAuto
-@inject IAuthenticationService AuthenticationService
+@inject IAuthenticationGateway AuthenticationGateway
 @inject NavigationManager Navigation
 
 <PageTitle>Register</PageTitle>
 
 <h1>Register</h1>
 
-<EditForm Model="_request" OnValidSubmit="HandleRegisterAsync" FormName="authn-register">
+<EditForm EditContext="_editContext" OnValidSubmit="HandleRegisterAsync" FormName="authn-register">
 	<FluentValidationValidator />
+	<ValidationSummary />
 	<FluentTextField @bind-Value="_request.Email" Label="Email" Required="true" />
 	<FluentTextField @bind-Value="_request.Password" TextFieldType="TextFieldType.Password" Label="Password" Required="true" />
 	<FluentButton Type="ButtonType.Submit" Appearance="Appearance.Accent">Register</FluentButton>
 </EditForm>
 
-@if (_errorMessage is not null)
-{
-	<FluentMessageBar Intent="MessageIntent.Error">@_errorMessage</FluentMessageBar>
-}
-
 @code {
-	private RegisterRequest _request = new() { Email = "", Password = "" };
-	private string? _errorMessage;
+	readonly RegisterRequest _request = new() { Email = "", Password = "" };
+	EditContext _editContext = default!;
+	ValidationMessageStore _messageStore = default!;
 
-	private async Task HandleRegisterAsync()
+	protected override void OnInitialized()
 	{
-		_errorMessage = null;
-		var outcome = await AuthenticationService.Register(_request);
+		_editContext = new EditContext(_request);
+		_messageStore = new ValidationMessageStore(_editContext);
+	}
 
-		if (!outcome.IsSuccess)
+	async Task HandleRegisterAsync()
+	{
+		_messageStore.Clear();
+		var result = await AuthenticationGateway.Register(_request);
+
+		if (!result.Succeeded)
 		{
-			_errorMessage = outcome.Problem!.Category switch
+			// Register never produces an empty Errors dictionary on failure — Conflict/Validation are
+			// always populated (spec §9.3), unlike Login's anti-enumeration collapse. No fallback needed.
+			foreach (var (field, messages) in result.Errors)
 			{
-				ErrorCategory.Conflict => "That email address is already registered.",
-				_ => "Something went wrong. Please try again.",
-			};
+				var identifier = new FieldIdentifier(_request, field);
+				foreach (var message in messages)
+					_messageStore.Add(identifier, message);
+			}
+
+			_editContext.NotifyValidationStateChanged();
 			return;
 		}
 
@@ -1997,13 +2198,13 @@ No new automated tests in this task — Razor component behavior is verified by 
 ```razor
 @page "/authn/logout"
 @rendermode InteractiveAuto
-@inject IAuthenticationService AuthenticationService
+@inject IAuthenticationGateway AuthenticationGateway
 @inject NavigationManager Navigation
 
 @code {
 	protected override async Task OnInitializedAsync()
 	{
-		await AuthenticationService.Logout(new LogoutRequest());
+		await AuthenticationGateway.Logout(new LogoutRequest());
 		Navigation.NavigateTo("/", forceLoad: true);
 	}
 }
@@ -2011,7 +2212,7 @@ No new automated tests in this task — Razor component behavior is verified by 
 
 - [ ] **Step 6: Manually verify the project builds**
 
-Run: `dotnet build Heimdall/src/AuthN.Components.FluentUI/AuthN.Components.FluentUI.csproj`
+Run: `dotnet build Heimdall/src/AuthN.Components.FluentUI/AuthN.Components.FluentUI.csproj -p:UseProjectReferences=true`
 Expected: builds clean (0 errors).
 
 - [ ] **Step 7: Wire into `Heimdall.slnx` and `Bifrost.slnx`**
@@ -2026,15 +2227,13 @@ In `Bifrost.slnx`, add to the `/AuthN/src/` folder created in Task 2:
 		<Project Path="Heimdall/src/AuthN.Components.FluentUI/AuthN.Components.FluentUI.csproj" />
 ```
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 8: Stage (session policy: stage only, never commit)**
 
 ```bash
 cd Heimdall
 git add src/AuthN.Components.FluentUI Heimdall.slnx
-git commit -m "feat: add AuthN.Components.FluentUI — Login/Register/Logout Razor components"
 cd ..
 git add Bifrost.slnx
-git commit -m "chore: wire Heimdall's AuthN.Components.FluentUI into Bifrost.slnx"
 ```
 
 ---
@@ -2058,13 +2257,16 @@ Task 9 needs the published `Norse.AuthN.Components.FluentUI` package — that's 
 - Create: `Bragi/src/DesignSystem.Stories/Authentication/Login.stories.razor`
 - Create: `Bragi/src/DesignSystem.Stories/Authentication/Register.stories.razor`
 - Create: `Bragi/src/DesignSystem.Stories/Authentication/Logout.stories.razor`
+- Create: `Yggdrasil/src/Hosting.Stories.Client/FakeAuthenticationGateway.cs`
+- Modify: `Yggdrasil/src/Hosting.Stories.Client/Program.cs`
 
 **Interfaces:**
-- Consumes: `Login`, `Register`, `Logout` (Task 8, `Norse.AuthN.Components.FluentUI`, now published per the ship gate above).
+- Consumes: `IAuthenticationGateway`, `LoginRequest`, `RegisterRequest`, `LogoutRequest`, `AuthenticationResult` (Task 5/Task 2, `Norse.AuthN.Components`).
+- Consumes: `Login`, `Register`, `Logout` (Task 8, `Norse.AuthN.Components.FluentUI`).
 
 This is content, not behavior — Bragi is exempt from the brainstorm→spec→plan→TDD cycle (`Bragi/CLAUDE.md` §1), so there's no failing-test step here. Bragi is its own composition layer purely for Razor components that render with **no server context** — no real backend call, no `HttpContext`, nothing but the component and its inputs. Story files live directly under `DesignSystem.Stories/`, one subfolder per realm-category matching each story's `[Stories("Category/Name")]` attribute — no intermediate `Stories/` folder, that would just be redundant with the project's own name. As of this plan, that convention is: Asgard's headless primitives (`Abstractions.Components`) live under `DesignSystem.Stories/Primitives/` — the existing `Loader.stories.razor` moved there (from a flat `DesignSystem.Stories/Stories/` layout that predates this convention) as part of adopting it — and Heimdall's `AuthN.Components.FluentUI` components live under `DesignSystem.Stories/Authentication/` (the folder name is the domain word, not the realm/namespace abbreviation — "Authentication," not "AuthN"). Every future realm's stories get their own subfolder the same way; there is no ship gate for this task — nothing later in this plan consumes `Norse.DesignSystem.Stories` — but it still goes through the normal PR/merge Buvy runs by hand, same as any other repo change.
 
-**`Login`/`Register` inject `IAuthenticationService`, which normally calls the real gRPC backend — that's a server context, and Bragi's stories don't get one.** Decided this session: the story host mocks the service client-side rather than excluding these components from the catalog or splitting them into presentational sub-components. `Yggdrasil/src/Hosting.Stories.Client` (the DI composition root — Bragi itself stays markup/story-wiring only, per its charter) registers a `FakeAuthenticationService` returning canned `Outcome`/`Outcome<T>` results, so `Login.razor`/`Register.razor`/`Logout.razor` render and are genuinely interactive in the catalog without ever reaching Himinbjörg.
+**`Login`/`Register`/`Logout` (Task 8) each inject `IAuthenticationGateway`, never `IAuthenticationService` directly (spec §9.8) — the gateway is what needs a fake here, not the mediator/gRPC service underneath it.** `Yggdrasil/src/Hosting.Stories.Client` (the DI composition root — Bragi itself stays markup/story-wiring only, per its charter) registers a `FakeAuthenticationGateway : IAuthenticationGateway` returning canned `AuthenticationResult` values directly — no `Outcome<T>`, no gRPC, no `CallContext` anywhere in this fake, since none of that vocabulary reaches the component layer even in the real implementations. This is simpler than the pre-`IAuthenticationGateway` design assumed: one interface, one client-safe result type, no channel to simulate.
 
 - [ ] **Step 1: Add the `NorseRef` to `AuthN.Components.FluentUI`**
 
@@ -2075,37 +2277,34 @@ This is content, not behavior — Bragi is exempt from the brainstorm→spec→p
 </NorseRef>
 ```
 
-- [ ] **Step 2: Yggdrasil — add `FakeAuthenticationService` to the story host**
+- [ ] **Step 2: Yggdrasil — add `FakeAuthenticationGateway` to the story host**
 
-`Yggdrasil/src/Hosting.Stories.Client/FakeAuthenticationService.cs`:
+`Yggdrasil/src/Hosting.Stories.Client/FakeAuthenticationGateway.cs`:
 ```csharp
-using Norse.Abstractions.Mediator;
 using Norse.AuthN.Components;
-using ProtoBuf.Grpc;
 
 namespace Norse.Hosting.Stories.Client;
 
 /// <summary>
-/// Story-host-only stand-in for <see cref="IAuthenticationService"/> — never calls Himinbjörg. Exists
-/// so Bragi's Login/Register/Logout stories render and are interactive with no server context, per
-/// Bragi's charter (content/markup only, no real backend calls from the catalog).
+/// Story-host-only stand-in for <see cref="IAuthenticationGateway"/> — never calls Himinbjörg, never
+/// touches gRPC. Exists so Bragi's Login/Register/Logout stories render and are interactive with no
+/// server context, per Bragi's charter (content/markup only, no real backend calls from the catalog).
 /// </summary>
-sealed class FakeAuthenticationService : IAuthenticationService
+sealed class FakeAuthenticationGateway : IAuthenticationGateway
 {
-	public Task<Outcome<LoginResponse>> Login(LoginRequest request, CallContext context = default) =>
-		Task.FromResult(Outcome<LoginResponse>.Ok(new LoginResponse { Status = LoginStatus.Succeeded }));
+	static readonly AuthenticationResult Success = new() { Succeeded = true };
 
-	public Task<Outcome<RegisterResponse>> Register(RegisterRequest request, CallContext context = default) =>
-		Task.FromResult(Outcome<RegisterResponse>.Ok(new RegisterResponse { UserId = Guid.NewGuid() }));
+	public Task<AuthenticationResult> Login(LoginRequest request) => Task.FromResult(Success);
 
-	public Task<Outcome> Logout(LogoutRequest request, CallContext context = default) =>
-		Task.FromResult(Outcome.Ok());
+	public Task<AuthenticationResult> Register(RegisterRequest request) => Task.FromResult(Success);
+
+	public Task<AuthenticationResult> Logout(LogoutRequest request) => Task.FromResult(Success);
 }
 ```
 
-In `Yggdrasil/src/Hosting.Stories.Client/Program.cs`, register it ahead of `BlazingStoryApp`'s own service registration:
+In `Yggdrasil/src/Hosting.Stories.Client/Program.cs`, register it ahead of `builder.Build()`:
 ```csharp
-builder.Services.AddScoped<IAuthenticationService, FakeAuthenticationService>();
+builder.Services.AddScoped<IAuthenticationGateway, FakeAuthenticationGateway>();
 ```
 
 - [ ] **Step 3: Write the stories**
@@ -2127,19 +2326,22 @@ builder.Services.AddScoped<IAuthenticationService, FakeAuthenticationService>();
 
 `Bragi/src/DesignSystem.Stories/Authentication/Register.stories.razor` and `Logout.stories.razor` follow the same shape, `@attribute [Stories("Authentication/Register")]` / `[Stories("Authentication/Logout")]` respectively.
 
-- [ ] **Step 3: Manually verify the story host builds and renders**
+- [ ] **Step 4: Manually verify the story host builds and renders**
 
-Run: `dotnet build Bragi/src/DesignSystem.Stories/DesignSystem.Stories.csproj`
+Run: `dotnet build Bragi/src/DesignSystem.Stories/DesignSystem.Stories.csproj -p:UseProjectReferences=true`
 Expected: builds clean (0 errors).
 
-Run: `dotnet run --project Yggdrasil/src/Hosting.Stories.Client` (or via the Aspire AppHost once `Hosting.Stories.Client` is composed there), open the catalog. Expected: `Authentication/Login`, `Authentication/Register`, `Authentication/Logout` all appear (alongside `Primitives/Loader`) and render without a DI fault.
+Run: `dotnet build Yggdrasil/src/Hosting.Stories.Client -p:UseProjectReferences=true`, then `dotnet run --project Yggdrasil/src/Hosting.Stories.Client --no-build` (or via the Aspire AppHost once `Hosting.Stories.Client` is composed there), open the catalog. Expected: `Authentication/Login`, `Authentication/Register`, `Authentication/Logout` all appear (alongside `Primitives/Loader`) and render without a DI fault. Submitting `Login`'s form should show the success path (`Succeeded = true` navigates away) since the fake always succeeds — that's expected; the fake proves the component renders and wires up, not failure-path behavior (Task 10 proves that against the real backend).
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 cd Bragi
 git add src/DesignSystem.Stories/DesignSystem.Stories.csproj src/DesignSystem.Stories/Authentication
 git commit -m "feat: add Login/Register/Logout stories for Heimdall's AuthN.Components.FluentUI"
+cd ../Yggdrasil
+git add src/Hosting.Stories.Client/FakeAuthenticationGateway.cs src/Hosting.Stories.Client/Program.cs
+git commit -m "feat: register FakeAuthenticationGateway in the story host"
 ```
 
 ---
@@ -2161,23 +2363,24 @@ Open the `web` resource's browser endpoint before any client-side interactivity 
 
 With the same browser tab still open (WASM has now hydrated per `InteractiveAuto`), log out via `/authn/logout`, then log back in at `/authn/login` again. Expected: same successful redirect; in the browser's Network tab, confirm the `Login` call is now a `POST` to a gRPC-Web content-type endpoint (`application/grpc-web` or `application/grpc-web-text`) rather than a normal form post, and that the response carries a `Set-Cookie` header the browser accepted (confirmed by the subsequent authenticated navigation succeeding).
 
-- [ ] **Step 4: Verify a locked-out / invalid-credentials path surfaces correctly**
+- [ ] **Step 4: Verify a locked-out / not-allowed path surfaces its own distinct message**
 
-At `/authn/login`, submit the wrong password five times for the account created in Step 2. Expected: the fifth attempt (or the first attempt past Identity's configured lockout threshold) shows the "This account is locked out" message from `Login.razor`'s `ErrorCategory.LockedOut` branch, not an unhandled exception.
+At `/authn/login`, submit the wrong password enough times to trip Identity's configured lockout threshold for the account created in Step 2. Expected: the triggering attempt shows a distinct **"This account is locked out. Try again later or reset your password."** message (`LoginHandler`'s `ErrorCategory.LockedOut` branch, populated in `Problem.Errors[""]` — see the ledger's post-Task-8 fix), not an unhandled exception and not the generic "Invalid email or password." message. Then, separately, submit a wrong password once (before tripping lockout) against a *different* still-good account. Expected: the generic **"Invalid email or password."** message (`Login.razor`'s own synthesized fallback for the anti-enumeration empty-`Errors` case) — confirming the two paths are now visibly different in the UI, which is the entire point of keeping `LockedOut` distinguishable.
 
 - [ ] **Step 5: Verify the raw protobuf lifecycle in Postman via gRPC reflection**
 
-This exercises `IAuthenticationService` directly over the wire — no Blazor UI, no cookie jar, nothing but the gRPC contract itself. It's the cleanest proof that `Identity.Web.Server`'s forwarder and handlers are correct independent of any client concern.
+This exercises `IAuthenticationService` directly over the wire — no Blazor UI, no cookie jar, nothing but the gRPC contract itself. It's the cleanest proof that `Identity.Web.Server`'s forwarder and handlers are correct independent of any client concern. Unlike the pre-`IAuthenticationGateway` design this plan originally assumed, there is no `isSuccess`/`value`/`problem` envelope on the wire — `Register`/`Logout` return nothing on success and an `RpcException` (with a `problem-bin` trailer) on failure; only `Login` has a real success payload (`LoginResult { succeeded: bool }`), and even `Login` throws an `RpcException` for `Validation`/`LockedOut`/`NotAllowed` rather than returning a JSON error body — only the raw wrong-credentials case returns `{ "succeeded": false }` as a normal 200-shaped response (spec §9.3's anti-enumeration collapse; see `Midgard/src/Infrastructure.Web.Server/Mediator/Grpc/ProblemExtensions.cs` for the exact `ErrorCategory` → `StatusCode` mapping: `Validation` → `InvalidArgument`, `Conflict` → `AlreadyExists`, `LockedOut`/`NotAllowed` → `PermissionDenied`).
 
 1. In Postman, create a new gRPC request against the `web` resource's endpoint (check the Aspire dashboard for the exact `https://localhost:{port}` address).
 2. Use "Server reflection" as the import method (not "Import a .proto file") — Postman calls the reflection service Task 5 wired and lists `Norse.AuthN.Components.IAuthenticationService` with its three methods.
-3. Call `Register` with a JSON body `{ "email": "postman-test@example.com", "password": "correct-horse-battery" }`. Expected: a response shaped like `{ "isSuccess": true, "value": { "userId": "<a real guid>" } }`.
-4. Call `Register` again with the **same** body. Expected: `{ "isSuccess": false, "problem": { "category": 3, "errors": { ... } } }` — `3` is `ErrorCategory.Conflict` (§1 of Task 1's `ErrorCategory` enum), proving `RegisterHandler`'s duplicate-email path is reachable over the real wire, not just in the unit test from Task 4.
-5. Call `Login` with the same credentials. Expected: `{ "isSuccess": true, "value": { "status": 1 } }` — `1` is `LoginStatus.Succeeded`.
-6. Call `Login` with the wrong password five times in a row. Expected: the response's `problem.category` becomes `4` (`ErrorCategory.LockedOut`) once Identity's lockout threshold is hit — the same behavior confirmed through the browser in Step 4, now confirmed at the protocol level with nothing else in the way.
-7. Call `Logout` with an empty body (`{}`). Expected: `{ "isSuccess": true }`. Note that a bare Postman gRPC call carries no cookie jar by default — this call proves the RPC completes cleanly, not that it cleared a specific browser session; Steps 2–4 above are what prove the cookie side of the lifecycle.
+3. Call `Register` with a JSON body `{ "email": "postman-test@example.com", "password": "correct-horse-battery" }`. Expected: the call completes with an **empty response body** (`Register` returns `Task`, not `Task<T>`) and gRPC status `OK`.
+4. Call `Register` again with the **same** body. Expected: the call **fails** with gRPC status `AlreadyExists` (`StatusCode.AlreadyExists`) and a status detail of `"Conflict"` (the `ErrorCategory` name, per `ToRpcException`'s `Status(status, problem.Category.ToString())`) — check Postman's trailers/metadata panel for a `problem-bin` binary trailer containing the serialized errors dictionary. This proves `RegisterHandler`'s duplicate-email path is reachable over the real wire, not just in the unit test from Task 4.
+5. Call `Login` with the same credentials. Expected: a normal `OK` response with body `{ "succeeded": true }`.
+6. Call `Login` with the wrong password once. Expected: still `OK` status, but body `{ "succeeded": false }` — this is the deliberate anti-enumeration case, not an error at the protocol level.
+7. Call `Login` with the wrong password repeatedly until Identity's lockout threshold trips. Expected: the triggering call **fails** with gRPC status `PermissionDenied` and status detail `"LockedOut"`, with a `problem-bin` trailer whose decoded JSON is `{"": ["This account is locked out. Try again later or reset your password."]}` — the same message confirmed through the browser in Step 4, now confirmed at the protocol level with nothing else in the way.
+8. Call `Logout` with an empty body (`{}`). Expected: empty response body, gRPC status `OK`. Note that a bare Postman gRPC call carries no cookie jar by default — this call proves the RPC completes cleanly, not that it cleared a specific browser session; Steps 2–4 of the browser walkthrough above are what prove the cookie side of the lifecycle.
 
-If reflection doesn't list the service, don't guess — confirm `AddGrpcReflection()`/`MapGrpcReflectionService()` actually ran (`app.Environment.IsDevelopment()` must be true) before assuming Postman or the contract is at fault.
+If reflection doesn't list the service, don't guess — confirm `AddGrpcReflection()`/`MapGrpcReflectionService()` actually ran (`app.Environment.IsDevelopment()` must be true; both are already wired in `Hosting.Web.Server/Program.cs`) before assuming Postman or the contract is at fault.
 
 - [ ] **Step 6: Record the result**
 
