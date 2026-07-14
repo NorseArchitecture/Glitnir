@@ -22,8 +22,8 @@
 - `[DataContract]`/`[DataMember(Order = N)]` on every wire-crossing type (`System.Runtime.Serialization`, BCL — no extra package needed for these two attributes specifically).
 - `[ServiceContract]`/`[OperationContract]` come from the `protobuf-net.Grpc` package (brings in `System.ServiceModel.Primitives` transitively).
 - Every `[OperationContract]` method has a matching `IRequestHandler<TRequest, TResponse>` — no business logic in the gRPC service class itself, per `Heimdall/specs/2026-07-13-authn-identity-split-design.md` §0/§3.
-- `LoginRequest`/`RegisterRequest` deliberately use mutable (`get; set;`) `[DataMember]` properties, not `init` — they are direct `EditForm` binding targets in Task 6, and introducing a parallel mutable form-model type purely to preserve `init`-only wire records would duplicate the validator for no benefit at this scale. Every other record in this plan (`LoginResponse`, `RegisterResponse`, `LogoutRequest`, `Outcome`, `Outcome<T>`, `Problem`) stays `init`-only as usual.
-- **Every Razor component this plan ships gets a matching Bragi story in the same slice** — a platform-wide rule as of 2026-07-13 (`[[feedback_every-component-needs-a-bragi-story]]`), not specific to AuthN. Two decisions travel together whenever a `.razor` file is created anywhere on the platform: (1) headless-vs-skinned first, per `Platform/specs/2026-07-11-blazor-component-architecture-design.md` Decision 1 — does the markup reference a specific design-system package, or does it stay in `.Components` unstyled; (2) regardless of that answer, a `.stories.razor` catalog page lands in Bragi (`Norse.DesignSystem.Stories`) content-only, no exceptions. See Task 8 below, added specifically to apply this to `Login.razor`/`Register.razor`/`Logout.razor`. Bragi ships no runtime of its own — the story *content* lives there; the app that renders it (`Hosting.Stories.Client`/`Hosting.Stories.Server`) is Yggdrasil's.
+- `LoginRequest`/`RegisterRequest` deliberately use mutable (`get; set;`) `[DataMember]` properties, not `init` — they are direct `EditForm` binding targets in Task 7, and introducing a parallel mutable form-model type purely to preserve `init`-only wire records would duplicate the validator for no benefit at this scale. Every other record in this plan (`LoginResponse`, `RegisterResponse`, `LogoutRequest`, `Outcome`, `Outcome<T>`, `Problem`) stays `init`-only as usual.
+- **Every Razor component this plan ships gets a matching Bragi story in the same slice** — a platform-wide rule as of 2026-07-13 (`[[feedback_every-component-needs-a-bragi-story]]`), not specific to AuthN. Two decisions travel together whenever a `.razor` file is created anywhere on the platform: (1) headless-vs-skinned first, per `Platform/specs/2026-07-11-blazor-component-architecture-design.md` Decision 1 — does the markup reference a specific design-system package, or does it stay in `.Components` unstyled; (2) regardless of that answer, a `.stories.razor` catalog page lands in Bragi (`Norse.DesignSystem.Stories`) content-only, no exceptions. See Task 9 below, added specifically to apply this to `Login.razor`/`Register.razor`/`Logout.razor`. Bragi ships no runtime of its own — the story *content* lives there; the app that renders it (`Hosting.Stories.Client`/`Hosting.Stories.Server`) is Yggdrasil's.
 
 ---
 
@@ -379,19 +379,15 @@ git commit -m "chore: wire Asgard's Abstractions.Mediator into Bifrost.slnx"
 
 **CLEARED 2026-07-14.** `Norse.Abstractions.Web.Server` v0.0.4 live on GitHub Packages (https://github.com/NorseArchitecture/Asgard/releases/tag/v0.0.4, PR #25) — the mediator vocabulary shipped inside the existing `Abstractions.Web.Server` project, not a standalone `Norse.Abstractions.Mediator` package (that project was deleted mid-session; see `Glitnir/docs/Heimdall/specs/2026-07-13-authn-identity-split-design.md` §9.1 for why).
 
-**A second Asgard ship gate is required before Task 2 can compile — not yet done.** Per the spec addendum §9.1/§9.4/§9.5, this bootstrap discovered `Abstractions.Web.Server` needs a v0.0.5:
+**CLEARED 2026-07-14 05:27 UTC.** `Norse.Abstractions.Web.Server` v0.0.5 live on GitHub Packages (PR #26) — `IRequestHandler<TRequest,TResponse>`'s `where TRequest : ICommandRequest<TResponse>` constraint dropped (see spec §9.1) and `Abstractions.Web.Server/Mediator/BoolResponse.cs` added (spec §9.4). Note: an intermediate draft of this v0.0.5 also added `MediatorFailureException`/`OutcomeExtensions.ThrowIfFailed()` directly to Asgard — that was reverted before shipping, per spec §9.1's "second follow-up... explicitly reverted" note. The `ThrowIfFailed()`/interceptor pair lives in Midgard instead (Task 3), not Asgard.
 
-1. Drop `IRequestHandler<TRequest,TResponse>`'s `where TRequest : ICommandRequest<TResponse>` constraint (keeping it would force `AuthN.Components`'s wire DTOs to reference this server-only project — see spec §9.1 for the full reasoning). `ICommandRequest<T>` itself stays, unused, for later.
-2. Add `Abstractions.Web.Server/Mediator/BoolResponse.cs` (spec §9.4).
-3. Add `Abstractions.Web.Server/Mediator/MediatorFailureException.cs` and an `OutcomeExtensions.ThrowIfFailed()` pair (spec §9.5).
-
-**STOP. Do not start Task 2 until this second gate clears** — push, PR, CI green, merge, tag, confirm `Norse.Abstractions.Web.Server` v0.0.5 live on NuGet, same as the first gate.
+Bonus verification: Yggdrasil's CPM auto-bump fan-in fired for real too — `Directory.Packages.props`' `AsgardVersion` bumped to `0.0.5` via auto-merged PR #49, confirming the release-ceremony automation still works end to end.
 
 ---
 
 ## Task 2: Heimdall — `AuthN.Components` (the contract)
 
-**Supersedes the code below — see spec addendum `Glitnir/docs/Heimdall/specs/2026-07-13-authn-identity-split-design.md` §9.2/§9.3/§9.6 for the actual shapes to build.** The interfaces/steps as originally written here (`IAuthenticationService` returning `Outcome<LoginResponse>`, `LoginRequest : ICommandRequest<T>`, a `protobuf-net.Grpc` package reference) reflect the pre-addendum design and are wrong in three ways the addendum corrects: no `Outcome<T>` on the wire, no `CallContext` parameter (drop the `protobuf-net.Grpc` `PackageReference`, keep only `System.ServiceModel.Primitives` + `FluentValidation`), and two new types (`LoginResult`, `ProblemException`) the original brief doesn't mention. Read the spec addendum in full before implementing this task — do not transcribe the code sample below as-is.
+**Supersedes the code below — see spec addendum `Glitnir/docs/Heimdall/specs/2026-07-13-authn-identity-split-design.md` §9.2/§9.3/§9.6 for the actual shapes to build.** The interfaces/steps as originally written here (`IAuthenticationService` returning `Outcome<LoginResponse>`, `LoginRequest : ICommandRequest<T>`, a `protobuf-net.Grpc` package reference) reflect the pre-addendum design and are wrong in three ways the addendum corrects: no `Outcome<T>` on the wire, no `CallContext` parameter (drop the `protobuf-net.Grpc` `PackageReference`, keep only `System.ServiceModel.Primitives` + `FluentValidation`), and two new types (`LoginResult`, `AuthenticationResult`) the original brief doesn't mention. Read the spec addendum in full before implementing this task — do not transcribe the code sample below as-is.
 
 **Files:**
 - Create: `Heimdall/Heimdall.slnx`
@@ -796,9 +792,340 @@ git commit -m "chore: wire Heimdall's AuthN.Components into Bifrost.slnx"
 
 ---
 
-## Task 3: Himinbjörg — `Identity.Web.Server`
+## Task 3: Midgard — channel adapters (`Infrastructure.Web.Server`, `Infrastructure.Web.Client`)
 
-**Supersedes the code below — see spec addendum §9.4/§9.5.** Handlers return `Outcome<BoolResponse>`, not `Outcome<LoginResponse>`/`Outcome<RegisterResponse>` (those response types retire). `RegisterHandler`'s `IdentityResult` → `ErrorCategory` mapping is corrected (only genuine duplicates are `Conflict`; password-policy failures are `Validation`). `AuthenticationService`'s forwarder methods no longer branch on failure at all — they call `.ThrowIfFailed()` and let a new gRPC interceptor (built in Task 4, registered in Yggdrasil's hosting, not in this project) handle the failure path entirely. Read the spec addendum in full before implementing.
+**Added this session, not in the original bootstrap slice — see spec addendum `Glitnir/docs/Heimdall/specs/2026-07-13-authn-identity-split-design.md` §9.5/§9.6 for the full design and rationale, read it before implementing.** Two new Midgard projects, both realm-first (Midgard's first `Mediator`-anything). Neither is auth-specific — they translate `Outcome<T>` into and out of gRPC's failure idiom generically, so Himinbjörg's forwarder (Task 4) never branches on failure at all, and neither does any future gRPC-hosted mediator handler (Mímir's, when it exists).
+
+**Files:**
+| Action | Path |
+|---|---|
+| Create | `Midgard/src/Infrastructure.Web.Server/Infrastructure.Web.Server.csproj` |
+| Create | `Midgard/src/Infrastructure.Web.Server/Mediator/Grpc/OutcomeFailedException.cs` |
+| Create | `Midgard/src/Infrastructure.Web.Server/Mediator/Grpc/OutcomeExtensions.cs` |
+| Create | `Midgard/src/Infrastructure.Web.Server/Mediator/Grpc/OutcomeServerInterceptor.cs` |
+| Create | `Midgard/src/Infrastructure.Web.Server/Mediator/Grpc/ProblemExtensions.cs` |
+| Create | `Midgard/tests/Infrastructure.Web.Server.Tests/Mediator/Grpc/OutcomeExtensionsTests.cs` |
+| Create | `Midgard/tests/Infrastructure.Web.Server.Tests/Mediator/Grpc/ProblemExtensionsTests.cs` |
+| Create | `Midgard/src/Infrastructure.Web.Client/Infrastructure.Web.Client.csproj` |
+| Create | `Midgard/src/Infrastructure.Web.Client/Grpc/RpcExceptionExtensions.cs` |
+| Create | `Midgard/tests/Infrastructure.Web.Client.Tests/Grpc/RpcExceptionExtensionsTests.cs` |
+| Modify | `Midgard/Midgard.slnx` |
+| Modify | `Bifrost.slnx` |
+
+**Interfaces:**
+- Consumes: `Outcome`, `Outcome<T>`, `Problem`, `ErrorCategory` (Task 1, `Norse.Abstractions.Web.Server`, live at v0.0.5).
+- Produces:
+  - `Norse.Infrastructure.Web.Server.Mediator.Grpc.OutcomeFailedException` — thrown only by `ThrowIfFailed`, caught only by `OutcomeServerInterceptor`.
+  - `Norse.Infrastructure.Web.Server.Mediator.Grpc.OutcomeExtensions.ThrowIfFailed<T>(this Outcome<T>)` / `ThrowIfFailed(this Outcome)`.
+  - `Norse.Infrastructure.Web.Server.Mediator.Grpc.OutcomeServerInterceptor : Interceptor` — catches `OutcomeFailedException`, throws the `RpcException` `ProblemExtensions.ToRpcException` produces.
+  - `Norse.Infrastructure.Web.Server.Mediator.Grpc.ProblemExtensions.ToRpcException(this Problem)`.
+  - `Norse.Infrastructure.Web.Client.Grpc.RpcExceptionExtensions.DecodeProblem(this RpcException) : IReadOnlyDictionary<string,string[]>`.
+
+- [ ] **Step 1: Create the project files**
+
+`Midgard/src/Infrastructure.Web.Server/Infrastructure.Web.Server.csproj`:
+```xml
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<Description>Norse.Infrastructure.Web.Server: the embodied half of Asgard's server-only mediator law. Mediator/Grpc translates Outcome&lt;T&gt; into gRPC's native failure idiom (RpcException + trailers) and back out of a thrown OutcomeFailedException — zero domain knowledge, reused verbatim by every gRPC-hosted mediator handler on the platform.</Description>
+	</PropertyGroup>
+	<ItemGroup>
+		<PackageReference Include="protobuf-net.Grpc.AspNetCore" Version="*" />
+	</ItemGroup>
+	<ItemGroup>
+		<NorseRef Include="Abstractions.Web.Server">
+			<Repo>Asgard</Repo>
+		</NorseRef>
+	</ItemGroup>
+</Project>
+```
+
+`Midgard/src/Infrastructure.Web.Client/Infrastructure.Web.Client.csproj`:
+```xml
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<Description>Norse.Infrastructure.Web.Client: WASM-friendly gRPC client-side failure decoding. Grpc/ decodes an RpcException's problem-bin trailer directly into a plain dictionary — never references Asgard's server-only Outcome/Problem/ErrorCategory, because this project is meant to compile into a WASM client bundle.</Description>
+	</PropertyGroup>
+	<ItemGroup>
+		<PackageReference Include="protobuf-net.Grpc" Version="*" />
+	</ItemGroup>
+</Project>
+```
+
+- [ ] **Step 2: Write the failing tests**
+
+`Midgard/tests/Infrastructure.Web.Server.Tests/Mediator/Grpc/OutcomeExtensionsTests.cs`:
+```csharp
+using Norse.Abstractions.Web.Server.Mediator;
+using Norse.Infrastructure.Web.Server.Mediator.Grpc;
+
+namespace Norse.Infrastructure.Web.Server.Tests.Mediator.Grpc;
+
+public sealed class OutcomeExtensionsTests
+{
+	[Fact]
+	void ThrowIfFailed_returns_the_value_on_success()
+	{
+		var outcome = Outcome<bool>.Ok(true);
+
+		outcome.ThrowIfFailed().ShouldBeTrue();
+	}
+
+	[Fact]
+	void ThrowIfFailed_throws_OutcomeFailedException_carrying_the_Problem_on_failure()
+	{
+		var outcome = Outcome<bool>.Err(ErrorCategory.LockedOut);
+
+		var exception = Should.Throw<OutcomeFailedException>(() => outcome.ThrowIfFailed());
+
+		exception.Problem.Category.ShouldBe(ErrorCategory.LockedOut);
+	}
+
+	[Fact]
+	void Non_generic_ThrowIfFailed_does_not_throw_on_success()
+	{
+		Should.NotThrow(() => Outcome.Ok().ThrowIfFailed());
+	}
+
+	[Fact]
+	void Non_generic_ThrowIfFailed_throws_OutcomeFailedException_on_failure()
+	{
+		var outcome = Outcome.Err(ErrorCategory.Conflict);
+
+		var exception = Should.Throw<OutcomeFailedException>(() => outcome.ThrowIfFailed());
+
+		exception.Problem.Category.ShouldBe(ErrorCategory.Conflict);
+	}
+}
+```
+
+`Midgard/tests/Infrastructure.Web.Server.Tests/Mediator/Grpc/ProblemExtensionsTests.cs`:
+```csharp
+using Grpc.Core;
+using Norse.Abstractions.Web.Server.Mediator;
+using Norse.Infrastructure.Web.Server.Mediator.Grpc;
+
+namespace Norse.Infrastructure.Web.Server.Tests.Mediator.Grpc;
+
+public sealed class ProblemExtensionsTests
+{
+	[Theory]
+	[InlineData(ErrorCategory.Validation, StatusCode.InvalidArgument)]
+	[InlineData(ErrorCategory.Conflict, StatusCode.AlreadyExists)]
+	[InlineData(ErrorCategory.LockedOut, StatusCode.PermissionDenied)]
+	[InlineData(ErrorCategory.NotAllowed, StatusCode.PermissionDenied)]
+	[InlineData(ErrorCategory.NotFound, StatusCode.Unknown)]
+	void ToRpcException_maps_the_category_to_the_expected_status_code(ErrorCategory category, StatusCode expected)
+	{
+		var problem = new Problem { Category = category };
+
+		var exception = problem.ToRpcException();
+
+		exception.StatusCode.ShouldBe(expected);
+	}
+
+	[Fact]
+	void ToRpcException_carries_the_errors_dictionary_in_the_problem_bin_trailer()
+	{
+		var problem = new Problem { Category = ErrorCategory.Validation, Errors = new Dictionary<string, string[]> { ["Email"] = ["required"] } };
+
+		var exception = problem.ToRpcException();
+		var trailer = exception.Trailers.Get("problem-bin");
+		var decoded = JsonSerializer.Deserialize<Dictionary<string, string[]>>(trailer!.ValueBytes);
+
+		decoded!["Email"].ShouldBe(["required"]);
+	}
+}
+```
+
+`Midgard/tests/Infrastructure.Web.Client.Tests/Grpc/RpcExceptionExtensionsTests.cs`:
+```csharp
+using Grpc.Core;
+using Norse.Infrastructure.Web.Client.Grpc;
+
+namespace Norse.Infrastructure.Web.Client.Tests.Grpc;
+
+public sealed class RpcExceptionExtensionsTests
+{
+	[Fact]
+	void DecodeProblem_returns_the_errors_from_the_problem_bin_trailer()
+	{
+		var errors = new Dictionary<string, string[]> { ["Email"] = ["required"] };
+		var trailers = new Metadata { { "problem-bin", JsonSerializer.SerializeToUtf8Bytes(errors) } };
+		var exception = new RpcException(new Status(StatusCode.InvalidArgument, "Validation"), trailers);
+
+		var decoded = exception.DecodeProblem();
+
+		decoded["Email"].ShouldBe(["required"]);
+	}
+
+	[Fact]
+	void DecodeProblem_returns_empty_when_no_trailer_present()
+	{
+		var exception = new RpcException(new Status(StatusCode.Unknown, ""));
+
+		exception.DecodeProblem().ShouldBeEmpty();
+	}
+}
+```
+
+- [ ] **Step 3: Run the tests to verify they fail**
+
+Run: `dotnet test Midgard/tests/Infrastructure.Web.Server.Tests/Infrastructure.Web.Server.Tests.csproj` and `dotnet test Midgard/tests/Infrastructure.Web.Client.Tests/Infrastructure.Web.Client.Tests.csproj`
+Expected: FAIL to compile — none of the types exist yet.
+
+- [ ] **Step 4: Implement `Infrastructure.Web.Server/Mediator/Grpc/`**
+
+`OutcomeFailedException.cs`:
+```csharp
+using Norse.Abstractions.Web.Server.Mediator;
+
+namespace Norse.Infrastructure.Web.Server.Mediator.Grpc;
+
+/// <summary>
+/// Thrown only by <see cref="OutcomeExtensions.ThrowIfFailed{T}"/>, caught only by <see cref="OutcomeServerInterceptor"/> —
+/// scoped to this project so it's never visible to code that isn't already building a gRPC-hosted mediator handler.
+/// </summary>
+sealed class OutcomeFailedException(Problem problem) : Exception
+{
+	public Problem Problem { get; } = problem;
+}
+```
+
+`OutcomeExtensions.cs`:
+```csharp
+using Norse.Abstractions.Web.Server.Mediator;
+
+namespace Norse.Infrastructure.Web.Server.Mediator.Grpc;
+
+public static class OutcomeExtensions
+{
+	public static T ThrowIfFailed<T>(this Outcome<T> outcome) =>
+		outcome.IsSuccess ? outcome.Value! : throw new OutcomeFailedException(outcome.Problem!);
+
+	public static void ThrowIfFailed(this Outcome outcome)
+	{
+		if (!outcome.IsSuccess)
+			throw new OutcomeFailedException(outcome.Problem!);
+	}
+}
+```
+
+`ProblemExtensions.cs`:
+```csharp
+using System.Text.Json;
+using Grpc.Core;
+using Norse.Abstractions.Web.Server.Mediator;
+
+namespace Norse.Infrastructure.Web.Server.Mediator.Grpc;
+
+public static class ProblemExtensions
+{
+	public static RpcException ToRpcException(this Problem problem)
+	{
+		var status = problem.Category switch
+		{
+			ErrorCategory.Validation => StatusCode.InvalidArgument,
+			ErrorCategory.Conflict => StatusCode.AlreadyExists,
+			ErrorCategory.LockedOut or ErrorCategory.NotAllowed => StatusCode.PermissionDenied,
+			_ => StatusCode.Unknown,
+		};
+		var trailers = new Metadata { { "problem-bin", JsonSerializer.SerializeToUtf8Bytes(problem.Errors) } };
+		return new RpcException(new Status(status, problem.Category.ToString()), trailers);
+	}
+}
+```
+
+`OutcomeServerInterceptor.cs`:
+```csharp
+using Grpc.Core;
+using Grpc.Core.Interceptors;
+
+namespace Norse.Infrastructure.Web.Server.Mediator.Grpc;
+
+/// <summary>Zero domain knowledge — registered once per gRPC-hosting realm, reused verbatim by every future gRPC-hosted mediator handler.</summary>
+sealed class OutcomeServerInterceptor : Interceptor
+{
+	public override async Task<TResponse> UnaryServerHandler<TRequest, TResponse>(
+		TRequest request, ServerCallContext context, UnaryServerMethod<TRequest, TResponse> continuation)
+	{
+		try { return await continuation(request, context); }
+		catch (OutcomeFailedException ex) { throw ex.Problem.ToRpcException(); }
+	}
+}
+```
+
+- [ ] **Step 5: Implement `Infrastructure.Web.Client/Grpc/`**
+
+`RpcExceptionExtensions.cs`:
+```csharp
+using System.Text.Json;
+using Grpc.Core;
+
+namespace Norse.Infrastructure.Web.Client.Grpc;
+
+/// <summary>Client-side companion to Infrastructure.Web.Server's OutcomeServerInterceptor — decodes an
+/// RpcException's problem-bin trailer directly into a plain dictionary. Never references Asgard's
+/// Problem/ErrorCategory (server-only) — this project compiles into a WASM client bundle.</summary>
+public static class RpcExceptionExtensions
+{
+	public static IReadOnlyDictionary<string, string[]> DecodeProblem(this RpcException exception)
+	{
+		var trailer = exception.Trailers.Get("problem-bin");
+		return trailer is null
+			? new Dictionary<string, string[]>()
+			: JsonSerializer.Deserialize<Dictionary<string, string[]>>(trailer.ValueBytes) ?? new();
+	}
+}
+```
+
+- [ ] **Step 6: Run the tests to verify they pass**
+
+Run both test projects again. Expected: PASS — 4 tests in `OutcomeExtensionsTests`, 6 in `ProblemExtensionsTests` (5 theory cases + 1 fact), 2 in `RpcExceptionExtensionsTests`.
+
+- [ ] **Step 7: Wire `Midgard.slnx` and `Bifrost.slnx`**
+
+In `Midgard/Midgard.slnx`, add under `/src/`:
+```xml
+		<Project Path="src/Infrastructure.Web.Server/Infrastructure.Web.Server.csproj" />
+		<Project Path="src/Infrastructure.Web.Client/Infrastructure.Web.Client.csproj" />
+```
+and under `/tests/`:
+```xml
+		<Project Path="tests/Infrastructure.Web.Server.Tests/Infrastructure.Web.Server.Tests.csproj" />
+		<Project Path="tests/Infrastructure.Web.Client.Tests/Infrastructure.Web.Client.Tests.csproj" />
+```
+
+In `Bifrost.slnx`, under the existing Midgard `/src/` and `/tests/` folders, add the same four entries with the `Midgard/` path prefix.
+
+- [ ] **Step 8: Commit**
+
+```bash
+cd Midgard
+git add src/Infrastructure.Web.Server src/Infrastructure.Web.Client tests/Infrastructure.Web.Server.Tests tests/Infrastructure.Web.Client.Tests Midgard.slnx
+git commit -m "feat: add Infrastructure.Web.Server/Mediator/Grpc and Infrastructure.Web.Client/Grpc — gRPC channel adapters for the platform mediator"
+cd ..
+git add Bifrost.slnx
+git commit -m "chore: wire Midgard's new channel-adapter projects into Bifrost.slnx"
+```
+
+---
+
+## SHIP GATE — Midgard (`Infrastructure.Web.Server`, `Infrastructure.Web.Client`)
+
+**STOP. Do not start Task 4 until this gate is cleared.**
+
+1. Push the Midgard commit; open a PR against `master`; confirm CI is green.
+2. Merge the PR; push a version tag; confirm `Norse.Infrastructure.Web.Server` and `Norse.Infrastructure.Web.Client` are both live on the NuGet feed.
+3. Push the Bifrost commit.
+
+Task 4 (Himinbjörg's forwarder, `ThrowIfFailed()`) and Task 6 (Yggdrasil's `Hosting.Web.Client`, `DecodeProblem()`) both need these packages live.
+
+---
+
+## Task 4: Himinbjörg — `Identity.Web.Server`
+
+**Supersedes the code below — see spec addendum §9.4/§9.5.** Handlers return `Outcome<BoolResponse>`, not `Outcome<LoginResponse>`/`Outcome<RegisterResponse>` (those response types retire). `RegisterHandler`'s `IdentityResult` → `ErrorCategory` mapping is corrected (only genuine duplicates are `Conflict`; password-policy failures are `Validation`). `AuthenticationService`'s forwarder methods become one line each — `ThrowIfFailed()` (Midgard's `Infrastructure.Web.Server`, Task 3, live before this task starts) throws on failure, `OutcomeServerInterceptor` (also Task 3, registered here in this task's `MapNorseAuthenticationService()`) catches it and produces the `RpcException`. No branching in the forwarder at all. Read the spec addendum in full before implementing.
 
 **Files:**
 - Create: `Himinbjorg/src/Identity.Web.Server/Identity.Web.Server.csproj`
@@ -1175,7 +1502,7 @@ public sealed class LogoutHandler(SignInManager<NorseUser> signInManager)
 Run: `dotnet test Himinbjorg/tests/Identity.Web.Server.Tests/Identity.Web.Server.Tests.csproj`
 Expected: PASS — 8 tests green.
 
-- [ ] **Step 7: Implement the gRPC forwarder (no new test — pure delegation, covered by the handler tests above plus Task 9's end-to-end check)**
+- [ ] **Step 7: Implement the gRPC forwarder (no new test — pure delegation, covered by the handler tests above plus Task 10's end-to-end check)**
 
 `Himinbjorg/src/Identity.Web.Server/AuthenticationService.cs`:
 ```csharp
@@ -1283,7 +1610,7 @@ git commit -m "chore: bump Himinbjorg submodule pointer"
 
 ## SHIP GATE — Himinbjörg
 
-**STOP. Do not start Task 4 until this gate is cleared.**
+**STOP. Do not start Task 5 until this gate is cleared.**
 
 1. Push the Himinbjörg commit; open a PR against `master`; confirm CI is green.
 2. Merge the PR; push a version tag; confirm `Norse.Identity.Web.Server` is live on the NuGet feed.
@@ -1291,16 +1618,16 @@ git commit -m "chore: bump Himinbjorg submodule pointer"
 
 ---
 
-## Task 4: Yggdrasil — `Hosting.Web.Server` (host the gRPC service)
+## Task 5: Yggdrasil — `Hosting.Web.Server` (host the gRPC service)
 
-**Adds two things beyond the code below — see spec addendum §9.5/§9.6/§9.7, not optional:** (1) a `Grpc.Core.Interceptors.Interceptor` that catches `MediatorFailureException` and translates it to `RpcException` + a `problem-bin` trailer, registered once at gRPC hosting setup — auth-agnostic, reusable for any future gRPC-backed mediator handler; (2) a small `IAuthenticationService` decorator for Blazor Server's own in-process Razor components (which never touch gRPC or the interceptor at all, per §2's transport matrix), catching `MediatorFailureException` directly and re-throwing `ProblemException`. Read the spec addendum in full before implementing.
+**Adds one thing beyond the code below — see spec addendum §9.5/§9.6/§9.7, not optional:** for Blazor Server's own in-process Razor components (which never touch gRPC at all, per §2's transport matrix) — a small gateway that calls the handler directly, gets `Outcome<BoolResponse>` back, and maps it to `AuthenticationResult` using Midgard's `Infrastructure.Web.Server/Mediator/Grpc/` transform (Task 3, already live) — no exception anywhere in this path. The gRPC interceptor itself is Midgard's, registered in this task via `MapNorseAuthenticationService()` (Task 4, Himinbjörg's own extension method) — Yggdrasil doesn't author any interceptor code, just calls what Task 4 already wired up. Read the spec addendum in full before implementing.
 
 **Files:**
 - Modify: `Yggdrasil/src/Hosting.Web.Server/Hosting.Web.Server.csproj`
 - Modify: `Yggdrasil/src/Hosting.Web.Server/Program.cs`
 
 **Interfaces:**
-- Consumes: `AddNorseAuthenticationService(this IServiceCollection, string)`, `MapNorseAuthenticationService(this WebApplication)` (Task 3, `Norse.Identity.Web.Server`).
+- Consumes: `AddNorseAuthenticationService(this IServiceCollection, string)`, `MapNorseAuthenticationService(this WebApplication)` (Task 4, `Norse.Identity.Web.Server`).
 
 - [ ] **Step 1: Add the `NorseRef`s and the reflection package**
 
@@ -1361,7 +1688,7 @@ if (app.Environment.IsDevelopment())
 - [ ] **Step 3: Manually verify the project still builds**
 
 Run: `dotnet build Yggdrasil/src/Hosting.Web.Server/Hosting.Web.Server.csproj`
-Expected: builds clean (0 errors) — there is no automated test for Program.cs wiring; Task 9's end-to-end check (extended below) is the real verification.
+Expected: builds clean (0 errors) — there is no automated test for Program.cs wiring; Task 10's end-to-end check (extended below) is the real verification.
 
 - [ ] **Step 4: Commit**
 
@@ -1373,9 +1700,9 @@ git commit -m "feat: host Norse.Identity.Web.Server's gRPC endpoints (with dev-o
 
 ---
 
-## Task 5: Yggdrasil — `Hosting.Web.Client` (gRPC-Web client wiring)
+## Task 6: Yggdrasil — `Hosting.Web.Client` (gRPC-Web client wiring)
 
-**Adds one thing beyond the code below — see spec addendum §9.6, not optional:** an `IAuthenticationService` decorator wrapping the real gRPC-Web client proxy, catching `RpcException`, decoding its `problem-bin` trailer back into `ErrorCategory` + field errors, and re-throwing `ProblemException` — the same type Task 4's Blazor Server decorator throws, so `AuthN.Components.FluentUI`'s Razor components (Task 7) have exactly one failure type to catch regardless of host. Read the spec addendum in full before implementing.
+**Adds one thing beyond the code below — see spec addendum §9.6, not optional:** an `IAuthenticationService` gateway wrapping the real gRPC-Web client proxy, catching `RpcException`, decoding its `problem-bin` trailer via Midgard's `Infrastructure.Web.Client/Grpc/RpcExceptionExtensions.DecodeProblem()` (Task 3, already live), and mapping to `AuthenticationResult` — the same type Task 5's Blazor Server gateway produces, so `AuthN.Components.FluentUI`'s Razor components (Task 8) read exactly one result shape regardless of host, never a caught exception. Read the spec addendum in full before implementing.
 
 **Files:**
 - Modify: `Yggdrasil/src/Hosting.Web.Client/Hosting.Web.Client.csproj`
@@ -1452,7 +1779,7 @@ builder.Services.AddSingleton(authNChannel.CreateGrpcService<IAuthenticationServ
 - [ ] **Step 4: Manually verify the project still builds**
 
 Run: `dotnet build Yggdrasil/src/Hosting.Web.Client/Hosting.Web.Client.csproj`
-Expected: builds clean (0 errors). The actual cookie round-trip through the browser can only be confirmed by running the app (Task 9).
+Expected: builds clean (0 errors). The actual cookie round-trip through the browser can only be confirmed by running the app (Task 10).
 
 - [ ] **Step 5: Commit**
 
@@ -1467,7 +1794,7 @@ git add Bifrost.slnx
 
 ## SHIP GATE — Yggdrasil (backend + client wiring)
 
-**STOP. Do not start Task 6 until this gate is cleared.**
+**STOP. Do not start Task 7 until this gate is cleared.**
 
 1. Push the Yggdrasil commits (Tasks 4 and 5); open a PR against `master`; confirm CI is green.
 2. Merge the PR. `Hosting.Web.Server`/`Hosting.Web.Client` are deployables, not NuGet-published libraries — no version tag/publish step applies here, unlike the library-producing realms above.
@@ -1475,7 +1802,7 @@ git add Bifrost.slnx
 
 ---
 
-## Task 6: Bifrost — wire `Hosting.Web.Server` into the Aspire AppHost
+## Task 7: Bifrost — wire `Hosting.Web.Server` into the Aspire AppHost
 
 **Files:**
 - Modify: `src/Orchestration.AppHost/AppHost.cs`
@@ -1510,9 +1837,9 @@ git commit -m "feat: wire Hosting.Web.Server into the Aspire composition against
 
 ---
 
-## Task 7: Heimdall — `AuthN.Components.FluentUI` (the Razor components)
+## Task 8: Heimdall — `AuthN.Components.FluentUI` (the Razor components)
 
-**Supersedes the code below — see spec addendum §9.6.** `Login.razor`/`Register.razor` catch `ProblemException` (one type, regardless of which host is rendering them), not `Outcome<T>`/`ErrorCategory` checks on a returned value — the component never sees `Outcome<T>` at all, that's boxed below it. `Login.razor` awaits `Task<LoginResult>` and reads `.Succeeded`; `Register.razor`/`Logout.razor` just await `Task` — success is silence. Read the spec addendum in full before implementing.
+**Supersedes the code below — see spec addendum §9.6.** `Login.razor`/`Register.razor`/`Logout.razor` read `AuthenticationResult { bool Succeeded; IReadOnlyDictionary<string,string[]> Errors }` from whichever host-specific gateway they inject (Task 4's Blazor Server gateway or Task 6's WASM gateway) — no `try`/`catch` anywhere, the component never sees `Outcome<T>`, `RpcException`, or any exception at all, that's boxed below it in both hosts. `Errors[""]` (empty-string key) renders as a model-level message in the same `ValidationSummary`/`ValidationMessageStore` as field-keyed errors — `LockedOut`/`NotAllowed`/`Conflict` all use this convention, per spec §9.6. Read the spec addendum in full before implementing.
 
 **Files:**
 - Create: `Heimdall/src/AuthN.Components.FluentUI/AuthN.Components.FluentUI.csproj`
@@ -1525,7 +1852,7 @@ git commit -m "feat: wire Hosting.Web.Server into the Aspire composition against
 **Interfaces:**
 - Consumes: `IAuthenticationService`, `LoginRequest`, `LoginResponse`, `LoginStatus`, `RegisterRequest`, `LogoutRequest` (Task 2); `ErrorCategory` (Task 1).
 
-No new automated tests in this task — Razor component behavior is verified by the manual end-to-end check in Task 9; this task is TDD-exempt only in the narrow sense that bUnit component tests are deferred to the `IAccountService` follow-on plan once the pattern's proven here, consistent with keeping this bootstrap slim.
+No new automated tests in this task — Razor component behavior is verified by the manual end-to-end check in Task 10; this task is TDD-exempt only in the narrow sense that bUnit component tests are deferred to the `IAccountService` follow-on plan once the pattern's proven here, consistent with keeping this bootstrap slim.
 
 - [ ] **Step 1: Create the project file**
 
@@ -1714,17 +2041,17 @@ git commit -m "chore: wire Heimdall's AuthN.Components.FluentUI into Bifrost.sln
 
 ## SHIP GATE — Heimdall (`AuthN.Components.FluentUI`)
 
-**STOP. Do not start Task 8 until this gate is cleared.**
+**STOP. Do not start Task 9 until this gate is cleared.**
 
 1. Push the Heimdall commit; open a PR against `master`; confirm CI is green.
 2. Merge the PR; push a version tag; confirm `Norse.AuthN.Components.FluentUI` is live on the NuGet feed.
 3. Push the Bifrost commit.
 
-Task 8 needs the published `Norse.AuthN.Components.FluentUI` package — that's why it waits for this gate rather than running alongside Task 7.
+Task 9 needs the published `Norse.AuthN.Components.FluentUI` package — that's why it waits for this gate rather than running alongside Task 8.
 
 ---
 
-## Task 8: Bragi — stories for `Login`/`Register`/`Logout`
+## Task 9: Bragi — stories for `Login`/`Register`/`Logout`
 
 **Files:**
 - Modify: `Bragi/src/DesignSystem.Stories/DesignSystem.Stories.csproj`
@@ -1733,7 +2060,7 @@ Task 8 needs the published `Norse.AuthN.Components.FluentUI` package — that's 
 - Create: `Bragi/src/DesignSystem.Stories/Authentication/Logout.stories.razor`
 
 **Interfaces:**
-- Consumes: `Login`, `Register`, `Logout` (Task 7, `Norse.AuthN.Components.FluentUI`, now published per the ship gate above).
+- Consumes: `Login`, `Register`, `Logout` (Task 8, `Norse.AuthN.Components.FluentUI`, now published per the ship gate above).
 
 This is content, not behavior — Bragi is exempt from the brainstorm→spec→plan→TDD cycle (`Bragi/CLAUDE.md` §1), so there's no failing-test step here. Bragi is its own composition layer purely for Razor components that render with **no server context** — no real backend call, no `HttpContext`, nothing but the component and its inputs. Story files live directly under `DesignSystem.Stories/`, one subfolder per realm-category matching each story's `[Stories("Category/Name")]` attribute — no intermediate `Stories/` folder, that would just be redundant with the project's own name. As of this plan, that convention is: Asgard's headless primitives (`Abstractions.Components`) live under `DesignSystem.Stories/Primitives/` — the existing `Loader.stories.razor` moved there (from a flat `DesignSystem.Stories/Stories/` layout that predates this convention) as part of adopting it — and Heimdall's `AuthN.Components.FluentUI` components live under `DesignSystem.Stories/Authentication/` (the folder name is the domain word, not the realm/namespace abbreviation — "Authentication," not "AuthN"). Every future realm's stories get their own subfolder the same way; there is no ship gate for this task — nothing later in this plan consumes `Norse.DesignSystem.Stories` — but it still goes through the normal PR/merge Buvy runs by hand, same as any other repo change.
 
@@ -1817,7 +2144,7 @@ git commit -m "feat: add Login/Register/Logout stories for Heimdall's AuthN.Comp
 
 ---
 
-## Task 9: End-to-end manual verification
+## Task 10: End-to-end manual verification
 
 **Files:** none — this task runs the composed system and exercises it by hand. No shortcuts: this is the step that actually proves the bootstrap, not a formality.
 
@@ -1843,9 +2170,9 @@ At `/authn/login`, submit the wrong password five times for the account created 
 This exercises `IAuthenticationService` directly over the wire — no Blazor UI, no cookie jar, nothing but the gRPC contract itself. It's the cleanest proof that `Identity.Web.Server`'s forwarder and handlers are correct independent of any client concern.
 
 1. In Postman, create a new gRPC request against the `web` resource's endpoint (check the Aspire dashboard for the exact `https://localhost:{port}` address).
-2. Use "Server reflection" as the import method (not "Import a .proto file") — Postman calls the reflection service Task 4 wired and lists `Norse.AuthN.Components.IAuthenticationService` with its three methods.
+2. Use "Server reflection" as the import method (not "Import a .proto file") — Postman calls the reflection service Task 5 wired and lists `Norse.AuthN.Components.IAuthenticationService` with its three methods.
 3. Call `Register` with a JSON body `{ "email": "postman-test@example.com", "password": "correct-horse-battery" }`. Expected: a response shaped like `{ "isSuccess": true, "value": { "userId": "<a real guid>" } }`.
-4. Call `Register` again with the **same** body. Expected: `{ "isSuccess": false, "problem": { "category": 3, "errors": { ... } } }` — `3` is `ErrorCategory.Conflict` (§1 of Task 1's `ErrorCategory` enum), proving `RegisterHandler`'s duplicate-email path is reachable over the real wire, not just in the unit test from Task 3.
+4. Call `Register` again with the **same** body. Expected: `{ "isSuccess": false, "problem": { "category": 3, "errors": { ... } } }` — `3` is `ErrorCategory.Conflict` (§1 of Task 1's `ErrorCategory` enum), proving `RegisterHandler`'s duplicate-email path is reachable over the real wire, not just in the unit test from Task 4.
 5. Call `Login` with the same credentials. Expected: `{ "isSuccess": true, "value": { "status": 1 } }` — `1` is `LoginStatus.Succeeded`.
 6. Call `Login` with the wrong password five times in a row. Expected: the response's `problem.category` becomes `4` (`ErrorCategory.LockedOut`) once Identity's lockout threshold is hit — the same behavior confirmed through the browser in Step 4, now confirmed at the protocol level with nothing else in the way.
 7. Call `Logout` with an empty body (`{}`). Expected: `{ "isSuccess": true }`. Note that a bare Postman gRPC call carries no cookie jar by default — this call proves the RPC completes cleanly, not that it cleared a specific browser session; Steps 2–4 above are what prove the cookie side of the lifecycle.
