@@ -67,25 +67,22 @@ public sealed class DeferredSignInActionTests
 Run (from `Asgard/`): `dotnet test tests/Abstractions.Web.Server.Tests/Abstractions.Web.Server.Tests.csproj`
 Expected: FAIL — `Norse.Abstractions.Web.Server.DeferredSignIn` namespace / `DeferredSignInAction` type does not exist (compile error).
 
-- [ ] **Step 3: Add the `Microsoft.AspNetCore.App` framework reference**
+- [ ] **Step 3: Switch to the Web SDK instead of bolting on an explicit framework reference**
 
-`IDeferredSignIn` needs `ClaimsPrincipal`/`AuthenticationProperties`, which this project has never referenced before (its existing contracts — `Outcome`, `Problem`, `BoolResponse`, `IRequestHandler`, `ICommandRequest`, `ErrorCategory` — are plain BCL types). Modify `Asgard/src/Abstractions.Web.Server/Abstractions.Web.Server.csproj`:
+`IDeferredSignIn` needs `ClaimsPrincipal`/`AuthenticationProperties`, which this project has never referenced before (its existing contracts — `Outcome`, `Problem`, `BoolResponse`, `IRequestHandler`, `ICommandRequest`, `ErrorCategory` — are plain BCL types). Rather than add an explicit `<FrameworkReference>` to a plain `Sdk="Microsoft.NET.Sdk"` project, switch the project's SDK itself to `Microsoft.NET.Sdk.Web` — it implies the ASP.NET Core shared framework automatically, matching the precedent already set on Himinbjörg's `Identity.Web.Server.csproj` (plain SDK + explicit `FrameworkReference` → `Sdk.Web`, no manual framework wiring). Modify `Asgard/src/Abstractions.Web.Server/Abstractions.Web.Server.csproj`:
 
 ```xml
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk.Web">
 	<PropertyGroup>
 		<Description>Norse web-server abstractions: IWebHostPlugin, the document repository surface (IDocumentRepository&lt;T&gt;), and mediator law (ICommandRequest&lt;T&gt;, validator and authorizer contracts) — the server-side law for the web tier. Mutually invisible with Norse.Abstractions.Worker.</Description>
 	</PropertyGroup>
-	<ItemGroup>
-		<FrameworkReference Include="Microsoft.AspNetCore.App" />
-	</ItemGroup>
 	<ItemGroup>
 		<ProjectReference Include="../Abstractions.Backend/Abstractions.Backend.csproj" />
 	</ItemGroup>
 </Project>
 ```
 
-(This flows transitively into `Abstractions.Web.Server.Tests.csproj` via its existing `ProjectReference` — no test-project csproj edit needed, matching how Midgard's `Infrastructure.Web.Server.Tests` already gets `Microsoft.AspNetCore.App` for free the same way.)
+(This flows transitively into `Abstractions.Web.Server.Tests.csproj` via its existing `ProjectReference` — no test-project csproj edit needed, matching how Midgard's `Infrastructure.Web.Server.Tests` already gets `Microsoft.AspNetCore.App` for free the same way. If `Sdk.Web`'s implicit global usings make any existing `using` line in this project redundant — IDE0005 under this platform's warnings-as-errors — remove it, same fallout Himinbjörg's `Identity.Web.Server` switch already hit.)
 
 - [ ] **Step 4: Write the contract**
 
