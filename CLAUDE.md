@@ -2,11 +2,7 @@
 
 ## 0. Wrong Root — Halt
 
-If you are reading this because **Glitnir itself is the Claude Code session root** — someone ran `claude` from inside this directory instead of `../Bifrost` — stop here. Do not read further, do not propose changes, do not run anything.
-
-Tell the user: every Norse Architecture session starts from **Bifrost**. Org-wide settings (the `superpowers` plugin, permission rules) only apply when Bifrost is the actual session root — Claude Code never merges a submodule's own `.claude/settings.json` into a parent-launched session. Exit, `cd ../Bifrost`, and run `claude` there instead.
-
-This repo's own `.claude/settings.json` carries a `SessionStart` hook that should already have blocked this session before this file was ever read. If you're reading this anyway, hooks were bypassed, disabled, or failed — halt regardless; this rule does not depend on the hook to hold.
+Session root must be **Bifröst**, not this repo directly — org-wide settings (`superpowers`, permission rules) only apply from the actual root, and Claude Code never merges a submodule's own `.claude/settings.json` into a parent-launched session. If `claude` was run from inside **Glitnir**, stop: don't read further, don't propose changes, don't run anything — tell the user to `cd ../Bifrost` and start there. (This repo's `.claude/settings.json` carries a `SessionStart` hook meant to block this before you ever see this file; if you're reading this anyway, the hook was bypassed, disabled, or failed — halt regardless.)
 
 ---
 
@@ -16,7 +12,7 @@ Authoritative cold-start context for any Claude Code session in this repo. Read 
 
 ## 1. Project Overview and Mission
 
-**Glitnir** is the design court — specs, proofs of concept, and plans are heard and judged here; production code is the verdict, rendered only after the narrative converges. It lives at `./Glitnir` inside the **Bifrost** meta-repository.
+**Glitnir** is the design court — specs, proofs of concept, and plans are heard and judged here; production code is the verdict, rendered only after the narrative converges. It lives at `./Glitnir` inside the **Bifröst** meta-repository.
 
 **Norse** is a multi-product platform — a venture studio. Platform realms (`Norse.{Function}`) are the shared substrate; product realms (`{Company}.{Context}.*`) are separately-capitalized operating entities. Founding verticals: insurance (the first product, a greenfield MGA), deregulated energy retail, logistics. **Codenames are lore; code uses the function.** Full topology: `docs/Platform/specs/2026-06-07-multiproduct-platform-design.md`. Realm table and assembly catalog: `docs/decomposition.md`. Codename ⇒ namespace dictionary: `docs/codenames.md`.
 
@@ -120,7 +116,7 @@ Key decisions only — full rationale in linked specs.
 PostgreSQL (Neon) — primary OLTP. TimescaleDB — time series. pgvector — embeddings. MongoDB — operational read store (`.Server` tier); also system of record for identity and UI layout (deliberate inversions). Full design: `docs/Midgard/specs/2026-05-21-midgard-persistence-design.md`.
 
 Key decisions:
-- Abstract base context (audit stamping, conventions) → `Norse.EntityFramework` (Urdarbrunnr).
+- Abstract base context (audit stamping, conventions) → `Norse.EntityFramework` (Urðarbrunnr).
 - Concrete per-service DbContexts are **source-generated, `file`-scoped** — unreferenceable by construction.
 - Four repository contracts in `Norse.Abstractions.Infrastructure`: `IDocumentRepository<T>`, `ICommandRepository<T>`, `ICachedRepository<T>`, `ITemporalRepository<T>`. **No `IUnitOfWork`** — the messaging library's per-handler session owns the transaction.
 - Services never inject a DbContext or call `SaveChangesAsync`.
@@ -269,13 +265,13 @@ Build errors, PR rejections, or refusal-to-write-the-code. **Not style preferenc
 ### Architecture
 
 - **No `ProjectReference` inside `<Target>` blocks** — invisible to dependency ordering (`YGG301`).
-- **No domain → infrastructure references** — build-time enforcement.
+- **No domain → infrastructure references** (§2.4) — build-time enforcement.
 - **No synchronous cross-context RPC for writes** — contexts integrate via published events.
 - **No `partial` on generated classes** unless the generator demands it and the demand is documented.
 
 ### Persistence
 
-- **No EF-Fluent-only invariants** — everything that matters at the data layer exists as a database constraint.
+- **No EF-Fluent-only invariants** (§2.2) — everything that matters at the data layer exists as a database constraint.
 - **No silent migrations at app startup** — deployment job only above local dev.
 - **No hardcoded credentials or connection strings** — Azure App Configuration or env vars; local dev uses user secrets.
 - **No `DbContext` injection in services** — repository contract family from `Norse.Abstractions.Infrastructure` only (`YGG004`).

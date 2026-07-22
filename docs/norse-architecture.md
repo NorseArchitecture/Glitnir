@@ -13,7 +13,7 @@ The shared, demonstrable, separately-ownable reference platform. The **function*
 
 `Norse.Abstractions` · `Norse.Primitives` · `Norse.Infrastructure` · `Norse.Hosting` · `Norse.Orchestration` · `Norse.Auth` · `Norse.Observability` · `Norse.Warehouse` · `Norse.AI` · `Norse.Notifications`
 
-The codenames — Heimdall, Mimir, Asgard, the Æsir, the nine realms — live **entirely in the docs** as the origin story: hype at the front door, the how/why for anyone who reaches in. *Mythology markets; functions operate; docs explain.* Three jobs, never crossed.
+The codenames — Heimdall, Mímir, Asgard, the Æsir, the nine realms — live **entirely in the docs** as the origin story: hype at the front door, the how/why for anyone who reaches in. *Mythology markets; functions operate; docs explain.* Three jobs, never crossed.
 
 (`Norse.` is a brand/vendor root, not a tier — the realms stay peers within it, exactly as CLAUDE.md §5 requires. It reads like `Microsoft.Extensions.*`: one identity, sibling concerns beneath.)
 

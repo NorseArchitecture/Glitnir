@@ -41,27 +41,27 @@ Was: `string? IdempotencyKey` on `IWebhookCommand` / `StripeWebhookReceivedComma
 - YGG101 satisfied structurally — `Guid` is legal on message types; no new domain type, no `PlainText`.
 - Source-agnostic: the per-source idempotency-header variance in `BuildCommand` collapses — the key derives from what the partner actually *sent*, not what they labeled it. (`BuildCommand` may shrink to near-nothing; re-examine whether it's still per-controller during the amendment.)
 - The synthesized Guid is a natural `ResourceId` for the messaging spec's deterministic-MessageId outgoing behavior (`MessageId = UUIDv5(command type, ResourceId)`, messaging §3) — broker-level dedup of replayed webhook deliveries falls out for free.
-- Partner codes want namespace entries in the Svartalfheim UUID v5 registry (one per partner, or one webhook namespace keyed by partner code) — coordinate with the registry when it lands.
+- Partner codes want namespace entries in the Svartálfheim UUID v5 registry (one per partner, or one webhook namespace keyed by partner code) — coordinate with the registry when it lands.
 
 **Follow-on:** persistence §7.2's M2M request-hash dedup (hex SHA-256 string as Mongo `_id`) is the same shape — consider unifying it onto the same UUID v5 synthesis (Guid-keyed, same generator). Fold into the 2.6 pass.
 
-Amends: hosting spec §7.1, §11.2 (`IWebhookCommand`, `WebhookControllerBase`, worked example). **§7.1/§11.2 portion EXECUTED 2026-06-07 — see §5.7** (`string? IdempotencyKey` → synthesized `Guid`; minimal envelope). The Svartalfheim UUID v5 registry namespace entries remain the open follow-on.
+Amends: hosting spec §7.1, §11.2 (`IWebhookCommand`, `WebhookControllerBase`, worked example). **§7.1/§11.2 portion EXECUTED 2026-06-07 — see §5.7** (`string? IdempotencyKey` → synthesized `Guid`; minimal envelope). The Svartálfheim UUID v5 registry namespace entries remain the open follow-on.
 
-### ☑ 1.5 .NET 11 / C# 15 Svartalfheim vs .NET 10 platform — RESOLVED 2026-06-04
+### ☑ 1.5 .NET 11 / C# 15 Svartálfheim vs .NET 10 platform — RESOLVED 2026-06-04
 
-**Ruling: .NET 11 is the platform target, hard and fast.** Option (b) — no v0 non-union shape, no dual-targeting. Rationale (Buvy, 2026-06-04): RC1 with go-live license is ~3 months out (≈Sept 2026), RTM ~5 months (≈Nov 2026), and implementation is at minimum 6 months out — the gate costs nothing on the real timeline. Runtime-async and native discriminated unions are worth far more than insulation against preview-band API churn; the primitives spec's §4.1 caveat already contains any union-syntax drift inside Svartalfheim.
+**Ruling: .NET 11 is the platform target, hard and fast.** Option (b) — no v0 non-union shape, no dual-targeting. Rationale (Buvy, 2026-06-04): RC1 with go-live license is ~3 months out (≈Sept 2026), RTM ~5 months (≈Nov 2026), and implementation is at minimum 6 months out — the gate costs nothing on the real timeline. Runtime-async and native discriminated unions are worth far more than insulation against preview-band API churn; the primitives spec's §4.1 caveat already contains any union-syntax drift inside Svartálfheim.
 
-Consequences: the Svartalfheim spec stands as written (`net11.0`, C# 15 unions, runtime-async tier policy); the analyzers spec §13 migrate-at-RC1+go-live policy resolves to .NET 11 with no change in principle; every ".NET 10" hard-pin elsewhere is now mechanical debt → **item 2.12**. The analyzers §7 `Result<T>` "readonly record struct" text resolves toward the union representation (folded into 2.1).
+Consequences: the Svartálfheim spec stands as written (`net11.0`, C# 15 unions, runtime-async tier policy); the analyzers spec §13 migrate-at-RC1+go-live policy resolves to .NET 11 with no change in principle; every ".NET 10" hard-pin elsewhere is now mechanical debt → **item 2.12**. The analyzers §7 `Result<T>` "readonly record struct" text resolves toward the union representation (folded into 2.1).
 
 ### ☑ 1.6 Error vocabulary — RESOLVED + EXECUTED 2026-06-07
 
 The **"crossing the streams"** ruling (Buvy): each layer is smart about one thing and carries no other layer's error vocabulary.
 
-- **Svartalfheim** = scalar→domain *conversion* only. The six-case `Error` union collapsed to `Result<T> = Success<T> | Failure(ParseFailure reason + bounded diagnostics)`; `ParseFailure` enum = `Unspecified / Empty / Malformed`. `Collect` / `AggregateError` deleted (accumulation relocated). **EXECUTED** in primitives spec §1–§7, §10, §12, §13 (+ top amendment note).
-- **Mediator** = application outcomes. Owns its own **`Outcome<T>`** (failure case named `Problem`, so it never collides with Svartalfheim's conversion `Failure`), distinct from `Result<T>`. `ErrorCategory` trimmed to **`Validation` / `NotFound` / `Conflict`**. Non-generic `Outcome` for validators; `Ok` / `Err` factories defined here. Field-failure aggregation (former `Collect`) lives in the validate step. **EXECUTED** in mediator spec §0–§11, §13 (+ top amendment note).
+- **Svartálfheim** = scalar→domain *conversion* only. The six-case `Error` union collapsed to `Result<T> = Success<T> | Failure(ParseFailure reason + bounded diagnostics)`; `ParseFailure` enum = `Unspecified / Empty / Malformed`. `Collect` / `AggregateError` deleted (accumulation relocated). **EXECUTED** in primitives spec §1–§7, §10, §12, §13 (+ top amendment note).
+- **Mediator** = application outcomes. Owns its own **`Outcome<T>`** (failure case named `Problem`, so it never collides with Svartálfheim's conversion `Failure`), distinct from `Result<T>`. `ErrorCategory` trimmed to **`Validation` / `NotFound` / `Conflict`**. Non-generic `Outcome` for validators; `Ok` / `Err` factories defined here. Field-failure aggregation (former `Collect`) lives in the validate step. **EXECUTED** in mediator spec §0–§11, §13 (+ top amendment note).
 - **Yggdrasil host pipeline** = authn/authz (401/403, service-entry `[Authorize]` before the mediator — confirmed against Buvy's prior-platform `ServerGrpcServiceBase`) + transport conditions (503 broker-down, 500 uncaught) — never `Outcome` values. **Authorization left the mediator entirely** (`IRequestAuthorizer` deleted; no `Forbidden` category); the mediator runs *inside* an already-authorized service.
 
-**Three result families now coexist, each its own concern:** `Result<T>` (Svartalfheim, conversion) · `Outcome<T>` (mediator, application) · `HttpResult<T>` (egress, transport). Names deliberately distinct.
+**Three result families now coexist, each its own concern:** `Result<T>` (Svartálfheim, conversion) · `Outcome<T>` (mediator, application) · `HttpResult<T>` (egress, transport). Names deliberately distinct.
 
 **Spec debt spawned by this ruling:**
 - **UI Composition spec — EXECUTED 2026-06-07.** Handler/API returns → `Outcome<T>` (§2.2, §5.2); gRPC door trimmed to the three categories with 401/403 as service-entry and 503/500 host-synthesized (§8.2); §8.3 client-side adapter named the **Yggdrasil half of the render-table realm split** (rebuilds wire status → `Outcome<T>`, components channel-dumb); catalog authz test reframed to service-entry denial, not `Err(Forbidden)` (§10); top amendment note added. The client-rebuild mechanism already existed in §8.3 — this made it congruent and explicit.
@@ -168,7 +168,7 @@ Every ".NET 10" hard-pin updates to .NET 11 / EF Core 11 / C# 15:
 - **Norns spec §15** — acceptance ".NET 10 + EF Core 10" → ".NET 11 + EF Core 11".
 - **Persistence spec §18** — acceptance ".NET 10" pin.
 - **Mediator spec** — no version pin to fix, but note the lib floor (martinothamar/Mediator 3.0) needs a .NET 11 compatibility check when RC1 lands (open item §13 #2 there already covers re-evaluation).
-- **Svartalfheim spec** — stands as written; it was the spec that had it right. Its §4.1 preview-syntax caveat gains a "re-pin at RC1" note alongside the existing PG19-at-RC1 re-verification (norns §14 #2) — the two RC1-era re-checks should ride the same calendar trigger.
+- **Svartálfheim spec** — stands as written; it was the spec that had it right. Its §4.1 preview-syntax caveat gains a "re-pin at RC1" note alongside the existing PG19-at-RC1 re-verification (norns §14 #2) — the two RC1-era re-checks should ride the same calendar trigger.
 - Sweep for any remaining "net10.0" / ".NET 10" strings across `docs/` when executing this item.
 
 ### ☐ 2.13 CLAUDE.md ← UI Composition supersession (2026-06-05)
@@ -199,13 +199,13 @@ Hlidskjalf references `{Company}.Auth.Components` (login/profile surface). Confi
 
 The hosting runtime wires NSB's System.Text.Json serializer to a combined `JsonTypeInfoResolver` over loaded plugins' message contexts; missing message type = startup failure. Lands where unobtrusive-mode/serializer config is specified; ride the 2.2/2.3 hosting pass. Source: performance posture spec §5.2.
 
-### ☐ 2.20 Svartalfheim primitives spec ← platform-law cross-reference
+### ☐ 2.20 Svartálfheim primitives spec ← platform-law cross-reference
 
 §12.4 gains a note that its benchmark machinery is now an instance of platform law (performance posture spec §2); §9 tier policy gains the end-state framing — server-tier JIT is a temporary concession to the §7.2 blocker register, not a stance. Batch with the 2.12 touch of the same file.
 
 ### ☐ 2.21 Function-first namespace sweep (the big one — 2026-06-07 capstone)
 
-**Decision (CAPSTONE, see `docs/norse-architecture.md` + `docs/codenames.md`):** the platform substrate's code/spec namespaces become **`Norse.{Function}`** (Asgard→`Norse.Abstractions`, Midgard→`Norse.Infrastructure`, Svartalfheim→`Norse.Primitives`, Yggdrasil→`Norse.Hosting`, Norns→`Norse.ReferenceData`, Muninn→`Norse.Warehouse`, Heimdall→`Norse.Auth`, Gjallarhorn→`Norse.Observability`, Mimir→`Norse.AI`, Hlidskjalf→`{Company}.Shell`, Ratatoskr→`Norse.Notifications`); products stay `{Company}.{Context}.*`; codenames retreat to lore (README/dictionary). Tyr/Valkyrie unplaced (in the ether).
+**Decision (CAPSTONE, see `docs/norse-architecture.md` + `docs/codenames.md`):** the platform substrate's code/spec namespaces become **`Norse.{Function}`** (Asgard→`Norse.Abstractions`, Midgard→`Norse.Infrastructure`, Svartálfheim→`Norse.Primitives`, Yggdrasil→`Norse.Hosting`, Norns→`Norse.ReferenceData`, Muninn→`Norse.Warehouse`, Heimdall→`Norse.Auth`, Gjallarhorn→`Norse.Observability`, Mímir→`Norse.AI`, Hlidskjalf→`{Company}.Shell`, Ratatoskr→`Norse.Notifications`); products stay `{Company}.{Context}.*`; codenames retreat to lore (README/dictionary). Tyr/Valkyrie unplaced (in the ether).
 
 **Done (continuity-gap close, 2026-06-07):** the model-defining sources — CLAUDE.md §1 realm table, §3 cross-cutting list, §5 namespaces, §6 registry, and `docs/codenames.md` (now the ethos⇒function dictionary, Reserved tier killed) — all reflect the capstone. A cold-start reader is no longer behind.
 
@@ -224,7 +224,7 @@ The hosting runtime wires NSB's System.Text.Json serializer to a combined `JsonT
 - ☐ **"Dto" occurrences** (banned vocabulary): analyzers YGG105/YGG107 rule text (`*Dto`); persistence §3.3 (`enrichedDto`). ~~ui-composition §4 `BillingSummaryDto`~~ — cleared by the 2.5 supersession (2026-06-05).
 - ☐ **Mediator §10 references `ICommandSender`** — ghost of the deleted dispatch abstraction; §5 settled on raw `IMessageSession`.
 - ☐ **CLAUDE.md §4 sells TimescaleDB for "audit logs"** — Norns §8.4 deferred the audit event store (TimescaleDB hypertables named in the deferral). Soften to match.
-- ☑ **Skuld collision-adjacent** — RULED 2026-06-04: pulled from the bench (Urd/Verdandi/Skuld are load-bearing Norns facets). Executed in `codenames.md` same day.
+- ☑ **Skuld collision-adjacent** — RULED 2026-06-04: pulled from the bench (Urð/Verdandi/Skuld are load-bearing Norns facets). Executed in `codenames.md` same day.
 - ☐ **Auth §3 "standard three-assembly bounded-context layout"** — then lists four; platform shape is five. Wording fix.
 - ☑ **YGG101 family mentions `*Notification`** — RULED 2026-06-04: **trim** (no-speculative-surface; a `*Notification` type appearing today would be a naming violation before a PII one). Execute in the 2.1 (analyzers) and 2.7 (CLAUDE.md) passes. The future notifications spec (item 4.1) owns reintroducing a message kind and its YGG101 coverage if/when it earns one.
 
@@ -257,7 +257,7 @@ Ruled needed (Buvy, 2026-06-05). The root `.editorconfig` is template-default ("
 
 **Scope extension (Buvy, 2026-06-05): cross-repo reference switching.** The session also stands up the `UseProjectReferences` machinery across the entire submodule landscape: cross-repo references resolve to `ProjectReference` locally and `PackageReference` in CI, `$(CI)` forces package mode, single toggle. The payoff being bought: **debugging CI issues on your own machine** — flip to package mode locally instead of opening a PR and hoping. Validation is end-to-end, not on-paper: publish dummy packages to the GitHub Packages NuGet feed if that's what it takes to prove the package-resolution path resolves correctly across every submodule. Get it right now, not later. (Standing law already applies: reference items in plain `ItemGroup` elements, never inside `<Target>` blocks — YGG301.)
 
-Overlaps the meta-repo build-infrastructure work (Svartalfheim plan task 2) — this session is that work's enforcement-configuration venue. With the reference-switching scope added, the session may produce spec-worthy output (meta-repo build-graph mechanics); promote to a spec during the session if the mechanics warrant a citable home rather than forcing it now.
+Overlaps the meta-repo build-infrastructure work (Svartálfheim plan task 2) — this session is that work's enforcement-configuration venue. With the reference-switching scope added, the session may produce spec-worthy output (meta-repo build-graph mechanics); promote to a spec during the session if the mechanics warrant a citable home rather than forcing it now.
 
 **Status (2026-06-05):** MSBuild-law phase designed (`docs/Platform/specs/2026-06-05-build-enforcement-design.md`, planned via `docs/Platform/plans/2026-06-05-build-enforcement.md`) and **proven in the `poc/build/` replica** — harness `Verify-Enforcement.ps1` green, canary ledger + eleven deviations in its `FINDINGS.md` (headline: `EnforceCodeStyleInBuild` makes a root `.editorconfig` seed a build prerequisite; `ArtifactsPath` must be pinned at the law; CS1591 needs an isolated canary toggle). Remaining: `.editorconfig` curation (Phase 2), real-tree seeding from the replica, and the `UseProjectReferences` switching session (owns `Directory.Build.targets`).
 
@@ -265,19 +265,19 @@ Overlaps the meta-repo build-infrastructure work (Svartalfheim plan task 2) — 
 
 ### ☐ 4.3 EncryptedString spec (tracking adoption — demand predates this sweep)
 
-The surviving work item from the PII/encryption ruling (CLAUDE.md §4 → PII and Encryption, §7 #11) was tracked only in prose until now; listed here so this file is the single complete to-do surface. Owns: `EncryptedString` wrapper mechanics, blind-index (HMAC) companion-column design (designed once, never ad hoc per table), AES-256-GCM nonce bounds, Key Vault envelope/rotation mechanics, per-customer DEK lifecycle, local-dev keys. Platform-tier (Svartalfheim wrapper + Asgard/Midgard integration) — fits the platform-first roadmap alongside 4.1.
+The surviving work item from the PII/encryption ruling (CLAUDE.md §4 → PII and Encryption, §7 #11) was tracked only in prose until now; listed here so this file is the single complete to-do surface. Owns: `EncryptedString` wrapper mechanics, blind-index (HMAC) companion-column design (designed once, never ad hoc per table), AES-256-GCM nonce bounds, Key Vault envelope/rotation mechanics, per-customer DEK lifecycle, local-dev keys. Platform-tier (Svartálfheim wrapper + Asgard/Midgard integration) — fits the platform-first roadmap alongside 4.1.
 
 ---
 
 ### ☐ 4.4 pgvector-line-under-review flag (vector/embeddings decision-inputs, 2026-06-07)
 
-Bookkeeping, surfaced by the 2026-06-07 sweep: `2026-06-07-vector-embeddings-decision-inputs.md` flags CLAUDE.md §4 ("pgvector for embeddings feeding Mimir") and the two hosting-spec §13 #17 parentheticals as **under review, not reversed** — superseded only if/when the Mimir spec rules (sync vector serving signaled real; Mongo Atlas Vector Search is the presumptive store). Logged here so this file stays the complete cross-spec surface. **No action until the Mimir spec convenes** (platform-first sequencing); that spec owns the resolution and the matching CLAUDE.md/hosting cleanup. The quasi-PII embedding-eligibility question is separately parked for its own session (decision-inputs §4) and feeds the EncryptedString spec (4.3).
+Bookkeeping, surfaced by the 2026-06-07 sweep: `2026-06-07-vector-embeddings-decision-inputs.md` flags CLAUDE.md §4 ("pgvector for embeddings feeding Mímir") and the two hosting-spec §13 #17 parentheticals as **under review, not reversed** — superseded only if/when the Mímir spec rules (sync vector serving signaled real; Mongo Atlas Vector Search is the presumptive store). Logged here so this file stays the complete cross-spec surface. **No action until the Mímir spec convenes** (platform-first sequencing); that spec owns the resolution and the matching CLAUDE.md/hosting cleanup. The quasi-PII embedding-eligibility question is separately parked for its own session (decision-inputs §4) and feeds the EncryptedString spec (4.3).
 
 ---
 
 ## §5 — Egress spec (2026-06-07) cross-spec impact
 
-Surfaced when the Egress spec (`2026-06-07-egress-http-resilience-parsing-design.md`) landed. The spec is congruent with Svartalfheim (`Result<T>`, `[MustConsume]`, non-boxing union pattern reused, not re-invented) and `codenames.md` (Egress is descriptive-within-a-realm per the `Asgard.Infrastructure` / `Midgard.Persistence` precedent — **not** a codename, no registry change). The items below are the deltas it does create.
+Surfaced when the Egress spec (`2026-06-07-egress-http-resilience-parsing-design.md`) landed. The spec is congruent with Svartálfheim (`Result<T>`, `[MustConsume]`, non-boxing union pattern reused, not re-invented) and `codenames.md` (Egress is descriptive-within-a-realm per the `Asgard.Infrastructure` / `Midgard.Persistence` precedent — **not** a codename, no registry change). The items below are the deltas it does create.
 
 ### ☑ 5.1 Hosting spec resilience model contradicts egress named profiles — RULED + EXECUTED 2026-06-07
 
@@ -309,13 +309,13 @@ Note that external API clients register via `AddExternalApi` in the owning `.Wor
 
 ### ☑ 5.7 Webhook design: auth-as-verification + handshake hook + minimal command — EXECUTED 2026-06-07
 
-Surfaced when Buvy supplied a production `WebhookControllerBase<T>` + Monday.com implementation. Three rulings, all executed in the hosting spec (the design iterated within the session — an initial per-controller `PartnerNamespace` + Svartalfheim namespace-registry shape was superseded by the auth-handler shape below):
+Surfaced when Buvy supplied a production `WebhookControllerBase<T>` + Monday.com implementation. Three rulings, all executed in the hosting spec (the design iterated within the session — an initial per-controller `PartnerNamespace` + Svartálfheim namespace-registry shape was superseded by the auth-handler shape below):
 
 - **Verification is authentication, not per-command validation.** `IWebhookValidator<TCommand>` is **deleted**. Three `WebhookSchemes` replace it — `ClientCredentials` (JWT bearer, OpenIddict, preferred), `Signature` (HMAC over body), `Whitelist` (source-IP) — one per partner capability tier (none → whitelist, signature → HMAC, client-credentials → JWT). Each is a generic, data-driven ASP.NET **authentication handler** (not authz policy — only authentication can enrich the principal before claims freeze, which was Buvy's blocker). The handler resolves the partner's OpenIddict `client_id` and surfaces it as the `client_id` claim. Controllers declare their tier with one `[Authorize(AuthenticationSchemes = …)]`; the base reads the namespace uniformly.
 - **`client_id` IS the UUID v5 namespace** (Buvy's unification — no separate per-partner namespace registry; OpenIddict's client store *is* the partner registry). Partner clients get **Guid `client_id`s** by registration convention. JWT tier: `client_id` from the validated token. Non-JWT tiers: `{partnerCode}` route segment → `IWebhookClientResolver` (Asgard contract, implemented by `{Company}.Auth.Server` over the OpenIddict application store) → `client_id` + verification material. The signing secret is an `EncryptedString` application property, **NOT** the hashed `client_secret` (unrecoverable; serves only the token flow). Route partner-code is untrusted until the looked-up client's signature/IP check passes. **Discharges ruling 1.4's §7.1/§11.2 edit** (minimal `IWebhookCommand`: `byte[] Bytes` + synthesized `Guid IdempotencyKey` + `DateTimeOffset ReceivedAt`; no headers/URL/IP on the wire).
 - **Verification/challenge handshake = base-class hook.** Monday `{"challenge"}` / Slack `url_verification` / Meta `hub.challenge` is the *sole* non-202 success path. `protected virtual ValueTask<IActionResult?> TryHandleVerificationAsync(byte[] body, HttpRequest, ct)`; parses the already-captured bytes (no `EnableBuffering`, no stream re-read); default null → dispatch + 202.
 
-**Executed 2026-06-07:** hosting spec §4 (steps 1/2/3 + idempotency bullet), §7.1 (contracts rewrite: `WebhookSchemes` + `IWebhookClientResolver` + `WebhookClient` replace the validator; base class; new §7.1.1 schemes section; Stripe/Monday examples retiered), §11.2, rules #15 and #16, two 2026-06-07 top `**Amended:**` lines. Open follow-on: `WebhookKey.Synthesize` wraps the SequentialGuid v5 generator (lands with Svartalfheim; no per-partner registry needed — namespace is data). Auth-spec absorption → **§5.8**.
+**Executed 2026-06-07:** hosting spec §4 (steps 1/2/3 + idempotency bullet), §7.1 (contracts rewrite: `WebhookSchemes` + `IWebhookClientResolver` + `WebhookClient` replace the validator; base class; new §7.1.1 schemes section; Stripe/Monday examples retiered), §11.2, rules #15 and #16, two 2026-06-07 top `**Amended:**` lines. Open follow-on: `WebhookKey.Synthesize` wraps the SequentialGuid v5 generator (lands with Svartálfheim; no per-partner registry needed — namespace is data). Auth-spec absorption → **§5.8**.
 
 ### ☐ 5.8 Auth spec ← webhook client modeling (from §5.7)
 
