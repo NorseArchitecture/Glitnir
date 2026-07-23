@@ -1,7 +1,7 @@
 # `Norse.EntityFramework` — In-House Snake_Case Naming Convention
 
 **Date:** 2026-07-22
-**Status:** Design approved, not yet planned/implemented.
+**Status:** Shipped. Hardened 2026-07-23 — see the addendum at the end of this document; the `NorseSnakeCaseNamingConvention` pseudocode in §2 below now undersells the real implementation on two points that were bugs, not design gaps.
 **Owner:** Buvy
 
 ## Finding
@@ -294,3 +294,50 @@ if (useSnakeCaseNaming)
 
 1. Whether the new integration test (item 5 in §5 above) should target a foreign key or an index name —
    plan-time call, not a design fork; either exercises a metadata path the current single test misses.
+
+## Addendum (2026-07-23, found downstream in Mímisbrunnr): two real bugs in the shipped convention
+
+Discovered via `superpowers:systematic-debugging` while root-causing 8 failing
+`Mimisbrunnr/tests/Reference.Data.Tests` — both bugs live in `NorseSnakeCaseNamingConvention` as actually
+implemented (`src/Persistence.EntityFramework/NorseSnakeCaseNamingConvention.cs`), not in this spec's
+design intent; §2's pseudocode above was never updated for either. Root-caused by decompiling the exact
+pinned `Microsoft.EntityFrameworkCore.Relational`/`Npgsql.EntityFrameworkCore.PostgreSQL`
+`11.0.0-preview.6.26359.118` assemblies with `ilspycmd`, and by `gh search issues`/`gh api graphql`
+against `dotnet/efcore`. Full narrative: session memory
+`project_ef11-preview-json-shaper-and-history-table-bugs-fixed.md`.
+
+**Bug A — migrations-history table desync.** §2's walking loop renamed `HistoryRepository.EnsureModel()`'s
+synthetic `HistoryRow` entity's table too, same as everything else in the model. But
+`HistoryRepository.TableName` — used verbatim for raw SQL such as Npgsql's `LOCK TABLE` in
+`AcquireDatabaseLockAsync` — is sourced from `RelationalOptionsExtension.MigrationsHistoryTableName`,
+never from this convention. First `MigrateAsync` against a fresh database: the model-driven
+`CREATE TABLE IF NOT EXISTS __ef_migrations_history` succeeds, then the raw-SQL `LOCK TABLE
+"__EFMigrationsHistory"` immediately 42P01s against a table that was never created under that literal
+name. **Fix:** `HistoryRow` (`Microsoft.EntityFrameworkCore.Migrations`) is now excluded entirely from
+the rename walk — the history table stays PascalCase forever, next to snake_case domain tables.
+
+**Bug B — JSON container-column rename crashes EF Core 11 preview6's query shaper.** §2's JSON early-exit
+branch ("JSON-mapped entities: rewrite the container column name only, then continue") renames the
+container column on **every** JSON-mapped entity in the walk, including entities nested inside an
+already-JSON-mapped parent (e.g. a `SubregionNode` owned by a JSON-root `RegionNode`). Only the JSON
+**root** entity actually owns a container column — a nested entity shares it. Renaming a nested entity's
+container column a second time crashes
+`RelationalShapedQueryCompilingExpressionVisitor.ShaperProcessingExpressionVisitor.CreateJsonShapers`
+with `ArgumentNullException: Value cannot be null. (Parameter 'key')` compiling the shaper for any query
+that materializes the owning entity — a pure model-shape defect at shaper-compile time, not
+data-dependent (reproduces even when the JSON payload is null), and not Npgsql-specific (reproduces
+identically on SQLite). Confirmed as a real, already-triaged upstream defect, not a Norse-specific
+misuse: `dotnet/efcore#37417` is the identical crash (same stack trace), closed as a duplicate of
+`efcore/EFCore.NamingConventions#346`, whose merged fix (`efcore/EFCore.NamingConventions#347`)
+introduces the exact root-vs-nested distinction this platform's in-house convention was missing — this
+platform doesn't consume that package (§0 above: it's the very dependency this spec replaced), so the
+equivalent fix has to live here too. **Fix:** `entity.FindOwnership()?.PrincipalEntityType.IsMappedToJson()`
+detects nesting; only the root JSON entity's container column is renamed, nested entities are skipped
+entirely. Full snake_case is preserved at the root (`CountryOrArea.View` → `view`); this is the real fix
+matching upstream's own resolution, not a workaround pending one.
+
+Both fixes are unit-tested in `Persistence.EntityFramework.Tests/NorseSnakeCaseNamingConventionTests.cs`
+(`Migrations_history_table_name_is_not_rewritten`, `Nested_json_entity_shares_the_root_entitys_container_column_unrewritten_again`,
+`Nested_json_mapped_entity_round_trips_through_an_actual_query`) — the last two specifically because a
+model-metadata-only assertion would not have caught Bug B; it only surfaces compiling an actual query's
+shaper.
