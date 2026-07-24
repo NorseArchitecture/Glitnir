@@ -25,7 +25,7 @@
 - Heimdall stays dumb to transport: no gRPC package reference, no `AddCodeFirstGrpc` call, no interceptor, anywhere in Heimdall. It owns only the service contract, the gateway interface (generated), and Razor components. Himinbjörg is *a* reference backend behind that contract, not the only legal one — nothing in this plan may make Heimdall depend on Himinbjörg or Midgard.
 - No `[Behavior]` or gateway-generation attribute may appear on a type inside a `.Components`/`.Services` project that ships to WASM if that attribute's argument would force a server-only assembly reference (spec §2.5 defect 2) — `[Behavior]` decorates the service **implementation**, never the interface.
 - Wire decode of `Problem` category is always via `ErrorInfo.Reason`, never via gRPC status code (spec §2.1 defect 1).
-- `Outcome`/`Outcome<T>` are native `[Union]` readonly record structs (`IUnion`, `[MustConsume]`), matching Svartalfheim's `Result<T>` exactly — no `.IsSuccess`/`.Value`/`.Problem` flat-record fields exist. Every task that *inspects* one (not just constructs via `Ok`/`Err`) uses `TryGetValue`/`Match`/exhaustive `switch` on `Success<T>`/`Succeeded`/`Failed`.
+- `Outcome<T>` is one native `[Union]` readonly record struct (`IUnion`, `[MustConsume]`), matching Svartalfheim's `Result<T>` exactly — no `.IsSuccess`/`.Value`/`.Problem` flat-record fields exist, and no separate non-generic `Outcome` type. Void-success operations use `Outcome<Unit>`, spelled `Outcome` via a platform-wide `global using` alias (Task 1) — never a second type or a second `IBehavior<TRequest>` interface family. Every task that *inspects* one (not just constructs via `Ok`/`Err`) uses `TryGetValue`/`Match`/exhaustive `switch` on `Success<T>`/`Failed`.
 
 ---
 
@@ -34,12 +34,13 @@
 ### Asgard
 | Action | Path |
 |---|---|
-| Move | `Asgard/src/Abstractions.Web.Server/Mediator/Outcome.cs` → `Asgard/src/Abstractions.Contracts/Outcome.cs` |
+| Move | `Asgard/src/Abstractions.Web.Server/Mediator/Outcome.cs` → `Asgard/src/Abstractions.Contracts/Outcome{T}.cs` |
 | Move | `Asgard/src/Abstractions.Web.Server/Mediator/Problem.cs` → `Asgard/src/Abstractions.Contracts/Problem.cs` |
 | Move | `Asgard/src/Abstractions.Web.Server/Mediator/ErrorCategory.cs` → `Asgard/src/Abstractions.Contracts/ErrorCategory.cs` |
 | Move | `Asgard/src/Abstractions.Web.Server/Mediator/BoolResponse.cs` → `Asgard/src/Abstractions.Contracts/BoolResponse.cs` |
 | Create | `Asgard/src/Abstractions.Contracts/Failed.cs` |
-| Create | `Asgard/src/Abstractions.Contracts/Succeeded.cs` |
+| Create | `Asgard/src/Abstractions.Contracts/Unit.cs` |
+| Create | `Asgard/src/Abstractions.Contracts/GlobalUsings.Outcome.cs` |
 | Create | `Asgard/src/Abstractions.Contracts/GenerateGatewayAttribute.cs` |
 | Create | `Asgard/tests/Abstractions.Contracts.Tests/OutcomeTests.cs` |
 | Create | `Asgard/src/Abstractions.Web.Server/Mediator/IBehavior.cs` |
@@ -94,6 +95,8 @@
 |---|---|
 | Modify | `Himinbjorg/src/Identity.Web.Server/AuthenticationService.cs` (stub → real) |
 | Modify | `Himinbjorg/src/Identity.Web.Server/ServiceCollectionExtensions.cs` |
+| Modify | `Himinbjorg/src/Identity.Web.Server/LoginHandler.cs`, `RegisterHandler.cs`, `LogoutHandler.cs` (namespace fix) |
+| Create | `Himinbjorg/src/Identity.Web.Server/GlobalUsings.Outcome.cs` |
 | Create | `Himinbjorg/tests/Identity.Web.Server.Tests/AuthenticationServiceTests.cs` |
 
 ### Yggdrasil
@@ -114,11 +117,14 @@
 ## Task 1: Asgard — Relocate the envelope, extend `ErrorCategory` and `Problem`
 
 **Files:**
-- Move: `Asgard/src/Abstractions.Web.Server/Mediator/{Outcome,Problem,ErrorCategory,BoolResponse}.cs` → `Asgard/src/Abstractions.Contracts/`
+- Move: `Asgard/src/Abstractions.Web.Server/Mediator/{Problem,ErrorCategory,BoolResponse}.cs` → `Asgard/src/Abstractions.Contracts/`
+- Move: `Asgard/src/Abstractions.Web.Server/Mediator/Outcome.cs` → `Asgard/src/Abstractions.Contracts/Outcome{T}.cs` (renamed — single generic type only, matching Svartalfheim's own `Result{T}.cs` naming)
+- Create: `Asgard/src/Abstractions.Contracts/Unit.cs`
+- Create: `Asgard/src/Abstractions.Contracts/GlobalUsings.Outcome.cs`
 - Test: `Asgard/tests/Abstractions.Contracts.Tests/OutcomeTests.cs`
 
 **Interfaces:**
-- Produces: `Norse.Abstractions.Contracts.Outcome` / `Outcome<T>` — native `[Union]` readonly record structs (`IUnion`, `[MustConsume]`), matching Svartalfheim's `Result<T>` pattern exactly, not a hand-rolled flat record. Cases: `Outcome<T>` is `Norse.Primitives.Success<T>` (reused directly — Svartalfheim is the only realm Asgard's own charter allows it to depend on, and `Success<T>` is already a T-only, Result-agnostic wrapper) or `Failed(Problem Problem)`; `Outcome` (void-success) is `Succeeded` or `Failed(Problem Problem)`. `TryGetValue`/`Match` only — `outcome.IsSuccess`/`outcome.Value` do not exist; `outcome is Outcome<T>` is a compiler error (CS8121), same as `Result<T>`. `Norse.Abstractions.Contracts.Problem { ErrorCategory Category; IReadOnlyDictionary<string,string[]> Errors; Guid? CorrelationId; }`, `Norse.Abstractions.Contracts.ErrorCategory` (now 9 members), `Norse.Abstractions.Contracts.BoolResponse`. Every later task in this plan consumes these from `Norse.Abstractions.Contracts`, not `Norse.Abstractions.Web.Server` — and every task that *inspects* an `Outcome`/`Outcome<T>` (not just constructs one via `Ok`/`Err`) pattern-matches on `Success<T>`/`Succeeded`/`Failed`, never a boolean flag.
+- Produces: `Norse.Abstractions.Contracts.Outcome<T>` — a native `[Union]` readonly record struct (`IUnion`, `[MustConsume]`), matching Svartalfheim's `Result<T>` pattern exactly. **2026-07-24 amendment, pre-ship-gate:** there is no separate non-generic `Outcome` type or `Succeeded` case — void-success operations use `Outcome<Unit>` with a new `Norse.Abstractions.Contracts.Unit` (empty readonly record struct, zero-cost, trivially `notnull`) as the payload. A platform-wide `global using Outcome = Norse.Abstractions.Contracts.Outcome<Norse.Abstractions.Contracts.Unit>;` alias (C#'s closed-generic-type aliasing, valid since C# 2.0; `global using` since C# 10) keeps every existing and future call site that means "no payload" spelled `Outcome`, identical to the non-generic type it replaces — `IRequestHandler<LogoutRequest, Outcome>` compiles unchanged in spelling. This collapses what would otherwise be a permanent fork: every future `[Behavior]` implementation would need both a generic and non-generic form forever, and Register/Logout would need `IBehavior<TRequest>` a second interface family just to be void. Ruled before Asgard's ship gate specifically because the day after, this becomes a breaking change against a published package, not a same-day edit. `object` was rejected as the placeholder (boxing, notnull awkwardness, doesn't say what it is); `Unit` isn't a placeholder in that sense — it's the honest, zero-cost payload type for "nothing." Cases: `Success<T>` (reused directly from Svartalfheim — the only realm Asgard's own charter allows it to depend on, and `Success<T>` is already a T-only, Result-agnostic wrapper) or `Failed(Problem Problem)`. `TryGetValue`/`Match` only — `outcome.IsSuccess`/`outcome.Value` do not exist; `outcome is Outcome<T>` is a compiler error (CS8121), same as `Result<T>`. `Norse.Abstractions.Contracts.Problem { ErrorCategory Category; IReadOnlyDictionary<string,string[]> Errors; Guid? CorrelationId; }`, `Norse.Abstractions.Contracts.ErrorCategory` (now 9 members), `Norse.Abstractions.Contracts.BoolResponse`. Every later task in this plan consumes these from `Norse.Abstractions.Contracts`, not `Norse.Abstractions.Web.Server` — and every task that *inspects* an `Outcome<T>` (not just constructs one via `Ok`/`Err`) pattern-matches on `Success<T>`/`Failed`, never a boolean flag. **Delivery of the alias file** is per-project (a small file copied into each project that needs the bare `Outcome` spelling), not the platform's repo-wide config-scatter manifest (`manifest.psd1`) — that manifest scatters whole files uniformly to every realm regardless of whether it references `Abstractions.Contracts`; blanket-delivering this alias that way would break every unrelated project's build the moment it can't resolve the aliased namespace. Promoting this to a proper conditional/selective scatter mechanism is a follow-up infrastructure question, not part of this plan.
 
 - [ ] **Step 1: Confirm `Abstractions.Contracts` project exists and has no existing production types to collide with**
 
@@ -138,10 +144,13 @@ namespace Norse.Abstractions.Contracts.Tests;
 class OutcomeTests
 {
 	[Fact]
-	void Outcome_Ok_MatchesSucceeded()
+	void OutcomeOfUnit_Ok_IsTheVoidSuccessShape()
 	{
-		var outcome = Outcome.Ok();
-		var matched = outcome switch { Succeeded => true, Failed => false };
+		// Explicit Outcome<Unit> here — this test doesn't need the alias in scope to prove the type
+		// itself works; the alias (GlobalUsings.Outcome.cs, copied into consumers as needed, e.g.
+		// Task 12) is an ergonomic spelling concern for downstream call sites, not this type's own test.
+		var outcome = Outcome<Unit>.Ok(Unit.Value);
+		var matched = outcome switch { Success<Unit> => true, Failed => false };
 		matched.ShouldBeTrue();
 	}
 
@@ -198,10 +207,10 @@ class OutcomeTests
 Run: `dotnet test Asgard/tests/Abstractions.Contracts.Tests --filter OutcomeTests`
 Expected: FAIL — project has no `Abstractions.Contracts.Tests.csproj` reference to the not-yet-moved types (build error: `Outcome` not found).
 
-- [ ] **Step 4: Move the four files with `git mv`, update namespaces, extend the two changed types**
+- [ ] **Step 4: Move the three files with `git mv`, update namespaces, extend the changed types, add `Unit` and the alias**
 
 ```bash
-git mv Asgard/src/Abstractions.Web.Server/Mediator/Outcome.cs Asgard/src/Abstractions.Contracts/Outcome.cs
+git mv Asgard/src/Abstractions.Web.Server/Mediator/Outcome.cs Asgard/src/Abstractions.Contracts/Outcome{T}.cs
 git mv Asgard/src/Abstractions.Web.Server/Mediator/Problem.cs Asgard/src/Abstractions.Contracts/Problem.cs
 git mv Asgard/src/Abstractions.Web.Server/Mediator/ErrorCategory.cs Asgard/src/Abstractions.Contracts/ErrorCategory.cs
 git mv Asgard/src/Abstractions.Web.Server/Mediator/BoolResponse.cs Asgard/src/Abstractions.Contracts/BoolResponse.cs
@@ -213,8 +222,8 @@ git mv Asgard/src/Abstractions.Web.Server/Mediator/BoolResponse.cs Asgard/src/Ab
 namespace Norse.Abstractions.Contracts;
 
 /// <summary>
-/// Application-level error vocabulary an <see cref="Outcome"/>/<see cref="Outcome{T}"/> carries on
-/// failure. <see cref="LockedOut"/>/<see cref="InvalidCredentials"/>/<see cref="NotAllowed"/> are an
+/// Application-level error vocabulary an <see cref="Outcome{T}"/> carries on failure.
+/// <see cref="LockedOut"/>/<see cref="InvalidCredentials"/>/<see cref="NotAllowed"/> are an
 /// AuthN-specific extension over the platform's base Validation/NotFound/Conflict trio.
 /// <see cref="Unauthorized"/>/<see cref="Forbidden"/> split not-authenticated from
 /// authenticated-but-lacks-the-policy — every request carries a principal (anonymous role included),
@@ -249,7 +258,7 @@ public enum ErrorCategory : byte
 namespace Norse.Abstractions.Contracts;
 
 /// <summary>
-/// The structured detail an <see cref="Outcome"/>/<see cref="Outcome{T}"/> carries on failure.
+/// The structured detail an <see cref="Outcome{T}"/> carries on failure.
 /// </summary>
 public sealed record Problem
 {
@@ -267,31 +276,45 @@ public sealed record Problem
 }
 ```
 
-`Asgard/src/Abstractions.Contracts/Failed.cs` — new file, the shared failure case for both `Outcome` and `Outcome<T>`:
+`Asgard/src/Abstractions.Contracts/Failed.cs` — new file, the failure case:
 
 ```csharp
 namespace Norse.Abstractions.Contracts;
 
 /// <summary>
-/// The failure case shared by <see cref="Outcome"/> and <see cref="Outcome{T}"/>. Named
-/// <c>Failed</c>, not <c>Failure</c>, to avoid colliding with <see cref="Norse.Primitives.Failure"/>
-/// (Svartalfheim's <c>ParseFailure</c>-shaped case type, unrelated) when both namespaces are open in
-/// the same file.
+/// The failure case of <see cref="Outcome{T}"/>. Named <c>Failed</c>, not <c>Failure</c>, to avoid
+/// colliding with <see cref="Norse.Primitives.Failure"/> (Svartalfheim's <c>ParseFailure</c>-shaped
+/// case type, unrelated) when both namespaces are open in the same file.
 /// </summary>
 /// <param name="Problem">The error detail.</param>
 public readonly record struct Failed(Problem Problem);
 ```
 
-`Asgard/src/Abstractions.Contracts/Succeeded.cs` — new file, the success case for the non-generic `Outcome`:
+`Asgard/src/Abstractions.Contracts/Unit.cs` — new file, the payload type for void-success operations:
 
 ```csharp
 namespace Norse.Abstractions.Contracts;
 
-/// <summary>The success case of <see cref="Outcome"/> — no payload, the operation simply worked.</summary>
-public readonly record struct Succeeded;
+/// <summary>
+/// The payload of <see cref="Outcome{T}"/> for operations with no success value — not a placeholder,
+/// the honest zero-cost type for "nothing." Trivially satisfies <c>where T : notnull</c> (structs
+/// always do). Spelled bare as <c>Outcome</c> almost everywhere via the platform-wide alias in
+/// <c>GlobalUsings.Outcome.cs</c> — most call sites never name <see cref="Unit"/> directly.
+/// </summary>
+public readonly record struct Unit
+{
+	/// <summary>The single value of this type.</summary>
+	public static readonly Unit Value = default;
+}
 ```
 
-`Asgard/src/Abstractions.Contracts/Outcome.cs` — full replacement contents. Native `[Union]` readonly record structs, matching Svartalfheim's `Result<T>` exactly (hand-authored, not a shorthand `union` declaration — both cases stored inline, zero boxing on either path; `[MustConsume]` so a caller can't silently drop the failure case; `outcome is Outcome<T>` is CS8121, pattern match `Success<T>`/`Failed` directly):
+`Asgard/src/Abstractions.Contracts/GlobalUsings.Outcome.cs` — new file, the platform-wide alias (copied verbatim into every project this plan adds an `Outcome<Unit>` dependency to — see Tasks 3, 10, 12, 13):
+
+```csharp
+global using Outcome = Norse.Abstractions.Contracts.Outcome<Norse.Abstractions.Contracts.Unit>;
+```
+
+`Asgard/src/Abstractions.Contracts/Outcome{T}.cs` — full replacement contents. A native `[Union]` readonly record struct, matching Svartalfheim's `Result<T>` exactly (hand-authored, not a shorthand `union` declaration — both cases stored inline, zero boxing on either path; `[MustConsume]` so a caller can't silently drop the failure case; `outcome is Outcome<T>` is CS8121, pattern match `Success<T>`/`Failed` directly). One generic type only — void-success operations use `T = Unit` via the alias above, never a separate non-generic type:
 
 ```csharp
 using System.Diagnostics;
@@ -300,66 +323,13 @@ using Norse.Primitives;
 namespace Norse.Abstractions.Contracts;
 
 /// <summary>
-/// The mediator's application-level result vehicle for operations with no success payload: exactly
-/// one of <see cref="Succeeded"/> or <see cref="Failed"/>, as a native C# union. Match against the
-/// case types — never against <c>Outcome</c> itself; the compiler rejects <c>outcome is Outcome</c>
-/// (CS8121). Do not use <c>default(Outcome)</c>; a defaulted value is malformed by construction and
-/// throws <see cref="SwitchExpressionException"/> on first exhaustive-switch consumption.
-/// </summary>
-[MustConsume]
-[Union]
-public readonly record struct Outcome : IUnion
-{
-	enum State : byte { Default = 0, Success = 1, Failure = 2 }
-
-	readonly Failed _failed;
-	readonly State _state;
-
-	/// <summary>Creates a successful outcome. Also reachable as an implicit union conversion.</summary>
-	public Outcome(Succeeded value) => _state = State.Success;
-
-	/// <summary>Creates a failed outcome. Also reachable as an implicit union conversion.</summary>
-	public Outcome(Failed value)
-	{
-		_failed = value;
-		_state = State.Failure;
-	}
-
-	/// <summary>Retrieves the success case without boxing.</summary>
-	public bool TryGetValue(out Succeeded value)
-	{
-		value = default;
-		return _state == State.Success;
-	}
-
-	/// <summary>Retrieves the failure case without boxing.</summary>
-	public bool TryGetValue(out Failed value)
-	{
-		value = _failed;
-		return _state == State.Failure;
-	}
-
-	/// <summary>Creates a successful outcome.</summary>
-	public static Outcome Ok() => new(default(Succeeded));
-
-	/// <summary>Creates a failed outcome with the given error category and optional field errors.</summary>
-	public static Outcome Err(ErrorCategory category, IReadOnlyDictionary<string, string[]>? errors = null, Guid? correlationId = null) =>
-		new(new Failed(new Problem { Category = category, Errors = errors ?? new Dictionary<string, string[]>(), CorrelationId = correlationId }));
-
-	/// <summary>Consumes the outcome by handling both cases.</summary>
-	public TResult Match<TResult>(Func<TResult> success, Func<Problem, TResult> failure) =>
-		this switch
-		{
-			Succeeded => success(),
-			Failed(var problem) => failure(problem),
-		};
-}
-
-/// <summary>
-/// The mediator's application-level result vehicle for operations with a success payload of type
-/// <typeparamref name="T"/>: exactly one of <see cref="Success{T}"/> (reused directly from
-/// Svartalfheim — the only realm Asgard's own charter allows it to depend on, and <c>Success&lt;T&gt;</c>
-/// is already a bare, Result-agnostic wrapper) or <see cref="Failed"/>, as a native C# union.
+/// The mediator's application-level result vehicle: exactly one of <see cref="Success{T}"/> (reused
+/// directly from Svartalfheim) or <see cref="Failed"/>, as a native C# union. Match against the case
+/// types — never against <c>Outcome&lt;T&gt;</c> itself; the compiler rejects <c>outcome is Outcome&lt;T&gt;</c>
+/// (CS8121). Do not use <c>default(Outcome&lt;T&gt;)</c>; a defaulted value is malformed by construction
+/// and throws <see cref="SwitchExpressionException"/> on first exhaustive-switch consumption.
+/// Void-success operations use <c>T = </c><see cref="Unit"/> — spelled bare as <c>Outcome</c> via the
+/// platform-wide alias, never a second, non-generic type.
 /// </summary>
 /// <typeparam name="T">The success payload's type. Non-nullable by construction.</typeparam>
 [MustConsume]
@@ -469,8 +439,8 @@ git commit -m "feat: relocate envelope to Abstractions.Contracts as a native uni
 - Test: `Asgard/tests/Abstractions.Web.Server.Tests/BehaviorAttributeTests.cs`
 
 **Interfaces:**
-- Consumes: `Outcome<T>`, `Outcome` (Task 1, `Norse.Abstractions.Contracts`).
-- Produces: `Norse.Abstractions.Contracts.GenerateGatewayAttribute` (marker, no members, WASM-safe — decorates a `[ServiceContract]` interface). `Norse.Abstractions.Web.Server.Mediator.IBehavior<TRequest,TResponse>.Handle(TRequest, CancellationToken, BehaviorDelegate<TResponse>) : ValueTask<Outcome<TResponse>>` and the non-generic `IBehavior<TRequest>.Handle(TRequest, CancellationToken, BehaviorDelegate) : ValueTask<Outcome>`. `Norse.Abstractions.Web.Server.Mediator.BehaviorAttribute(Type behaviorType, Type? after = null)` — decorates a service **implementation class or method**, never an interface. Midgard's four standard behaviors (Task 3, 4) implement `IBehavior<,>`/`IBehavior<>`. The generator (Task 7-9) reads `BehaviorAttribute` from implementation-class symbols.
+- Consumes: `Outcome<T>` (Task 1, `Norse.Abstractions.Contracts`; void-success is `Outcome<Unit>`, spelled `Outcome` via the alias — no separate non-generic type).
+- Produces: `Norse.Abstractions.Contracts.GenerateGatewayAttribute` (marker, no members, WASM-safe — decorates a `[ServiceContract]` interface). `Norse.Abstractions.Web.Server.Mediator.IBehavior<TRequest,TResponse>.Handle(TRequest, CancellationToken, BehaviorDelegate<TResponse>) : ValueTask<Outcome<TResponse>>` — one interface family, `TResponse = Unit` for void-success operations, never a second `IBehavior<TRequest>` form (2026-07-24 amendment: the Unit consolidation exists specifically so this doesn't fork). `Norse.Abstractions.Web.Server.Mediator.BehaviorAttribute(Type behaviorType, Type? after = null)` — decorates a service **implementation class or method**, never an interface. Midgard's four standard behaviors (Task 3, 4) implement `IBehavior<,>`. The generator (Task 7-9) reads `BehaviorAttribute` from implementation-class symbols.
 
 - [ ] **Step 1: Write the failing test for `BehaviorAttribute`'s allowed targets**
 
@@ -520,25 +490,19 @@ namespace Norse.Abstractions.Web.Server.Mediator;
 /// <summary>Continues to the next behavior (or the handler) in a generated in-process chain.</summary>
 public delegate ValueTask<Outcome<TResponse>> BehaviorDelegate<TResponse>();
 
-/// <summary>Continues to the next behavior (or the handler) in a generated in-process chain (non-generic <see cref="Outcome"/> form).</summary>
-public delegate ValueTask<Outcome> BehaviorDelegate();
-
 /// <summary>
 /// One link in the generated in-process gateway's behavior chain (spec §2.5). Standard behaviors
 /// (Telemetry, ExceptionTranslation, Authorization, Validation) live in Midgard; a product realm's
-/// custom behavior implements this same contract.
+/// custom behavior implements this same contract. One family only — void-success operations use
+/// <c>TResponse = Unit</c> (spelled <c>Outcome</c> via the platform-wide alias), never a second,
+/// non-generic <c>IBehavior&lt;TRequest&gt;</c> form. That fork was drafted and reverted before
+/// Asgard's ship gate specifically to avoid forcing every future custom behavior — including every
+/// {Company}.{Context} product realm's own — to implement both shapes forever.
 /// </summary>
 public interface IBehavior<TRequest, TResponse>
 {
 	/// <summary>Runs this behavior, calling <paramref name="next"/> to continue the chain.</summary>
 	ValueTask<Outcome<TResponse>> Handle(TRequest request, CancellationToken cancellationToken, BehaviorDelegate<TResponse> next);
-}
-
-/// <summary>Non-generic <see cref="IBehavior{TRequest,TResponse}"/> for handlers that return <see cref="Outcome"/> (no payload).</summary>
-public interface IBehavior<TRequest>
-{
-	/// <summary>Runs this behavior, calling <paramref name="next"/> to continue the chain.</summary>
-	ValueTask<Outcome> Handle(TRequest request, CancellationToken cancellationToken, BehaviorDelegate next);
 }
 ```
 
@@ -557,7 +521,7 @@ namespace Norse.Abstractions.Web.Server.Mediator;
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = true)]
 public sealed class BehaviorAttribute(Type behaviorType, Type? after = null) : Attribute
 {
-	/// <summary>The <see cref="IBehavior{TRequest,TResponse}"/>/<see cref="IBehavior{TRequest}"/> implementation to insert.</summary>
+	/// <summary>The <see cref="IBehavior{TRequest,TResponse}"/> implementation to insert.</summary>
 	public Type BehaviorType { get; } = behaviorType;
 
 	/// <summary>The standard behavior this one runs after in the chain; <see langword="null"/> inserts immediately after Validation, before the handler.</summary>
@@ -614,7 +578,7 @@ Asgard's PR merges, CI is green, a version tag is pushed, and the resulting NuGe
 
 **Interfaces:**
 - Consumes: `IBehavior<TRequest,TResponse>`, `BehaviorDelegate<TResponse>`, `Outcome<T>`, `Problem`, `ErrorCategory` (Task 1, 2).
-- Produces: `Norse.Infrastructure.Web.Server.Mediator.TelemetryBehavior<TRequest,TResponse>(ILogger<TelemetryBehavior<TRequest,TResponse>> logger) : IBehavior<TRequest,TResponse>` and `Norse.Infrastructure.Web.Server.Mediator.ExceptionTranslationBehavior<TRequest,TResponse>(ILogger<ExceptionTranslationBehavior<TRequest,TResponse>> logger) : IBehavior<TRequest,TResponse>`, plus their non-generic `<TRequest>` siblings (`IBehavior<TRequest>`, `Outcome`-returning) for handlers with no payload (e.g. `Register`/`Logout`, whose `IRequestHandler<TRequest, Outcome>` is already a real, shipped Asgard shape). These are composed outermost-first as `Telemetry(ExceptionTranslation(...))` by the generator in Task 9 — tested together here because the ordering property (telemetry reads the finished `Problem.CorrelationId`) only holds when both are present (spec §2.5).
+- Produces: `Norse.Infrastructure.Web.Server.Mediator.TelemetryBehavior<TRequest,TResponse>(ILogger<TelemetryBehavior<TRequest,TResponse>> logger) : IBehavior<TRequest,TResponse>` and `Norse.Infrastructure.Web.Server.Mediator.ExceptionTranslationBehavior<TRequest,TResponse>(ILogger<ExceptionTranslationBehavior<TRequest,TResponse>> logger) : IBehavior<TRequest,TResponse>` — one generic family only (2026-07-24 amendment); `Register`/`Logout`, which have no payload, are wrapped by the generator (Task 9) as `TResponse = Unit`, never a second non-generic behavior form. These are composed outermost-first as `Telemetry(ExceptionTranslation(...))` — tested together here because the ordering property (telemetry reads the finished `Problem.CorrelationId`) only holds when both are present (spec §2.5).
 
 This task proves the fix from spec review: `ExceptionTranslationBehavior` never rethrows past itself — an unhandled exception becomes `Outcome<T>.Err(ErrorCategory.Fault, correlationId: ...)` as a **return value**, which `TelemetryBehavior`, wrapping it, can read directly.
 
@@ -775,115 +739,11 @@ sealed class TelemetryBehavior<TRequest, TResponse>(ILogger<TelemetryBehavior<TR
 Run: `dotnet test Midgard/tests/Infrastructure.Web.Server.Tests --filter TelemetryBehaviorTests`
 Expected: PASS (3 tests).
 
-- [ ] **Step 6: Write the failing test for the non-generic siblings**
-
-`IRequestHandler<LogoutRequest, Outcome>` (non-generic — already real, shipped Asgard convention) needs a chain over `IBehavior<TRequest>`/`Outcome`, not `Outcome<object>` with a placeholder payload type. The generator's non-generic emission branch (Task 9) references these two types directly.
-
-```csharp
-// Midgard/tests/Infrastructure.Web.Server.Tests/Mediator/TelemetryBehaviorTests.cs — append to the same file
-class NonGenericBehaviorTests
-{
-	[Fact]
-	async Task Chain_UnhandledException_BecomesFaultOutcome_NotRethrown()
-	{
-		var telemetry = new TelemetryBehavior<string>(NullLogger<TelemetryBehavior<string>>.Instance);
-		var translation = new ExceptionTranslationBehavior<string>(NullLogger<ExceptionTranslationBehavior<string>>.Instance);
-
-		Outcome Result() => throw new InvalidOperationException("boom");
-
-		var outcome = await telemetry.Handle("request", CancellationToken.None,
-			() => translation.Handle("request", CancellationToken.None,
-				() => ValueTask.FromResult(Result())));
-
-		outcome.TryGetValue(out Failed failed).ShouldBeTrue();
-		failed.Problem.Category.ShouldBe(ErrorCategory.Fault);
-	}
-
-	[Fact]
-	async Task Chain_SuccessfulCall_PassesThroughUnchanged()
-	{
-		var telemetry = new TelemetryBehavior<string>(NullLogger<TelemetryBehavior<string>>.Instance);
-		var translation = new ExceptionTranslationBehavior<string>(NullLogger<ExceptionTranslationBehavior<string>>.Instance);
-
-		var outcome = await telemetry.Handle("request", CancellationToken.None,
-			() => translation.Handle("request", CancellationToken.None,
-				() => ValueTask.FromResult(Outcome.Ok())));
-
-		outcome.TryGetValue(out Succeeded _).ShouldBeTrue();
-	}
-}
-```
-
-Run: `dotnet test Midgard/tests/Infrastructure.Web.Server.Tests --filter NonGenericBehaviorTests`
-Expected: FAIL — `TelemetryBehavior<TRequest>`/`ExceptionTranslationBehavior<TRequest>` (single type parameter) do not exist.
-
-- [ ] **Step 7: Implement the non-generic siblings**
-
-```csharp
-// Midgard/src/Infrastructure.Web.Server/Mediator/ExceptionTranslationBehavior.cs — append to the same file
-/// <summary>Non-generic sibling of <see cref="ExceptionTranslationBehavior{TRequest,TResponse}"/> for handlers returning <see cref="Outcome"/> (no payload).</summary>
-sealed class ExceptionTranslationBehavior<TRequest>(ILogger<ExceptionTranslationBehavior<TRequest>> logger) : IBehavior<TRequest>
-{
-	public async ValueTask<Outcome> Handle(TRequest request, CancellationToken cancellationToken, BehaviorDelegate next)
-	{
-		try
-		{
-			return await next().ConfigureAwait(false);
-		}
-		catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-		{
-			throw;
-		}
-		catch (Exception ex)
-		{
-			var correlationId = Guid.NewGuid();
-			logger.LogError(ex, "Unhandled exception, correlation id {CorrelationId}", correlationId);
-			return Outcome.Err(ErrorCategory.Fault, correlationId: correlationId);
-		}
-	}
-}
-```
-
-```csharp
-// Midgard/src/Infrastructure.Web.Server/Mediator/TelemetryBehavior.cs — append to the same file
-/// <summary>Non-generic sibling of <see cref="TelemetryBehavior{TRequest,TResponse}"/> for handlers returning <see cref="Outcome"/> (no payload).</summary>
-sealed class TelemetryBehavior<TRequest>(ILogger<TelemetryBehavior<TRequest>> logger) : IBehavior<TRequest>
-{
-	public async ValueTask<Outcome> Handle(TRequest request, CancellationToken cancellationToken, BehaviorDelegate next)
-	{
-		var stopwatch = Stopwatch.StartNew();
-		var outcome = await next().ConfigureAwait(false);
-		stopwatch.Stop();
-
-		switch (outcome)
-		{
-			case Succeeded:
-				logger.LogInformation("{RequestType} succeeded in {ElapsedMs}ms", typeof(TRequest).Name, stopwatch.ElapsedMilliseconds);
-				break;
-			case Failed(var problem) when problem.Category == ErrorCategory.Fault:
-				logger.LogWarning("{RequestType} faulted in {ElapsedMs}ms, correlation id {CorrelationId}",
-					typeof(TRequest).Name, stopwatch.ElapsedMilliseconds, problem.CorrelationId);
-				break;
-			case Failed(var problem):
-				logger.LogInformation("{RequestType} failed in {ElapsedMs}ms with {Category}", typeof(TRequest).Name, stopwatch.ElapsedMilliseconds, problem.Category);
-				break;
-		}
-
-		return outcome;
-	}
-}
-```
-
-- [ ] **Step 8: Run tests to verify they pass**
-
-Run: `dotnet test Midgard/tests/Infrastructure.Web.Server.Tests --filter "TelemetryBehaviorTests|NonGenericBehaviorTests"`
-Expected: PASS (5 tests total).
-
-- [ ] **Step 9: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add Midgard/src/Infrastructure.Web.Server/Mediator/TelemetryBehavior.cs Midgard/src/Infrastructure.Web.Server/Mediator/ExceptionTranslationBehavior.cs Midgard/tests/Infrastructure.Web.Server.Tests/Mediator/TelemetryBehaviorTests.cs
-git commit -m "feat: add TelemetryBehavior and ExceptionTranslationBehavior, generic and non-generic, telemetry outermost"
+git commit -m "feat: add TelemetryBehavior and ExceptionTranslationBehavior, telemetry outermost"
 ```
 
 ---
@@ -898,7 +758,7 @@ git commit -m "feat: add TelemetryBehavior and ExceptionTranslationBehavior, gen
 
 **Interfaces:**
 - Consumes: `IBehavior<TRequest,TResponse>` (Task 2). `IAuthorizationService` (ASP.NET Core). `IValidator<TRequest>` (FluentValidation, already referenced by Himinbjörg's validators).
-- Produces: `Norse.Infrastructure.Web.Server.Mediator.AuthorizationBehavior<TRequest,TResponse>(string policyName, IAuthorizationService authorizationService, Func<ValueTask<ClaimsPrincipal>> principalAccessor) : IBehavior<TRequest,TResponse>` and `Norse.Infrastructure.Web.Server.Mediator.ValidationBehavior<TRequest,TResponse>(IValidator<TRequest> validator) : IBehavior<TRequest,TResponse>`, plus their non-generic `<TRequest>` siblings (`IBehavior<TRequest>`, `Outcome`-returning) for handlers with no payload. The generator (Task 9) supplies `policyName` as a compile-time literal read from the service method's `[Authorize(Policy=...)]` attribute — this behavior never discovers its own policy via reflection. **`principalAccessor`, not `IHttpContextAccessor`, deliberately** — spec §2.5 already rules the principal source belongs to the host adapter, not the behavior, and `IHttpContextAccessor` is explicitly unsupported inside a live Blazor Server circuit (Microsoft's own docs: `HttpContext` is valid only for the initial synchronous render, `null`/stale after that, including after SignalR reconnection) — the exact path this feature exists to make safe. The in-process gateway (Task 9) supplies a closure over `AuthenticationStateProvider`; any future REST/gRPC-endpoint adapter (decided law item 5, deferred) supplies one over its own request principal instead.
+- Produces: `Norse.Infrastructure.Web.Server.Mediator.AuthorizationBehavior<TRequest,TResponse>(string policyName, IAuthorizationService authorizationService, Func<ValueTask<ClaimsPrincipal>> principalAccessor) : IBehavior<TRequest,TResponse>` and `Norse.Infrastructure.Web.Server.Mediator.ValidationBehavior<TRequest,TResponse>(IValidator<TRequest> validator) : IBehavior<TRequest,TResponse>` — one generic family only (2026-07-24 amendment), `TResponse = Unit` for handlers with no payload, never a non-generic `<TRequest>` form. The generator (Task 9) supplies `policyName` as a compile-time literal read from the service method's `[Authorize(Policy=...)]` attribute — this behavior never discovers its own policy via reflection. **`principalAccessor`, not `IHttpContextAccessor`, deliberately** — spec §2.5 already rules the principal source belongs to the host adapter, not the behavior, and `IHttpContextAccessor` is explicitly unsupported inside a live Blazor Server circuit (Microsoft's own docs: `HttpContext` is valid only for the initial synchronous render, `null`/stale after that, including after SignalR reconnection) — the exact path this feature exists to make safe. The in-process gateway (Task 9) supplies a closure over `AuthenticationStateProvider`; any future REST/gRPC-endpoint adapter (decided law item 5, deferred) supplies one over its own request principal instead.
 
 - [ ] **Step 1: Write the failing tests — authorization split (Unauthorized vs Forbidden) and validation error shape**
 
@@ -1093,113 +953,16 @@ sealed class ValidationBehavior<TRequest, TResponse>(IValidator<TRequest> valida
 Run: `dotnet test Midgard/tests/Infrastructure.Web.Server.Tests --filter "AuthorizationBehaviorTests|ValidationBehaviorTests"`
 Expected: PASS (5 tests).
 
-- [ ] **Step 6: Write the failing test for the non-generic siblings**
-
-```csharp
-// Midgard/tests/Infrastructure.Web.Server.Tests/Mediator/AuthorizationBehaviorTests.cs — append to the same file
-class NonGenericAuthorizationBehaviorTests
-{
-	[Fact]
-	async Task NotAuthenticated_ReturnsUnauthorized()
-	{
-		var user = new ClaimsPrincipal(new ClaimsIdentity());
-		var authorizationService = Substitute.For<IAuthorizationService>();
-		authorizationService.AuthorizeAsync(user, "AuthN.Public").Returns(AuthorizationResult.Failed());
-
-		var behavior = new AuthorizationBehavior<string>("AuthN.Public", authorizationService, () => ValueTask.FromResult(user));
-
-		var outcome = await behavior.Handle("request", CancellationToken.None, () => throw new InvalidOperationException("should not reach handler"));
-
-		outcome.TryGetValue(out Failed failed).ShouldBeTrue();
-		failed.Problem.Category.ShouldBe(ErrorCategory.Unauthorized);
-	}
-}
-```
-
-```csharp
-// Midgard/tests/Infrastructure.Web.Server.Tests/Mediator/ValidationBehaviorTests.cs — append to the same file
-class NonGenericValidationBehaviorTests
-{
-	[Fact]
-	async Task Invalid_ReturnsValidationOutcome()
-	{
-		var validator = Substitute.For<IValidator<string>>();
-		validator.ValidateAsync(Arg.Any<ValidationContext<string>>(), Arg.Any<CancellationToken>())
-			.Returns(new ValidationResult([new ValidationFailure("Field", "message")]));
-		var behavior = new ValidationBehavior<string>(validator);
-
-		var outcome = await behavior.Handle("request", CancellationToken.None, () => throw new InvalidOperationException("should not reach handler"));
-
-		outcome.TryGetValue(out Failed failed).ShouldBeTrue();
-		failed.Problem.Category.ShouldBe(ErrorCategory.Validation);
-	}
-}
-```
-
-Run: `dotnet test Midgard/tests/Infrastructure.Web.Server.Tests --filter "NonGenericAuthorizationBehaviorTests|NonGenericValidationBehaviorTests"`
-Expected: FAIL — `AuthorizationBehavior<TRequest>`/`ValidationBehavior<TRequest>` (single type parameter) do not exist.
-
-- [ ] **Step 7: Implement the non-generic siblings**
-
-```csharp
-// Midgard/src/Infrastructure.Web.Server/Mediator/AuthorizationBehavior.cs — append to the same file
-/// <summary>Non-generic sibling of <see cref="AuthorizationBehavior{TRequest,TResponse}"/> for handlers returning <see cref="Outcome"/> (no payload).</summary>
-sealed class AuthorizationBehavior<TRequest>(
-	string policyName, IAuthorizationService authorizationService, Func<ValueTask<ClaimsPrincipal>> principalAccessor)
-	: IBehavior<TRequest>
-{
-	public async ValueTask<Outcome> Handle(TRequest request, CancellationToken cancellationToken, BehaviorDelegate next)
-	{
-		var user = await principalAccessor().ConfigureAwait(false);
-		var result = await authorizationService.AuthorizeAsync(user, policyName).ConfigureAwait(false);
-
-		if (!result.Succeeded)
-		{
-			return Outcome.Err(user.Identity is { IsAuthenticated: true } ? ErrorCategory.Forbidden : ErrorCategory.Unauthorized);
-		}
-
-		return await next().ConfigureAwait(false);
-	}
-}
-```
-
-```csharp
-// Midgard/src/Infrastructure.Web.Server/Mediator/ValidationBehavior.cs — append to the same file
-/// <summary>Non-generic sibling of <see cref="ValidationBehavior{TRequest,TResponse}"/> for handlers returning <see cref="Outcome"/> (no payload).</summary>
-sealed class ValidationBehavior<TRequest>(IValidator<TRequest> validator) : IBehavior<TRequest>
-{
-	public async ValueTask<Outcome> Handle(TRequest request, CancellationToken cancellationToken, BehaviorDelegate next)
-	{
-		var result = await validator.ValidateAsync(request, cancellationToken).ConfigureAwait(false);
-
-		if (!result.IsValid)
-		{
-			var errors = result.Errors
-				.GroupBy(failure => failure.PropertyName)
-				.ToDictionary(group => group.Key, group => group.Select(failure => failure.ErrorMessage).ToArray());
-			return Outcome.Err(ErrorCategory.Validation, errors);
-		}
-
-		return await next().ConfigureAwait(false);
-	}
-}
-```
-
-- [ ] **Step 8: Run tests to verify they pass**
-
-Run: `dotnet test Midgard/tests/Infrastructure.Web.Server.Tests --filter "NonGenericAuthorizationBehaviorTests|NonGenericValidationBehaviorTests"`
-Expected: PASS (2 tests).
-
-- [ ] **Step 9: Run the full Midgard test suite**
+- [ ] **Step 6: Run the full Midgard test suite**
 
 Run: `dotnet test Midgard.slnx`
 Expected: PASS.
 
-- [ ] **Step 10: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add Midgard/src/Infrastructure.Web.Server/Mediator/AuthorizationBehavior.cs Midgard/src/Infrastructure.Web.Server/Mediator/ValidationBehavior.cs Midgard/tests/Infrastructure.Web.Server.Tests/Mediator/AuthorizationBehaviorTests.cs Midgard/tests/Infrastructure.Web.Server.Tests/Mediator/ValidationBehaviorTests.cs
-git commit -m "feat: add AuthorizationBehavior and ValidationBehavior, generic and non-generic siblings"
+git commit -m "feat: add AuthorizationBehavior and ValidationBehavior"
 ```
 
 ---
@@ -2126,29 +1889,29 @@ static class WireHostEmitter
 		builder.AppendLine("{");
 		foreach (var method in model.Methods)
 		{
-			var returnType = method.ResponseTypeName is { } responseType ? $"Outcome<{responseType}>" : "Outcome";
-			var okExpression = method.ResponseTypeName is { } rt ? $"Outcome<{rt}>.Ok(result)" : "Outcome.Ok()";
-			builder.AppendLine($"\tpublic async ValueTask<{returnType}> {method.Name}({method.RequestTypeName} request, CancellationToken cancellationToken = default)");
+			// One shape throughout: void-success methods use responseType = "Unit" (never a separate
+			// non-generic Outcome path) — 2026-07-24 amendment. Outcome<Unit>.Ok needs its one required
+			// argument; Outcome<T>.Err never did, so the failure branch is already uniform.
+			var responseType = method.ResponseTypeName ?? "Unit";
+			builder.AppendLine($"\tpublic async ValueTask<Outcome<{responseType}>> {method.Name}({method.RequestTypeName} request, CancellationToken cancellationToken = default)");
 			builder.AppendLine("\t{");
 			builder.AppendLine("\t\ttry");
 			builder.AppendLine("\t\t{");
-			if (method.ResponseTypeName is { } responseTypeName)
+			if (method.ResponseTypeName is not null)
 			{
 				builder.AppendLine($"\t\t\tvar result = await service.{method.Name}(request).ConfigureAwait(false);");
-				builder.AppendLine($"\t\t\treturn {okExpression};");
+				builder.AppendLine($"\t\t\treturn Outcome<{responseType}>.Ok(result);");
 			}
 			else
 			{
 				builder.AppendLine($"\t\t\tawait service.{method.Name}(request).ConfigureAwait(false);");
-				builder.AppendLine("\t\t\treturn Outcome.Ok();");
+				builder.AppendLine($"\t\t\treturn Outcome<{responseType}>.Ok(Unit.Value);");
 			}
 			builder.AppendLine("\t\t}");
 			builder.AppendLine("\t\tcatch (global::Grpc.Core.RpcException ex)");
 			builder.AppendLine("\t\t{");
 			builder.AppendLine("\t\t\tvar problem = global::Norse.Infrastructure.Web.Client.Grpc.RpcExceptionExtensions.DecodeProblem(ex);");
-			builder.AppendLine(method.ResponseTypeName is null
-				? "\t\t\treturn Outcome.Err(problem.Category, problem.Errors, problem.CorrelationId);"
-				: $"\t\t\treturn Outcome<{method.ResponseTypeName}>.Err(problem.Category, problem.Errors, problem.CorrelationId);");
+			builder.AppendLine($"\t\t\treturn Outcome<{responseType}>.Err(problem.Category, problem.Errors, problem.CorrelationId);");
 			builder.AppendLine("\t\t}");
 			builder.AppendLine("\t}");
 		}
@@ -2198,7 +1961,7 @@ git commit -m "feat: WireHost-mode gateway emission, ErrorInfo-decoded failure p
 
 **Interfaces:**
 - Consumes: `GatewayInterfaceModel`/`GatewayMethodModel` (Task 7). Emits fully-qualified references to Midgard's `TelemetryBehavior<,>`, `ExceptionTranslationBehavior<,>`, `AuthorizationBehavior<,>`, `ValidationBehavior<,>` (Task 3, 4) by name only — no compile-time reference from the generator project itself.
-- Produces: `InProcessHostEmitter.Emit(GatewayInterfaceModel) : string` — emits `{Context}InProcessGateway : I{Context}Gateway`, composing the standard chain `Telemetry(ExceptionTranslation(Authorization(Validation(handler))))` per method, with the method's baked-in policy name, then calling the real service implementation directly. The generated constructor takes `AuthenticationStateProvider` (never `IHttpContextAccessor` — spec §2.5, Remand 1) and one `IValidator<TRequest>` per method, constructor-injected by standard DI (never resolved by string-manipulated type name at runtime — Remand 2); a missing validator registration now fails at DI activation (circuit creation), not mid-request past the exception-translation boundary.
+- Produces: `InProcessHostEmitter.Emit(GatewayInterfaceModel) : string` — emits `{Context}InProcessGateway : I{Context}Gateway`, composing the standard chain `Telemetry(ExceptionTranslation(Authorization(Validation(handler))))` per method, with the method's baked-in policy name, then calling the real service implementation directly. The generated constructor takes `AuthenticationStateProvider` (never `IHttpContextAccessor` — spec §2.5, Remand 1) and one `IValidator<TRequest>` per method, constructor-injected by standard DI (never resolved by string-manipulated type name at runtime — Remand 2); a missing validator registration now fails at DI activation (circuit creation), not mid-request past the exception-translation boundary. **One chain shape for every method** (2026-07-24 amendment): void-success methods (bare `Task` on the wire interface) run the identical generic chain with `TResponse = Unit`; the only generated difference is a two-line `AwaitThenUnit` helper for the innermost call, emitted only when at least one method needs it — never a second, hand-written behavior/chain family.
 
 - [ ] **Step 1: Add the failing InProcessHost test case**
 
@@ -2226,6 +1989,39 @@ Append to `GatewayGeneratorTests`:
 		telemetryIndex.ShouldBeLessThan(exceptionIndex);
 		exceptionIndex.ShouldBeLessThan(authorizationIndex);
 		authorizationIndex.ShouldBeLessThan(validationIndex);
+	}
+
+	[Fact]
+	void InProcessHostMode_VoidSuccessMethod_UsesUnitViaSameChainShape_NotASecondFamily()
+	{
+		const string source = """
+			using System.ServiceModel;
+			using Microsoft.AspNetCore.Authorization;
+			using Norse.Abstractions.Contracts;
+
+			namespace TestRealm.Services;
+
+			[GenerateGateway]
+			[ServiceContract]
+			public interface IWidgetService
+			{
+				[Authorize(Policy = "Widget.Delete")]
+				[OperationContract]
+				Task DeleteWidget(WidgetRequest request, CancellationToken cancellationToken = default);
+			}
+
+			public sealed record WidgetRequest;
+			""";
+
+		var (diagnostics, sources) = GeneratorTestHarness.Run(source, "InProcessHost");
+
+		diagnostics.ShouldBeEmpty();
+		var generated = sources.ShouldHaveSingleItem();
+		generated.ShouldContain("ValueTask<Outcome<Unit>> DeleteWidget(");
+		generated.ShouldContain("ValidationBehavior<WidgetRequest, Unit>");
+		generated.ShouldContain("AwaitThenUnit");
+		// No second behavior/chain family — same generic types the payload-bearing method uses.
+		generated.ShouldNotContain("IBehavior<WidgetRequest>");
 	}
 ```
 
@@ -2278,44 +2074,37 @@ static class InProcessHostEmitter
 		foreach (var method in model.Methods)
 		{
 			var validatorParamName = char.ToLowerInvariant(method.Name[0]) + method.Name[1..] + "Validator";
-			if (method.ResponseTypeName is { } responseType)
-			{
-				// Generic chain — IRequestHandler<TRequest, Outcome<TResponse>> shape (e.g. Login).
-				builder.AppendLine($"\tpublic async ValueTask<Outcome<{responseType}>> {method.Name}({method.RequestTypeName} request, CancellationToken cancellationToken = default)");
-				builder.AppendLine("\t{");
-				builder.AppendLine($"\t\tvar validation = new Norse.Infrastructure.Web.Server.Mediator.ValidationBehavior<{method.RequestTypeName}, {responseType}>({validatorParamName});");
-				builder.AppendLine($"\t\tvar authorization = new Norse.Infrastructure.Web.Server.Mediator.AuthorizationBehavior<{method.RequestTypeName}, {responseType}>(\"{method.PolicyName}\", authorizationService, GetPrincipalAsync);");
-				builder.AppendLine($"\t\tvar exceptionTranslation = new Norse.Infrastructure.Web.Server.Mediator.ExceptionTranslationBehavior<{method.RequestTypeName}, {responseType}>(loggerFactory.CreateLogger<Norse.Infrastructure.Web.Server.Mediator.ExceptionTranslationBehavior<{method.RequestTypeName}, {responseType}>>());");
-				builder.AppendLine($"\t\tvar telemetry = new Norse.Infrastructure.Web.Server.Mediator.TelemetryBehavior<{method.RequestTypeName}, {responseType}>(loggerFactory.CreateLogger<Norse.Infrastructure.Web.Server.Mediator.TelemetryBehavior<{method.RequestTypeName}, {responseType}>>());");
-				builder.AppendLine();
-				builder.AppendLine("\t\treturn await telemetry.Handle(request, cancellationToken, () =>");
-				builder.AppendLine("\t\t\texceptionTranslation.Handle(request, cancellationToken, () =>");
-				builder.AppendLine("\t\t\t\tauthorization.Handle(request, cancellationToken, () =>");
-				builder.AppendLine("\t\t\t\t\tvalidation.Handle(request, cancellationToken, async () =>");
-				builder.AppendLine($"\t\t\t\t\t\tOutcome<{responseType}>.Ok(await service.{method.Name}(request).ConfigureAwait(false)))))).ConfigureAwait(false);");
-				builder.AppendLine("\t}");
-			}
-			else
-			{
-				// Non-generic chain — IRequestHandler<TRequest, Outcome> shape (e.g. Register, Logout,
-				// which return bare Task on the wire interface, per the platform's existing
-				// IRequestHandler<LogoutRequest, Outcome> convention). Uses the non-generic
-				// IBehavior<TRequest> siblings (Midgard, Task 3/4), not Outcome<object> — there is no
-				// payload type to substitute a placeholder for.
-				builder.AppendLine($"\tpublic async ValueTask<Outcome> {method.Name}({method.RequestTypeName} request, CancellationToken cancellationToken = default)");
-				builder.AppendLine("\t{");
-				builder.AppendLine($"\t\tvar validation = new Norse.Infrastructure.Web.Server.Mediator.ValidationBehavior<{method.RequestTypeName}>({validatorParamName});");
-				builder.AppendLine($"\t\tvar authorization = new Norse.Infrastructure.Web.Server.Mediator.AuthorizationBehavior<{method.RequestTypeName}>(\"{method.PolicyName}\", authorizationService, GetPrincipalAsync);");
-				builder.AppendLine($"\t\tvar exceptionTranslation = new Norse.Infrastructure.Web.Server.Mediator.ExceptionTranslationBehavior<{method.RequestTypeName}>(loggerFactory.CreateLogger<Norse.Infrastructure.Web.Server.Mediator.ExceptionTranslationBehavior<{method.RequestTypeName}>>());");
-				builder.AppendLine($"\t\tvar telemetry = new Norse.Infrastructure.Web.Server.Mediator.TelemetryBehavior<{method.RequestTypeName}>(loggerFactory.CreateLogger<Norse.Infrastructure.Web.Server.Mediator.TelemetryBehavior<{method.RequestTypeName}>>());");
-				builder.AppendLine();
-				builder.AppendLine("\t\treturn await telemetry.Handle(request, cancellationToken, () =>");
-				builder.AppendLine("\t\t\texceptionTranslation.Handle(request, cancellationToken, () =>");
-				builder.AppendLine("\t\t\t\tauthorization.Handle(request, cancellationToken, () =>");
-				builder.AppendLine("\t\t\t\t\tvalidation.Handle(request, cancellationToken, async () =>");
-				builder.AppendLine($"\t\t\t\t\t{{ await service.{method.Name}(request).ConfigureAwait(false); return Outcome.Ok(); }})))).ConfigureAwait(false);");
-				builder.AppendLine("\t}");
-			}
+			// One shape throughout: void-success methods use responseType = "Unit" via the
+			// IBehavior<,> family's TResponse — never a second, non-generic behavior/chain shape
+			// (2026-07-24 amendment). The only irreducible difference is at the innermost call: a
+			// bare Task response has no value to wrap, so it awaits the call and returns Unit.Value.
+			var responseType = method.ResponseTypeName ?? "Unit";
+			var innermostSuccessExpression = method.ResponseTypeName is not null
+				? $"Outcome<{responseType}>.Ok(await service.{method.Name}(request).ConfigureAwait(false))"
+				: $"await AwaitThenUnit(service.{method.Name}(request))";
+
+			builder.AppendLine($"\tpublic async ValueTask<Outcome<{responseType}>> {method.Name}({method.RequestTypeName} request, CancellationToken cancellationToken = default)");
+			builder.AppendLine("\t{");
+			builder.AppendLine($"\t\tvar validation = new Norse.Infrastructure.Web.Server.Mediator.ValidationBehavior<{method.RequestTypeName}, {responseType}>({validatorParamName});");
+			builder.AppendLine($"\t\tvar authorization = new Norse.Infrastructure.Web.Server.Mediator.AuthorizationBehavior<{method.RequestTypeName}, {responseType}>(\"{method.PolicyName}\", authorizationService, GetPrincipalAsync);");
+			builder.AppendLine($"\t\tvar exceptionTranslation = new Norse.Infrastructure.Web.Server.Mediator.ExceptionTranslationBehavior<{method.RequestTypeName}, {responseType}>(loggerFactory.CreateLogger<Norse.Infrastructure.Web.Server.Mediator.ExceptionTranslationBehavior<{method.RequestTypeName}, {responseType}>>());");
+			builder.AppendLine($"\t\tvar telemetry = new Norse.Infrastructure.Web.Server.Mediator.TelemetryBehavior<{method.RequestTypeName}, {responseType}>(loggerFactory.CreateLogger<Norse.Infrastructure.Web.Server.Mediator.TelemetryBehavior<{method.RequestTypeName}, {responseType}>>());");
+			builder.AppendLine();
+			builder.AppendLine("\t\treturn await telemetry.Handle(request, cancellationToken, () =>");
+			builder.AppendLine("\t\t\texceptionTranslation.Handle(request, cancellationToken, () =>");
+			builder.AppendLine("\t\t\t\tauthorization.Handle(request, cancellationToken, () =>");
+			builder.AppendLine("\t\t\t\t\tvalidation.Handle(request, cancellationToken, async () =>");
+			builder.AppendLine($"\t\t\t\t\t\t{innermostSuccessExpression})))).ConfigureAwait(false);");
+			builder.AppendLine("\t}");
+		}
+		if (model.Methods.Any(m => m.ResponseTypeName is null))
+		{
+			builder.AppendLine();
+			builder.AppendLine("\tstatic async ValueTask<Outcome<Unit>> AwaitThenUnit(System.Threading.Tasks.Task task)");
+			builder.AppendLine("\t{");
+			builder.AppendLine("\t\tawait task.ConfigureAwait(false);");
+			builder.AppendLine("\t\treturn Outcome<Unit>.Ok(Unit.Value);");
+			builder.AppendLine("\t}");
 		}
 		builder.AppendLine("}");
 		return builder.ToString();
@@ -2336,13 +2125,13 @@ Replace the `// InProcessHost mode added in Task 9.` comment in `GatewayGenerato
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `dotnet test Asgard/tests/Abstractions.Gateway.Generator.Tests --filter InProcessHostMode_EmitsChainInCorrectOrder`
-Expected: PASS.
+Run: `dotnet test Asgard/tests/Abstractions.Gateway.Generator.Tests --filter "InProcessHostMode_EmitsChainInCorrectOrder|InProcessHostMode_VoidSuccessMethod"`
+Expected: PASS (2 tests).
 
 - [ ] **Step 6: Run the full generator test suite**
 
 Run: `dotnet test Asgard/tests/Abstractions.Gateway.Generator.Tests`
-Expected: PASS (all cases from Tasks 7, 8, 9).
+Expected: PASS (7 tests total — 4 from Task 7, 1 from Task 8, 2 from Task 9).
 
 - [ ] **Step 7: Commit**
 
@@ -2647,15 +2436,33 @@ Heimdall's PR merges, CI is green, a version tag is pushed, and the resulting Nu
 **Files:**
 - Modify: `Himinbjorg/src/Identity.Web.Server/AuthenticationService.cs` (currently every method `throw new NotImplementedException()`)
 - Modify: `Himinbjorg/src/Identity.Web.Server/ServiceCollectionExtensions.cs`
+- Modify: `Himinbjorg/src/Identity.Web.Server/LoginHandler.cs`, `RegisterHandler.cs`, `LogoutHandler.cs` (namespace fix only — see Step 0)
+- Create: `Himinbjorg/src/Identity.Web.Server/GlobalUsings.Outcome.cs` (copy of `Asgard/src/Abstractions.Contracts/GlobalUsings.Outcome.cs`, Task 1)
 - Test: `Himinbjorg/tests/Identity.Web.Server.Tests/AuthenticationServiceTests.cs`
 
 **Interfaces:**
-- Consumes: `IAuthenticationService` (Heimdall, Task 10), `IRequestHandler<LoginRequest, Outcome<BoolResponse>>`/`IRequestHandler<RegisterRequest, Outcome<BoolResponse>>`/`IRequestHandler<LogoutRequest, Outcome>` (already registered in `ServiceCollectionExtensions.cs`), `ProblemExtensions.ToRpcException` (Midgard, Task 5).
+- Consumes: `IAuthenticationService` (Heimdall, Task 10), `IRequestHandler<LoginRequest, Outcome<BoolResponse>>`/`IRequestHandler<RegisterRequest, Outcome<BoolResponse>>`/`IRequestHandler<LogoutRequest, Outcome>` (already registered in `ServiceCollectionExtensions.cs` — `Outcome` here is the alias for `Outcome<Unit>`, not a distinct type; the existing spelling is unaffected), `ProblemExtensions.ToRpcException` (Midgard, Task 5).
 - Produces: `Norse.Identity.Web.Server.AuthenticationService : IAuthenticationService` — public (Yggdrasil's composition root, a different assembly, calls `MapGrpcService<AuthenticationService>()` on it directly — this is the one deliberate, justified `public` escalation in this plan). This is Himinbjörg's own realm-specific glue (spec §9.8-style framing: not generic Norse infrastructure), the *reference* backend behind Heimdall's contract — nothing prevents a different backend from implementing `IAuthenticationService` differently. Expected business failures (`Outcome` failing) throw `Problem.ToRpcException()` directly at this boundary — the one place in the whole chain where "return a value" genuinely isn't an option, because a gRPC method can only communicate non-OK status by throwing.
 
 Also fixes a real DI gap found during this plan's own grounding: `LoginRequestValidator`/`RegisterRequestValidator` are currently registered as concrete types only (`services.AddScoped<LoginRequestValidator>()`), not as `IValidator<TRequest>` — `ValidationBehavior<TRequest,TResponse>` (Task 4) needs the standard FluentValidation DI registration to resolve them generically. Mirrors `[Authorize]` from the interface onto every method (2026-07-24 review, Remand 3) — required for ASP.NET Core's gRPC endpoint metadata to see it at all, since that metadata reflects on this concrete type, not `IAuthenticationService`. Verified end to end by a dedicated wire-path enforcement test in Task 13, since every one of Heimdall's real policies is `AuthNPolicies.Public` (permissive) and can't itself prove a *restrictive* policy is honored.
 
+**A second real gap found during this pass (2026-07-24, Unit consolidation review):** Task 1 moves `Outcome`/`Problem`/`ErrorCategory`/`BoolResponse` from `Norse.Abstractions.Web.Server.Mediator` to `Norse.Abstractions.Contracts`, but only checked Asgard's own test suite for broken references — Himinbjörg's real, already-shipped `LoginHandler.cs`/`RegisterHandler.cs`/`LogoutHandler.cs` also import the old namespace and would fail to build the moment Task 1 lands, undetected until this task actually builds Himinbjörg. Step 0 fixes it here, since this is the first task that touches Himinbjörg after Task 1.
+
 **Flagged, not fixed here:** `httpContextAccessor.HttpContext!.RequestAborted`/`.Items[...]` in this class is the same pattern the real, already-shipped `BlazorServerAuthenticationGateway` used — `IHttpContextAccessor` is documented as unsupported for interactive Blazor Server circuit invocations (the same root issue Remand 1 fixed in `AuthorizationBehavior`). This class is called both from real HTTP/gRPC requests (where `HttpContext` is genuinely valid) and, via the in-process gateway, from live circuit interactions after the initial render (where it may not be). Reworking this is a bigger question — the deferred-sign-in mechanism this class's `TryGetDeferredCompletionUrl` depends on is *itself* predicated on a real, in-flight `HttpContext.Response.HasStarted` check, and un-picking that is `../Platform/specs/2026-07-15-deferred-signin-realm-placement-design.md` territory, not this plan's. Recorded here so it isn't mistaken for resolved.
+
+- [ ] **Step 0: Fix the namespace break Task 1 introduced, and deliver the `Outcome` alias**
+
+`LoginHandler.cs`, `RegisterHandler.cs`, and `LogoutHandler.cs` each currently have `using Norse.Abstractions.Web.Server.Mediator;` to reach `Outcome`/`Outcome<T>`/`BoolResponse`. Change each to `using Norse.Abstractions.Contracts;` (keep any other `using Norse.Abstractions.Web.Server.Mediator;` line if the file also uses `IRequestHandler<,>` — that type didn't move). Verify with:
+
+Run: `dotnet build Himinbjorg.slnx`
+Expected: FAILS before this fix (namespace not found), PASSES after.
+
+Then copy the alias file verbatim so `IRequestHandler<LogoutRequest, Outcome>` in `ServiceCollectionExtensions.cs` (and this task's own rewrite of `AuthenticationService.cs`, Step 3) keeps compiling with the bare `Outcome` spelling:
+
+```csharp
+// Himinbjorg/src/Identity.Web.Server/GlobalUsings.Outcome.cs
+global using Outcome = Norse.Abstractions.Contracts.Outcome<Norse.Abstractions.Contracts.Unit>;
+```
 
 - [ ] **Step 1: Write the failing tests — success, business failure (throws `RpcException`), and the deferred-completion-url path**
 
@@ -2850,8 +2657,8 @@ Expected: PASS.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add Himinbjorg/src/Identity.Web.Server/AuthenticationService.cs Himinbjorg/src/Identity.Web.Server/ServiceCollectionExtensions.cs Himinbjorg/tests/Identity.Web.Server.Tests/AuthenticationServiceTests.cs
-git commit -m "feat: implement AuthenticationService for real, fix FluentValidation DI registration to IValidator<T>"
+git add Himinbjorg/src/Identity.Web.Server/AuthenticationService.cs Himinbjorg/src/Identity.Web.Server/ServiceCollectionExtensions.cs Himinbjorg/src/Identity.Web.Server/LoginHandler.cs Himinbjorg/src/Identity.Web.Server/RegisterHandler.cs Himinbjorg/src/Identity.Web.Server/LogoutHandler.cs Himinbjorg/src/Identity.Web.Server/GlobalUsings.Outcome.cs Himinbjorg/tests/Identity.Web.Server.Tests/AuthenticationServiceTests.cs
+git commit -m "feat: implement AuthenticationService for real, fix FluentValidation DI registration to IValidator<T>, fix Outcome namespace after Task 1 move"
 ```
 
 ---
