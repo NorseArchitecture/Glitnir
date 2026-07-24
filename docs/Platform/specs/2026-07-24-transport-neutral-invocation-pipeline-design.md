@@ -73,19 +73,21 @@ public sealed record Problem
 }
 ```
 
-**Wire encoding — hybrid.** The gRPC interceptor maps `Problem` onto `google.rpc.Status` + `error_details.proto` well-known types instead of today's custom JSON `problem-bin` trailer. Partner gRPC tooling gets legible errors for free; the platform's own client interceptor decodes the same well-known types back into `Problem` losslessly (the category set is small enough to round-trip exactly).
+**Deliberate, not inherited:** `CorrelationId` stays `Fault`-only, considered explicitly rather than assumed. Every other arm is deterministic and reproducible from the request itself — `Validation`'s field errors, `NotFound`'s resource, `Forbidden`'s policy are all already self-describing without a trace handle. `Fault` is the one arm where the cause isn't visible from the response at all, which is exactly why it's the one arm that needs one.
 
-| ErrorCategory | google.rpc.Status | REST |
-|---|---|---|
-| Validation | INVALID_ARGUMENT (3) + `BadRequest.FieldViolation[]` | 400 ValidationProblemDetails |
-| NotFound | NOT_FOUND (5) | 404 |
-| Conflict | ALREADY_EXISTS (6) | 409 |
-| Unauthorized | UNAUTHENTICATED (16) | 401 |
-| Forbidden | PERMISSION_DENIED (7) | 403 |
-| LockedOut | PERMISSION_DENIED (7) | 423 Locked |
-| NotAllowed | FAILED_PRECONDITION (9) | 422 Unprocessable |
-| InvalidCredentials | UNAUTHENTICATED (16), vestigial | 401 |
-| Fault | INTERNAL (13) + `DebugInfo{ CorrelationId }`, never a stack trace on the wire | 500 |
+**Wire encoding — hybrid, with an explicit decode key.** The gRPC interceptor maps `Problem` onto `google.rpc.Status` + `error_details.proto` well-known types instead of today's custom JSON `problem-bin` trailer. The status-code column below is the partner-legible idiom — any standard gRPC client reads it correctly without knowing Norse exists. It is **not** the decode path for the platform's own client interceptor, because it isn't injective: `LockedOut`/`Forbidden` both land on `PERMISSION_DENIED`, and `Unauthorized`/`InvalidCredentials` both land on `UNAUTHENTICATED`, and a component must render those differently (lockout UI vs. a forbidden banner). Every response additionally carries a `google.rpc.ErrorInfo{ Reason = nameof(ErrorCategory-member), Domain = "norse.io" }` detail alongside the status code. The Norse client interceptor decodes `ErrorInfo.Reason` authoritatively — never the status code — so the round-trip is exact regardless of how many categories share a status.
+
+| ErrorCategory | google.rpc.Status (partner-legible, not decoded from) | ErrorInfo.Reason (authoritative decode key) | REST |
+|---|---|---|---|
+| Validation | INVALID_ARGUMENT (3) + `BadRequest.FieldViolation[]` | `VALIDATION` | 400 ValidationProblemDetails |
+| NotFound | NOT_FOUND (5) | `NOT_FOUND` | 404 |
+| Conflict | ALREADY_EXISTS (6) | `CONFLICT` | 409 |
+| Unauthorized | UNAUTHENTICATED (16) | `UNAUTHORIZED` | 401 |
+| Forbidden | PERMISSION_DENIED (7) | `FORBIDDEN` | 403 |
+| LockedOut | PERMISSION_DENIED (7) | `LOCKED_OUT` | 423 Locked |
+| NotAllowed | FAILED_PRECONDITION (9) | `NOT_ALLOWED` | 422 Unprocessable |
+| InvalidCredentials | UNAUTHENTICATED (16), vestigial | `INVALID_CREDENTIALS` | 401 |
+| Fault | INTERNAL (13) + `DebugInfo{ CorrelationId }`, never a stack trace on the wire | `FAULT` | 500 |
 
 **Changed from today's shipped mapping:** `NotAllowed` moves off the shared `LockedOut`/`NotAllowed → PermissionDenied` mapping onto `FAILED_PRECONDITION` — it's a state-precondition failure ("can't cancel an already-cancelled policy"), not an authorization failure, and now that `Forbidden` exists as a real, distinct arm, overloading `PermissionDenied` for both is no longer necessary.
 
@@ -98,8 +100,8 @@ public sealed record Problem
 The generator produces three artifacts from one decorated service interface:
 
 1. **`I{Context}Gateway`** — generated into the same `.Components` project as the service interface. Mirrors the service interface 1:1 by method name and parameters; wraps the return type in `Outcome<TResponse>`. No principal parameter — identity is ambient, resolved inside whichever implementation answers. `CancellationToken cancellationToken = default` on every method.
-2. **Wire implementation** — generated into the WASM/MAUI host project (Yggdrasil's `Hosting.Web.Client`, later the MAUI client). Wraps the protobuf-net.Grpc client proxy; decodes `google.rpc.Status`/`error_details` back into `Problem`.
-3. **In-process implementation** — generated into the Server host project (`Hosting.Web.Server`). Runs the baked behavior chain (§2.5) against the circuit's principal, then calls the real service implementation directly.
+2. **Wire implementation** — generated into the WASM/MAUI host project (Yggdrasil's `Hosting.Web.Client`, later the MAUI client). Wraps the protobuf-net.Grpc client proxy; decodes `google.rpc.Status`/`ErrorInfo` back into `Problem`.
+3. **In-process implementation** — generated wherever the standard behaviors (§2.5, Midgard) are a legal reference, which is a consequence of the platform's own dependency law ("only Yggdrasil may reference Midgard"), not an independent placement choice. Today that project is `Hosting.Web.Server`, because it is Yggdrasil's composition root, not merely because it's "the server host project" — the moment a second product stands up its own composition root, the in-process gateway is generated there instead, on the same rule. Runs the baked behavior chain against the circuit's principal, then calls the real service implementation directly. This also resolves §2.4's `InProcessHost` emission mode: it is precisely "wherever this project may reference Midgard," a compile-time-checkable condition, not an arbitrary label.
 
 This is the mechanized shape of Heimdall's existing hand-written trio — the generator formalizes a pattern already proven by hand, it does not invent a new one. The Razor samples below use an illustrative `IReferenceDataGateway` purely as a generic, self-explanatory `I{Context}Gateway` stand-in — the actual acceptance target is Heimdall (§4), not Mimir.
 
@@ -157,7 +159,7 @@ This is the mechanized shape of Heimdall's existing hand-written trio — the ge
 }
 ```
 
-`EditContext.MergeServerErrors(...)` is a small new extension method (lives in `Abstractions.Components` — a Blazor-rendering concern, unlike the envelope types themselves) that pushes `Problem.Errors` into Blazilla's own `ValidationMessageStore`, matched by field name. One error-rendering path for both client-side and server-side validation failures, not two. Neither "Blazilla" nor an "ErrorContext" type exist anywhere in the platform prior to this document — Blazilla is a real third-party library (loresoft/Blazilla, FluentValidation + `EditContext` integration with `AsyncMode`/`ValidateAsync()` for async-rule timing); the merge extension is new law this document introduces, not a wrapper around a pre-existing "ErrorContext" concept.
+`EditContext.MergeServerErrors(...)` is a small new extension method (lives in `Abstractions.Components` — a Blazor-rendering concern, unlike the envelope types themselves) that pushes `Problem.Errors` into Blazilla's own `ValidationMessageStore`, matched by field name against the `EditContext`'s bound model. This only lands on the right field if the edit model's member names mirror the request DTO's member names exactly (`model.Name` ↔ `request.Name`) — a convention this document states as a requirement, not an assumption; a shape divergence between the two silently orphans a server-side error off any rendered field. Whether this is analyzer-enforced (flag a `ToRequest()`-style mapper whose source/target member names diverge) or left to code review is implementation-plan detail. One error-rendering path for both client-side and server-side validation failures, not two. Neither "Blazilla" nor an "ErrorContext" type exist anywhere in the platform prior to this document — Blazilla is a real third-party library (loresoft/Blazilla, FluentValidation + `EditContext` integration with `AsyncMode`/`ValidateAsync()` for async-rule timing); the merge extension is new law this document introduces, not a wrapper around a pre-existing "ErrorContext" concept.
 
 **Deferred, fast-follow, explicitly out of scope here:** further abstracting the `outcome switch`/pattern-match boilerplate away from the typical component author (e.g. a `<GatewayView>` render-fragment helper). Design once the base gateway pattern is proven on Heimdall (§4) — inventing an ergonomics layer on top of an unproven primitive risks building the wrong abstraction.
 
@@ -167,7 +169,7 @@ This is the mechanized shape of Heimdall's existing hand-written trio — the ge
 
 ### 2.4 Generator packaging & realm assignment
 
-`Asgard/gen/Abstractions.Web.Server.Gateway.Generator` — its own analyzer NuGet package (`analyzers/dotnet/cs`, netstandard2.0), sibling to but separate from Asgard's runtime contracts packages. Mirrors Urdarbrunnr's just-shipped EF generator layout (`Urdarbrunnr/gen/Persistence.EntityFramework.Generator` and siblings) exactly — same `gen/` top-level folder, same per-generator `Directory.Build.props`, same "own package, not bundled with the runtime assembly" shape. `gen/Directory.Build.props` is already scattered to every NuGet-publishing realm via the platform config-scatter pipeline, so adding this generator to Asgard's `gen/` costs no new scatter-source work.
+`Asgard/gen/Abstractions.Gateway.Generator` — named for what it emits (contracts, WASM host, and composition-root artifacts), not `Abstractions.Web.Server.Gateway.Generator` as an earlier draft of this document had it; none of its three outputs are a `Web.Server`-only concern, and that name would mislead the moment someone reads it, per the platform's own "naming is a deliberate act" convention. Its own analyzer NuGet package (`analyzers/dotnet/cs`, netstandard2.0), sibling to but separate from Asgard's runtime contracts packages. Mirrors Urdarbrunnr's just-shipped EF generator layout (`Urdarbrunnr/gen/Persistence.EntityFramework.Generator` and siblings) exactly — same `gen/` top-level folder, same per-generator `Directory.Build.props`, same "own package, not bundled with the runtime assembly" shape. `gen/Directory.Build.props` is already scattered to every NuGet-publishing realm via the platform config-scatter pipeline, so adding this generator to Asgard's `gen/` costs no new scatter-source work.
 
 Any service-authoring realm `PackageReference`s this analyzer package directly. It produces no runtime surface of its own, so the "only Yggdrasil references Midgard" rule is never in tension with it — analyzer packages carry no runtime dependency graph the way a `ProjectReference`/`PackageReference` to a library does.
 
@@ -177,13 +179,13 @@ Any service-authoring realm `PackageReference`s this analyzer package directly. 
 
 ### 2.5 Behavior chain composition
 
-Fixed order, outermost first: **`ExceptionTranslationBehavior` → `TelemetryBehavior` → `AuthorizationBehavior` → `ValidationBehavior` → handler.** Exception translation wraps everything so nothing in the chain can escape unconverted. Telemetry measures the whole call, including authz/validation rejections. Authorization runs before validation so a caller who can't touch the resource never learns *why* a malformed request would have failed.
+Fixed order, outermost first: **`TelemetryBehavior` → `ExceptionTranslationBehavior` → `AuthorizationBehavior` → `ValidationBehavior` → handler.** Telemetry sits outside exception translation, not inside it: `ExceptionTranslationBehavior` returns `Outcome<T>` as data (never rethrows past itself), so `TelemetryBehavior` reads the finished `Problem` — including its `CorrelationId` — directly off the return value and tags its span/log entry with it. The reverse order (exception translation outermost, an earlier draft of this document) mints the correlation id *after* telemetry's own frame has already unwound past the throw, so telemetry could observe "this call failed" but never the id meant to correlate it. `TelemetryBehavior` itself is trusted not to throw — it is not further wrapped; that's an implementation/test obligation on that one behavior, not another layer of translation. Exception translation still wraps everything downstream of it (authz, validation, the handler) so nothing from those layers escapes unconverted. Authorization runs before validation so a caller who can't touch the resource never learns *why* a malformed request would have failed.
 
 Standard behaviors live in Midgard, as concrete `Norse.Infrastructure.*` implementations of an Asgard-declared `IBehavior<TRequest, TResponse>` contract. **Scoping note:** the "handler" step here is the concrete service implementation method (`{Context}Service : I{Context}Api`), not a dispatch through the still-unresolved generic `IRequestHandler<,>` sender — Asgard's own code comment already flags that no generic dispatcher exists yet ("nothing in the platform dispatches through a generic sender yet ... revisit once a real generic dispatcher exists"). This design does not take a dependency on that unresolved question; the behavior chain wraps whatever method actually implements the service interface today.
 
 `AuthorizationBehavior` lifts the method's `[Authorize(Policy=...)]` attribute (analyzer-enforced: every Asgard-contracted service method must carry one) and evaluates through `IAuthorizationService` against whichever principal the host adapter supplies — the circuit's `AuthenticationStateProvider` principal in-process, the ASP.NET request principal on the gRPC/REST endpoints.
 
-**Extension seam:** a `{Company}.{Context}` product realm adds its own behavior via `[Behavior(typeof(MyBehavior), After = typeof(ValidationBehavior))]` on the service interface or method. The gateway generator reads it at the consumer's own compile time and bakes it directly into that consumer's generated chain — no runtime `IEnumerable<IBehavior>` resolution, no assembly scanning, fully static per the manifesto's compile-time bias.
+**Extension seam:** a `{Company}.{Context}` product realm adds its own behavior via `[Behavior(typeof(MyBehavior), After = typeof(ValidationBehavior))]` on the **service implementation class**, not the service interface — the interface lives in the `.Components` project that ships to the browser, and `typeof(MyBehavior)` on it would force that WASM-shipped assembly to reference the behavior's (server-side) implementation assembly, exactly the boundary `.Components`-never-references-server-types exists to prevent. Only the in-process gateway generator needs to see this attribute — it compiles where the implementation is visible, and the wire gateway needs no behavior knowledge at all, since behaviors already ran server-side before the wire response was ever produced. The generator reads the attribute at the consumer's own compile time and bakes it directly into that consumer's generated in-process chain — no runtime `IEnumerable<IBehavior>` resolution, no assembly scanning, fully static per the manifesto's compile-time bias.
 
 **Rejected alternative:** a fixed, non-extensible generated chain with custom behavior applied via a hand-written DI decorator wrapping the generated gateway. Rejected because it produces two composition mechanisms side by side (generator-baked standard chain plus a hand-written decorator for anything custom) instead of one coherent extension point.
 
