@@ -106,6 +106,7 @@
 | Delete | `Yggdrasil/src/Hosting.Web.Client/WasmAuthenticationGateway.cs` |
 | Create | `Yggdrasil/src/Hosting.Web.Server/EnvelopeHydrationState.cs` |
 | Create | `Yggdrasil/tests/Hosting.Web.Server.Tests/EnvelopeHydrationStateTests.cs` |
+| Create | `Yggdrasil/tests/Hosting.Web.Server.Tests/WirePathAuthorizationTests.cs` |
 | Create | `Yggdrasil/tests/Hosting.Web.Server.Tests/AuthenticationHydrationParityTests.cs` |
 
 ---
@@ -136,6 +137,7 @@ namespace Norse.Abstractions.Contracts.Tests;
 
 class OutcomeTests
 {
+	[Fact]
 	void Outcome_Ok_MatchesSucceeded()
 	{
 		var outcome = Outcome.Ok();
@@ -143,6 +145,7 @@ class OutcomeTests
 		matched.ShouldBeTrue();
 	}
 
+	[Fact]
 	void OutcomeOfT_Ok_TryGetValue_UnwrapsSuccessWithoutBoxing()
 	{
 		var outcome = Outcome<BoolResponse>.Ok(new BoolResponse { Value = true });
@@ -150,6 +153,7 @@ class OutcomeTests
 		success.Value.Value.ShouldBeTrue();
 	}
 
+	[Fact]
 	void OutcomeOfT_Err_CarriesCategoryAndCorrelationId()
 	{
 		var correlationId = Guid.Parse("11111111-1111-1111-1111-111111111111");
@@ -163,6 +167,7 @@ class OutcomeTests
 		failed.Problem.CorrelationId.ShouldBe(correlationId);
 	}
 
+	[Fact]
 	void OutcomeOfT_Match_ExhaustiveOverBothCases()
 	{
 		var success = Outcome<BoolResponse>.Ok(new BoolResponse { Value = true });
@@ -172,6 +177,7 @@ class OutcomeTests
 		failure.Match(value => value.Value, problem => problem.Category == ErrorCategory.NotFound).ShouldBeTrue();
 	}
 
+	[Fact]
 	void ErrorCategory_HasNineMembers_ExplicitValues()
 	{
 		((byte)ErrorCategory.Validation).ShouldBe((byte)1);
@@ -478,6 +484,7 @@ namespace Norse.Abstractions.Web.Server.Tests;
 
 class BehaviorAttributeTests
 {
+	[Fact]
 	void BehaviorAttribute_TargetsClassAndMethod_NotInterface()
 	{
 		var usage = typeof(BehaviorAttribute).GetCustomAttribute<AttributeUsageAttribute>();
@@ -487,6 +494,7 @@ class BehaviorAttributeTests
 		usage.ValidOn.HasFlag(AttributeTargets.Interface).ShouldBeFalse();
 	}
 
+	[Fact]
 	void BehaviorAttribute_StoresBehaviorTypeAndAfter()
 	{
 		var attribute = new BehaviorAttribute(typeof(string), after: typeof(int));
@@ -624,6 +632,7 @@ namespace Norse.Infrastructure.Web.Server.Tests.Mediator;
 
 class TelemetryBehaviorTests
 {
+	[Fact]
 	async Task Chain_UnhandledException_BecomesFaultOutcome_NotRethrown()
 	{
 		var telemetry = new TelemetryBehavior<string, bool>(NullLogger<TelemetryBehavior<string, bool>>.Instance);
@@ -640,6 +649,7 @@ class TelemetryBehaviorTests
 		failed.Problem.CorrelationId.ShouldNotBeNull();
 	}
 
+	[Fact]
 	async Task Chain_SuccessfulCall_PassesThroughUnchanged()
 	{
 		var telemetry = new TelemetryBehavior<string, bool>(NullLogger<TelemetryBehavior<string, bool>>.Instance);
@@ -653,6 +663,7 @@ class TelemetryBehaviorTests
 		success.Value.ShouldBeTrue();
 	}
 
+	[Fact]
 	async Task Chain_CooperativeCancellation_PropagatesAsOperationCanceledException()
 	{
 		var telemetry = new TelemetryBehavior<string, bool>(NullLogger<TelemetryBehavior<string, bool>>.Instance);
@@ -772,6 +783,7 @@ Expected: PASS (3 tests).
 // Midgard/tests/Infrastructure.Web.Server.Tests/Mediator/TelemetryBehaviorTests.cs — append to the same file
 class NonGenericBehaviorTests
 {
+	[Fact]
 	async Task Chain_UnhandledException_BecomesFaultOutcome_NotRethrown()
 	{
 		var telemetry = new TelemetryBehavior<string>(NullLogger<TelemetryBehavior<string>>.Instance);
@@ -787,6 +799,7 @@ class NonGenericBehaviorTests
 		failed.Problem.Category.ShouldBe(ErrorCategory.Fault);
 	}
 
+	[Fact]
 	async Task Chain_SuccessfulCall_PassesThroughUnchanged()
 	{
 		var telemetry = new TelemetryBehavior<string>(NullLogger<TelemetryBehavior<string>>.Instance);
@@ -884,8 +897,8 @@ git commit -m "feat: add TelemetryBehavior and ExceptionTranslationBehavior, gen
 - Test: `Midgard/tests/Infrastructure.Web.Server.Tests/Mediator/ValidationBehaviorTests.cs`
 
 **Interfaces:**
-- Consumes: `IBehavior<TRequest,TResponse>` (Task 2). `IAuthorizationService`, `IHttpContextAccessor` (ASP.NET Core, already a platform dependency). `IValidator<TRequest>` (FluentValidation, already referenced by Himinbjörg's validators).
-- Produces: `Norse.Infrastructure.Web.Server.Mediator.AuthorizationBehavior<TRequest,TResponse>(string policyName, IAuthorizationService authorizationService, IHttpContextAccessor httpContextAccessor) : IBehavior<TRequest,TResponse>` and `Norse.Infrastructure.Web.Server.Mediator.ValidationBehavior<TRequest,TResponse>(IValidator<TRequest> validator) : IBehavior<TRequest,TResponse>`, plus their non-generic `<TRequest>` siblings (`IBehavior<TRequest>`, `Outcome`-returning) for handlers with no payload. The generator (Task 9) supplies `policyName` as a compile-time literal read from the service method's `[Authorize(Policy=...)]` attribute — this behavior never discovers its own policy via reflection.
+- Consumes: `IBehavior<TRequest,TResponse>` (Task 2). `IAuthorizationService` (ASP.NET Core). `IValidator<TRequest>` (FluentValidation, already referenced by Himinbjörg's validators).
+- Produces: `Norse.Infrastructure.Web.Server.Mediator.AuthorizationBehavior<TRequest,TResponse>(string policyName, IAuthorizationService authorizationService, Func<ValueTask<ClaimsPrincipal>> principalAccessor) : IBehavior<TRequest,TResponse>` and `Norse.Infrastructure.Web.Server.Mediator.ValidationBehavior<TRequest,TResponse>(IValidator<TRequest> validator) : IBehavior<TRequest,TResponse>`, plus their non-generic `<TRequest>` siblings (`IBehavior<TRequest>`, `Outcome`-returning) for handlers with no payload. The generator (Task 9) supplies `policyName` as a compile-time literal read from the service method's `[Authorize(Policy=...)]` attribute — this behavior never discovers its own policy via reflection. **`principalAccessor`, not `IHttpContextAccessor`, deliberately** — spec §2.5 already rules the principal source belongs to the host adapter, not the behavior, and `IHttpContextAccessor` is explicitly unsupported inside a live Blazor Server circuit (Microsoft's own docs: `HttpContext` is valid only for the initial synchronous render, `null`/stale after that, including after SignalR reconnection) — the exact path this feature exists to make safe. The in-process gateway (Task 9) supplies a closure over `AuthenticationStateProvider`; any future REST/gRPC-endpoint adapter (decided law item 5, deferred) supplies one over its own request principal instead.
 
 - [ ] **Step 1: Write the failing tests — authorization split (Unauthorized vs Forbidden) and validation error shape**
 
@@ -893,7 +906,6 @@ git commit -m "feat: add TelemetryBehavior and ExceptionTranslationBehavior, gen
 // Midgard/tests/Infrastructure.Web.Server.Tests/Mediator/AuthorizationBehaviorTests.cs
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 using Norse.Abstractions.Contracts;
 using Norse.Infrastructure.Web.Server.Mediator;
 using NSubstitute;
@@ -903,15 +915,14 @@ namespace Norse.Infrastructure.Web.Server.Tests.Mediator;
 
 class AuthorizationBehaviorTests
 {
+	[Fact]
 	async Task NotAuthenticated_ReturnsUnauthorized()
 	{
-		var httpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity()) }; // IsAuthenticated: false
-		var accessor = Substitute.For<IHttpContextAccessor>();
-		accessor.HttpContext.Returns(httpContext);
+		var user = new ClaimsPrincipal(new ClaimsIdentity()); // IsAuthenticated: false
 		var authorizationService = Substitute.For<IAuthorizationService>();
-		authorizationService.AuthorizeAsync(httpContext.User, "AuthN.Public").Returns(AuthorizationResult.Failed());
+		authorizationService.AuthorizeAsync(user, "AuthN.Public").Returns(AuthorizationResult.Failed());
 
-		var behavior = new AuthorizationBehavior<string, bool>("AuthN.Public", authorizationService, accessor);
+		var behavior = new AuthorizationBehavior<string, bool>("AuthN.Public", authorizationService, () => ValueTask.FromResult(user));
 
 		var outcome = await behavior.Handle("request", CancellationToken.None, () => throw new InvalidOperationException("should not reach handler"));
 
@@ -919,16 +930,14 @@ class AuthorizationBehaviorTests
 		failed.Problem.Category.ShouldBe(ErrorCategory.Unauthorized);
 	}
 
+	[Fact]
 	async Task AuthenticatedButLacksPolicy_ReturnsForbidden()
 	{
-		var identity = new ClaimsIdentity(authenticationType: "cookie");
-		var httpContext = new DefaultHttpContext { User = new ClaimsPrincipal(identity) }; // IsAuthenticated: true
-		var accessor = Substitute.For<IHttpContextAccessor>();
-		accessor.HttpContext.Returns(httpContext);
+		var user = new ClaimsPrincipal(new ClaimsIdentity(authenticationType: "cookie")); // IsAuthenticated: true
 		var authorizationService = Substitute.For<IAuthorizationService>();
-		authorizationService.AuthorizeAsync(httpContext.User, "AuthN.Admin").Returns(AuthorizationResult.Failed());
+		authorizationService.AuthorizeAsync(user, "AuthN.Admin").Returns(AuthorizationResult.Failed());
 
-		var behavior = new AuthorizationBehavior<string, bool>("AuthN.Admin", authorizationService, accessor);
+		var behavior = new AuthorizationBehavior<string, bool>("AuthN.Admin", authorizationService, () => ValueTask.FromResult(user));
 
 		var outcome = await behavior.Handle("request", CancellationToken.None, () => throw new InvalidOperationException("should not reach handler"));
 
@@ -936,16 +945,14 @@ class AuthorizationBehaviorTests
 		failed.Problem.Category.ShouldBe(ErrorCategory.Forbidden);
 	}
 
+	[Fact]
 	async Task Authorized_CallsNext()
 	{
-		var identity = new ClaimsIdentity(authenticationType: "cookie");
-		var httpContext = new DefaultHttpContext { User = new ClaimsPrincipal(identity) };
-		var accessor = Substitute.For<IHttpContextAccessor>();
-		accessor.HttpContext.Returns(httpContext);
+		var user = new ClaimsPrincipal(new ClaimsIdentity(authenticationType: "cookie"));
 		var authorizationService = Substitute.For<IAuthorizationService>();
-		authorizationService.AuthorizeAsync(httpContext.User, "AuthN.Public").Returns(AuthorizationResult.Success());
+		authorizationService.AuthorizeAsync(user, "AuthN.Public").Returns(AuthorizationResult.Success());
 
-		var behavior = new AuthorizationBehavior<string, bool>("AuthN.Public", authorizationService, accessor);
+		var behavior = new AuthorizationBehavior<string, bool>("AuthN.Public", authorizationService, () => ValueTask.FromResult(user));
 
 		var outcome = await behavior.Handle("request", CancellationToken.None, () => ValueTask.FromResult(Outcome<bool>.Ok(true)));
 
@@ -968,6 +975,7 @@ namespace Norse.Infrastructure.Web.Server.Tests.Mediator;
 
 class ValidationBehaviorTests
 {
+	[Fact]
 	async Task Invalid_ReturnsValidationOutcome_GroupedByField()
 	{
 		var validator = Substitute.For<IValidator<string>>();
@@ -987,6 +995,7 @@ class ValidationBehaviorTests
 		failed.Problem.Errors["Password"].ShouldBe(["Password is required"]);
 	}
 
+	[Fact]
 	async Task Valid_CallsNext()
 	{
 		var validator = Substitute.For<IValidator<string>>();
@@ -1010,8 +1019,8 @@ Expected: FAIL — types do not exist.
 
 ```csharp
 // Midgard/src/Infrastructure.Web.Server/Mediator/AuthorizationBehavior.cs
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 using Norse.Abstractions.Contracts;
 using Norse.Abstractions.Web.Server.Mediator;
 
@@ -1019,17 +1028,20 @@ namespace Norse.Infrastructure.Web.Server.Mediator;
 
 /// <summary>
 /// Evaluates the policy the generator baked in from the service method's <c>[Authorize(Policy=...)]</c>
-/// attribute (spec §2.5) against the host adapter's current principal. Not authenticated at all →
-/// <see cref="ErrorCategory.Unauthorized"/>; authenticated but the policy fails →
-/// <see cref="ErrorCategory.Forbidden"/> — standard ASP.NET Core semantics.
+/// attribute (spec §2.5) against the principal <paramref name="principalAccessor"/> supplies. The
+/// principal source is deliberately the host adapter's problem, not this behavior's — no
+/// <c>IHttpContextAccessor</c> here: it's explicitly unsupported inside a live Blazor Server circuit
+/// (valid only for the initial synchronous render, null/stale after SignalR reconnection), exactly the
+/// path this feature exists to make safe. Not authenticated at all → <see cref="ErrorCategory.Unauthorized"/>;
+/// authenticated but the policy fails → <see cref="ErrorCategory.Forbidden"/>.
 /// </summary>
 sealed class AuthorizationBehavior<TRequest, TResponse>(
-	string policyName, IAuthorizationService authorizationService, IHttpContextAccessor httpContextAccessor)
+	string policyName, IAuthorizationService authorizationService, Func<ValueTask<ClaimsPrincipal>> principalAccessor)
 	: IBehavior<TRequest, TResponse>
 {
 	public async ValueTask<Outcome<TResponse>> Handle(TRequest request, CancellationToken cancellationToken, BehaviorDelegate<TResponse> next)
 	{
-		var user = httpContextAccessor.HttpContext!.User;
+		var user = await principalAccessor().ConfigureAwait(false);
 		var result = await authorizationService.AuthorizeAsync(user, policyName).ConfigureAwait(false);
 
 		if (!result.Succeeded)
@@ -1087,15 +1099,14 @@ Expected: PASS (5 tests).
 // Midgard/tests/Infrastructure.Web.Server.Tests/Mediator/AuthorizationBehaviorTests.cs — append to the same file
 class NonGenericAuthorizationBehaviorTests
 {
+	[Fact]
 	async Task NotAuthenticated_ReturnsUnauthorized()
 	{
-		var httpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity()) };
-		var accessor = Substitute.For<IHttpContextAccessor>();
-		accessor.HttpContext.Returns(httpContext);
+		var user = new ClaimsPrincipal(new ClaimsIdentity());
 		var authorizationService = Substitute.For<IAuthorizationService>();
-		authorizationService.AuthorizeAsync(httpContext.User, "AuthN.Public").Returns(AuthorizationResult.Failed());
+		authorizationService.AuthorizeAsync(user, "AuthN.Public").Returns(AuthorizationResult.Failed());
 
-		var behavior = new AuthorizationBehavior<string>("AuthN.Public", authorizationService, accessor);
+		var behavior = new AuthorizationBehavior<string>("AuthN.Public", authorizationService, () => ValueTask.FromResult(user));
 
 		var outcome = await behavior.Handle("request", CancellationToken.None, () => throw new InvalidOperationException("should not reach handler"));
 
@@ -1109,6 +1120,7 @@ class NonGenericAuthorizationBehaviorTests
 // Midgard/tests/Infrastructure.Web.Server.Tests/Mediator/ValidationBehaviorTests.cs — append to the same file
 class NonGenericValidationBehaviorTests
 {
+	[Fact]
 	async Task Invalid_ReturnsValidationOutcome()
 	{
 		var validator = Substitute.For<IValidator<string>>();
@@ -1133,12 +1145,12 @@ Expected: FAIL — `AuthorizationBehavior<TRequest>`/`ValidationBehavior<TReques
 // Midgard/src/Infrastructure.Web.Server/Mediator/AuthorizationBehavior.cs — append to the same file
 /// <summary>Non-generic sibling of <see cref="AuthorizationBehavior{TRequest,TResponse}"/> for handlers returning <see cref="Outcome"/> (no payload).</summary>
 sealed class AuthorizationBehavior<TRequest>(
-	string policyName, IAuthorizationService authorizationService, IHttpContextAccessor httpContextAccessor)
+	string policyName, IAuthorizationService authorizationService, Func<ValueTask<ClaimsPrincipal>> principalAccessor)
 	: IBehavior<TRequest>
 {
 	public async ValueTask<Outcome> Handle(TRequest request, CancellationToken cancellationToken, BehaviorDelegate next)
 	{
-		var user = httpContextAccessor.HttpContext!.User;
+		var user = await principalAccessor().ConfigureAwait(false);
 		var result = await authorizationService.AuthorizeAsync(user, policyName).ConfigureAwait(false);
 
 		if (!result.Succeeded)
@@ -1218,6 +1230,7 @@ namespace Norse.Infrastructure.Web.Server.Tests.Mediator.Grpc;
 
 class ProblemExtensionsTests
 {
+	[Fact]
 	void LockedOut_And_Forbidden_ShareStatusCode_ButDistinctErrorInfoReason()
 	{
 		var lockedOut = new Problem { Category = ErrorCategory.LockedOut }.ToRpcException();
@@ -1229,18 +1242,21 @@ class ProblemExtensionsTests
 		lockedOut.Trailers.Get("grpc-status-details-bin").ShouldNotBeNull();
 	}
 
+	[Fact]
 	void Validation_MapsTo_InvalidArgument()
 	{
 		var exception = new Problem { Category = ErrorCategory.Validation, Errors = new Dictionary<string, string[]> { ["Email"] = ["required"] } }.ToRpcException();
 		exception.StatusCode.ShouldBe(StatusCode.InvalidArgument);
 	}
 
+	[Fact]
 	void NotAllowed_MapsTo_FailedPrecondition_NotSharedWithLockedOut()
 	{
 		var exception = new Problem { Category = ErrorCategory.NotAllowed }.ToRpcException();
 		exception.StatusCode.ShouldBe(StatusCode.FailedPrecondition);
 	}
 
+	[Fact]
 	void Fault_MapsTo_Internal_AndCarriesCorrelationId()
 	{
 		var correlationId = Guid.Parse("22222222-2222-2222-2222-222222222222");
@@ -1259,6 +1275,7 @@ namespace Norse.Infrastructure.Web.Client.Tests.Grpc;
 
 class RpcExceptionExtensionsTests
 {
+	[Fact]
 	void DecodeProblem_ReadsReason_NotStatusCode_DisambiguatesSharedStatus()
 	{
 		// Server-side ToRpcException() and client-side DecodeProblem() are the two halves of one
@@ -1481,6 +1498,7 @@ namespace Norse.Infrastructure.Web.Server.Tests.Mediator.Grpc;
 
 class UnhandledExceptionInterceptorTests
 {
+	[Fact]
 	async Task UnhandledException_BecomesInternalRpcException_WithErrorInfoFault()
 	{
 		var interceptor = new UnhandledExceptionInterceptor(NullLogger<UnhandledExceptionInterceptor>.Instance);
@@ -1494,6 +1512,7 @@ class UnhandledExceptionInterceptorTests
 		exception.StatusCode.ShouldBe(StatusCode.Internal);
 	}
 
+	[Fact]
 	async Task AlreadyWellFormedRpcException_PassesThroughUnchanged()
 	{
 		var interceptor = new UnhandledExceptionInterceptor(NullLogger<UnhandledExceptionInterceptor>.Instance);
@@ -1624,7 +1643,7 @@ Midgard's PR merges, CI is green, a version tag is pushed, and the resulting NuG
 
 **Interfaces:**
 - Consumes: `GenerateGatewayAttribute` (Task 2), `System.ServiceModel.ServiceContractAttribute`/`OperationContractAttribute` (protobuf-net.Grpc's WCF-derived attributes), `Microsoft.AspNetCore.Authorization.AuthorizeAttribute`.
-- Produces: `Norse.Abstractions.Gateway.Generator.GatewayGenerator : IIncrementalGenerator` — discovers every `[GenerateGateway]`-decorated interface reachable from the compilation (own symbols and referenced assembly symbols, per the compiled-symbols constraint) and, in `Contract` emission mode, emits `I{Context}Gateway`. Diagnostic `NORSE001` (error) fires for any `[OperationContract]` method missing `[Authorize(Policy=...)]` (decided law item 4). Diagnostic `NORSE002` (error) fires for any method returning `IAsyncEnumerable<T>` (spec §2.3 — streaming excluded entirely from v1). Tasks 8 and 9 add the other two emission modes to this same generator.
+- Produces: `Norse.Abstractions.Gateway.Generator.GatewayGenerator : IIncrementalGenerator` — discovers every `[GenerateGateway]`-decorated interface reachable from the compilation (own symbols and referenced assembly symbols, per the compiled-symbols constraint) and, in `Contract` emission mode, emits `I{Context}Gateway`. Diagnostic `NORSE001` (error) fires for any `[OperationContract]` method missing `[Authorize(Policy=...)]` (decided law item 4). Diagnostic `NORSE002` (error) fires for any method returning `IAsyncEnumerable<T>` (spec §2.3 — streaming excluded entirely from v1). Diagnostic `NORSE003` (error) fires when a `[GenerateGateway]` interface's name isn't `I{Context}Service` — the context-name derivation refuses to guess for any other shape (e.g. `I{Context}Api`, also real per spec §9.8) rather than silently slicing an arbitrary suffix (2026-07-24 review, lesser finding 1). Tasks 8 and 9 add the other two emission modes to this same generator.
 
 - [ ] **Step 1: Write the failing generator test — Contract mode emits the gateway interface**
 
@@ -1686,6 +1705,7 @@ class GatewayGeneratorTests
 		public sealed record WidgetResponse;
 		""";
 
+	[Fact]
 	void ContractMode_EmitsGatewayInterface_MirroringMethodsWrappedInOutcome()
 	{
 		var (diagnostics, sources) = GeneratorTestHarness.Run(ServiceInterfaceSource, "Contract");
@@ -1696,6 +1716,7 @@ class GatewayGeneratorTests
 		gatewaySource.ShouldContain("ValueTask<Outcome<WidgetResponse>> GetWidget(WidgetRequest request, CancellationToken cancellationToken = default)");
 	}
 
+	[Fact]
 	void MissingAuthorizeAttribute_ReportsNorse001Error()
 	{
 		const string source = """
@@ -1721,6 +1742,7 @@ class GatewayGeneratorTests
 		diagnostics.ShouldContain(d => d.Id == "NORSE001" && d.Severity == DiagnosticSeverity.Error);
 	}
 
+	[Fact]
 	void StreamingMethod_ReportsNorse002Error()
 	{
 		const string source = """
@@ -1746,6 +1768,35 @@ class GatewayGeneratorTests
 		var (diagnostics, sources) = GeneratorTestHarness.Run(source, "Contract");
 
 		diagnostics.ShouldContain(d => d.Id == "NORSE002" && d.Severity == DiagnosticSeverity.Error);
+		sources.ShouldBeEmpty();
+	}
+
+	[Fact]
+	void InterfaceNotEndingInService_ReportsNorse003Error_DoesNotGuessAName()
+	{
+		const string source = """
+			using System.ServiceModel;
+			using Microsoft.AspNetCore.Authorization;
+			using Norse.Abstractions.Contracts;
+
+			namespace TestRealm.Services;
+
+			[GenerateGateway]
+			[ServiceContract]
+			public interface IWidgetApi
+			{
+				[Authorize(Policy = "Widget.Read")]
+				[OperationContract]
+				Task<WidgetResponse> GetWidget(WidgetRequest request, CancellationToken cancellationToken = default);
+			}
+
+			public sealed record WidgetRequest;
+			public sealed record WidgetResponse;
+			""";
+
+		var (diagnostics, sources) = GeneratorTestHarness.Run(source, "Contract");
+
+		diagnostics.ShouldContain(d => d.Id == "NORSE003" && d.Severity == DiagnosticSeverity.Error);
 		sources.ShouldBeEmpty();
 	}
 }
@@ -1899,6 +1950,11 @@ public sealed class GatewayGenerator : IIncrementalGenerator
 		"Method '{0}' returns IAsyncEnumerable<T> — v1 excludes streaming from gateway generation entirely (spec §2.3); remove [GenerateGateway] from this interface or move streaming methods to a separate, ungated interface",
 		"Norse.Gateway", DiagnosticSeverity.Error, isEnabledByDefault: true);
 
+	static readonly DiagnosticDescriptor UnrecognizedInterfaceSuffix = new(
+		"NORSE003", "[GenerateGateway] interface name is not I{Context}Service",
+		"Interface '{0}' is decorated [GenerateGateway] but its name doesn't match I{{Context}}Service — the generator derives the gateway's name from that suffix and refuses to guess for any other shape (e.g. I{{Context}}Api); rename the interface or extend this generator's naming rule deliberately",
+		"Norse.Gateway", DiagnosticSeverity.Error, isEnabledByDefault: true);
+
 	public void Initialize(IncrementalGeneratorInitializationContext context)
 	{
 		var emissionMode = context.AnalyzerConfigOptionsProvider.Select((provider, _) =>
@@ -1965,7 +2021,17 @@ public sealed class GatewayGenerator : IIncrementalGenerator
 					methods.Add(new GatewayMethodModel(member.Name, requestType, responseType, policyName));
 				}
 
-				var contextName = type.Name.StartsWith("I", StringComparison.Ordinal) ? type.Name[1..^"Service".Length] : type.Name;
+				// Spec §9.8-style naming: I{Context}Service is the only shape this generator derives a
+				// context name from. I{Context}Api (also a real shape per the spec's own scoping note)
+				// or any other suffix reports a diagnostic instead of silently slicing an arbitrary
+				// number of characters off the end of the name (2026-07-24 review, lesser finding 1).
+				if (!type.Name.StartsWith("I", StringComparison.Ordinal) || !type.Name.EndsWith("Service", StringComparison.Ordinal) || type.Name.Length <= 1 + "Service".Length)
+				{
+					diagnostics.Add(Diagnostic.Create(UnrecognizedInterfaceSuffix, type.Locations.FirstOrDefault() ?? Location.None, type.Name));
+					results.Add((new GatewayInterfaceModel(type.ContainingNamespace.ToDisplayString(), type.Name, type.Name, methods.ToImmutable()), diagnostics.ToImmutable()));
+					continue;
+				}
+				var contextName = type.Name[1..^"Service".Length];
 				results.Add((new GatewayInterfaceModel(type.ContainingNamespace.ToDisplayString(), type.Name, contextName, methods.ToImmutable()), diagnostics.ToImmutable()));
 			}
 		}
@@ -1993,7 +2059,7 @@ public sealed class GatewayGenerator : IIncrementalGenerator
 - [ ] **Step 7: Run tests to verify they pass**
 
 Run: `dotnet test Asgard/tests/Abstractions.Gateway.Generator.Tests --filter GatewayGeneratorTests`
-Expected: PASS (3 tests).
+Expected: PASS (4 tests).
 
 - [ ] **Step 8: Commit**
 
@@ -2020,6 +2086,7 @@ git commit -m "feat: gateway generator skeleton, compiled-symbol discovery, Cont
 Append to `GatewayGeneratorTests`:
 
 ```csharp
+	[Fact]
 	void WireHostMode_EmitsWireGateway_DecodingRpcExceptionViaMidgardExtension()
 	{
 		var (diagnostics, sources) = GeneratorTestHarness.Run(ServiceInterfaceSource, "WireHost");
@@ -2131,13 +2198,14 @@ git commit -m "feat: WireHost-mode gateway emission, ErrorInfo-decoded failure p
 
 **Interfaces:**
 - Consumes: `GatewayInterfaceModel`/`GatewayMethodModel` (Task 7). Emits fully-qualified references to Midgard's `TelemetryBehavior<,>`, `ExceptionTranslationBehavior<,>`, `AuthorizationBehavior<,>`, `ValidationBehavior<,>` (Task 3, 4) by name only — no compile-time reference from the generator project itself.
-- Produces: `InProcessHostEmitter.Emit(GatewayInterfaceModel) : string` — emits `{Context}InProcessGateway : I{Context}Gateway`, composing the standard chain `Telemetry(ExceptionTranslation(Authorization(Validation(handler))))` per method, with the method's baked-in policy name, then calling the real service implementation directly.
+- Produces: `InProcessHostEmitter.Emit(GatewayInterfaceModel) : string` — emits `{Context}InProcessGateway : I{Context}Gateway`, composing the standard chain `Telemetry(ExceptionTranslation(Authorization(Validation(handler))))` per method, with the method's baked-in policy name, then calling the real service implementation directly. The generated constructor takes `AuthenticationStateProvider` (never `IHttpContextAccessor` — spec §2.5, Remand 1) and one `IValidator<TRequest>` per method, constructor-injected by standard DI (never resolved by string-manipulated type name at runtime — Remand 2); a missing validator registration now fails at DI activation (circuit creation), not mid-request past the exception-translation boundary.
 
 - [ ] **Step 1: Add the failing InProcessHost test case**
 
 Append to `GatewayGeneratorTests`:
 
 ```csharp
+	[Fact]
 	void InProcessHostMode_EmitsChainInCorrectOrder_TelemetryOutermost()
 	{
 		var (diagnostics, sources) = GeneratorTestHarness.Run(ServiceInterfaceSource, "InProcessHost");
@@ -2145,6 +2213,9 @@ Append to `GatewayGeneratorTests`:
 		diagnostics.ShouldBeEmpty();
 		var source = sources.ShouldHaveSingleItem();
 		source.ShouldContain("sealed class WidgetInProcessGateway : IWidgetGateway");
+		source.ShouldContain("IValidator<WidgetRequest>");
+		source.ShouldContain("AuthenticationStateProvider");
+		source.ShouldNotContain("IHttpContextAccessor");
 		source.ShouldContain("\"Widget.Read\"");
 
 		var telemetryIndex = source.IndexOf("TelemetryBehavior", StringComparison.Ordinal);
@@ -2186,21 +2257,34 @@ static class InProcessHostEmitter
 		builder.AppendLine($"\t{model.ServiceInterfaceName} service,");
 		builder.AppendLine("\tMicrosoft.Extensions.Logging.ILoggerFactory loggerFactory,");
 		builder.AppendLine("\tMicrosoft.AspNetCore.Authorization.IAuthorizationService authorizationService,");
-		builder.AppendLine("\tMicrosoft.AspNetCore.Http.IHttpContextAccessor httpContextAccessor,");
-		builder.AppendLine("\tSystem.IServiceProvider serviceProvider)");
+		// AuthenticationStateProvider, never IHttpContextAccessor — the latter is unsupported inside a
+		// live Blazor Server circuit (spec §2.5, Remand 1). One IValidator<TRequest> per method,
+		// standard-DI constructor-injected — never resolved by string-manipulated type name at
+		// runtime (Remand 2); a missing registration now fails at DI activation, caught upstream of
+		// this whole chain, not mid-request past exception translation.
+		builder.AppendLine("\tMicrosoft.AspNetCore.Components.Authorization.AuthenticationStateProvider authenticationStateProvider,");
+		for (var i = 0; i < model.Methods.Length; i++)
+		{
+			var method = model.Methods[i];
+			var validatorParamName = char.ToLowerInvariant(method.Name[0]) + method.Name[1..] + "Validator";
+			var separator = i == model.Methods.Length - 1 ? ")" : ",";
+			builder.AppendLine($"\tFluentValidation.IValidator<{method.RequestTypeName}> {validatorParamName}{separator}");
+		}
 		builder.AppendLine($"\t: I{model.ContextName}Gateway");
 		builder.AppendLine("{");
+		builder.AppendLine("\tasync ValueTask<System.Security.Claims.ClaimsPrincipal> GetPrincipalAsync() =>");
+		builder.AppendLine("\t\t(await authenticationStateProvider.GetAuthenticationStateAsync().ConfigureAwait(false)).User;");
+		builder.AppendLine();
 		foreach (var method in model.Methods)
 		{
-			var validatorType = method.RequestTypeName.Replace("Request", "Validator");
+			var validatorParamName = char.ToLowerInvariant(method.Name[0]) + method.Name[1..] + "Validator";
 			if (method.ResponseTypeName is { } responseType)
 			{
 				// Generic chain — IRequestHandler<TRequest, Outcome<TResponse>> shape (e.g. Login).
 				builder.AppendLine($"\tpublic async ValueTask<Outcome<{responseType}>> {method.Name}({method.RequestTypeName} request, CancellationToken cancellationToken = default)");
 				builder.AppendLine("\t{");
-				builder.AppendLine($"\t\tvar validator = ({validatorType})serviceProvider.GetService(typeof({validatorType}))!;");
-				builder.AppendLine($"\t\tvar validation = new Norse.Infrastructure.Web.Server.Mediator.ValidationBehavior<{method.RequestTypeName}, {responseType}>((FluentValidation.IValidator<{method.RequestTypeName}>)validator);");
-				builder.AppendLine($"\t\tvar authorization = new Norse.Infrastructure.Web.Server.Mediator.AuthorizationBehavior<{method.RequestTypeName}, {responseType}>(\"{method.PolicyName}\", authorizationService, httpContextAccessor);");
+				builder.AppendLine($"\t\tvar validation = new Norse.Infrastructure.Web.Server.Mediator.ValidationBehavior<{method.RequestTypeName}, {responseType}>({validatorParamName});");
+				builder.AppendLine($"\t\tvar authorization = new Norse.Infrastructure.Web.Server.Mediator.AuthorizationBehavior<{method.RequestTypeName}, {responseType}>(\"{method.PolicyName}\", authorizationService, GetPrincipalAsync);");
 				builder.AppendLine($"\t\tvar exceptionTranslation = new Norse.Infrastructure.Web.Server.Mediator.ExceptionTranslationBehavior<{method.RequestTypeName}, {responseType}>(loggerFactory.CreateLogger<Norse.Infrastructure.Web.Server.Mediator.ExceptionTranslationBehavior<{method.RequestTypeName}, {responseType}>>());");
 				builder.AppendLine($"\t\tvar telemetry = new Norse.Infrastructure.Web.Server.Mediator.TelemetryBehavior<{method.RequestTypeName}, {responseType}>(loggerFactory.CreateLogger<Norse.Infrastructure.Web.Server.Mediator.TelemetryBehavior<{method.RequestTypeName}, {responseType}>>());");
 				builder.AppendLine();
@@ -2220,9 +2304,8 @@ static class InProcessHostEmitter
 				// payload type to substitute a placeholder for.
 				builder.AppendLine($"\tpublic async ValueTask<Outcome> {method.Name}({method.RequestTypeName} request, CancellationToken cancellationToken = default)");
 				builder.AppendLine("\t{");
-				builder.AppendLine($"\t\tvar validator = ({validatorType})serviceProvider.GetService(typeof({validatorType}))!;");
-				builder.AppendLine($"\t\tvar validation = new Norse.Infrastructure.Web.Server.Mediator.ValidationBehavior<{method.RequestTypeName}>((FluentValidation.IValidator<{method.RequestTypeName}>)validator);");
-				builder.AppendLine($"\t\tvar authorization = new Norse.Infrastructure.Web.Server.Mediator.AuthorizationBehavior<{method.RequestTypeName}>(\"{method.PolicyName}\", authorizationService, httpContextAccessor);");
+				builder.AppendLine($"\t\tvar validation = new Norse.Infrastructure.Web.Server.Mediator.ValidationBehavior<{method.RequestTypeName}>({validatorParamName});");
+				builder.AppendLine($"\t\tvar authorization = new Norse.Infrastructure.Web.Server.Mediator.AuthorizationBehavior<{method.RequestTypeName}>(\"{method.PolicyName}\", authorizationService, GetPrincipalAsync);");
 				builder.AppendLine($"\t\tvar exceptionTranslation = new Norse.Infrastructure.Web.Server.Mediator.ExceptionTranslationBehavior<{method.RequestTypeName}>(loggerFactory.CreateLogger<Norse.Infrastructure.Web.Server.Mediator.ExceptionTranslationBehavior<{method.RequestTypeName}>>());");
 				builder.AppendLine($"\t\tvar telemetry = new Norse.Infrastructure.Web.Server.Mediator.TelemetryBehavior<{method.RequestTypeName}>(loggerFactory.CreateLogger<Norse.Infrastructure.Web.Server.Mediator.TelemetryBehavior<{method.RequestTypeName}>>());");
 				builder.AppendLine();
@@ -2239,6 +2322,8 @@ static class InProcessHostEmitter
 	}
 }
 ```
+
+`GetPrincipalAsync` above is a private local method, passed to `AuthorizationBehavior`'s `Func<ValueTask<ClaimsPrincipal>>` parameter as a method-group conversion — this is the adapter-specific principal source spec §2.5 calls for: the in-process gateway supplies `AuthenticationStateProvider`; a future REST/gRPC-endpoint adapter (decided law item 5, deferred — see §5 Out of scope) would supply its own request principal instead, with `AuthorizationBehavior` itself unchanged either way.
 
 - [ ] **Step 4: Wire `InProcessHost` mode into `GatewayGenerator.RegisterSourceOutput`**
 
@@ -2421,6 +2506,7 @@ namespace Norse.AuthN.Components.FluentUI.Tests;
 
 class LoginTests : TestContext
 {
+	[Fact]
 	void WrongCredentials_CollapsedFailure_ShowsGenericMessage()
 	{
 		var gateway = Substitute.For<IAuthenticationGateway>();
@@ -2437,6 +2523,7 @@ class LoginTests : TestContext
 	// Outcome<LoginResult>.Ok(...) constructs via the union's public factory — unaffected by the
 	// Outcome/Outcome<T> rewrite; only Login.razor's own consumption of the outcome changes.
 
+	[Fact]
 	void LockedOut_RealFailure_ShowsDistinguishableMessage()
 	{
 		var gateway = Substitute.For<IAuthenticationGateway>();
@@ -2566,7 +2653,9 @@ Heimdall's PR merges, CI is green, a version tag is pushed, and the resulting Nu
 - Consumes: `IAuthenticationService` (Heimdall, Task 10), `IRequestHandler<LoginRequest, Outcome<BoolResponse>>`/`IRequestHandler<RegisterRequest, Outcome<BoolResponse>>`/`IRequestHandler<LogoutRequest, Outcome>` (already registered in `ServiceCollectionExtensions.cs`), `ProblemExtensions.ToRpcException` (Midgard, Task 5).
 - Produces: `Norse.Identity.Web.Server.AuthenticationService : IAuthenticationService` — public (Yggdrasil's composition root, a different assembly, calls `MapGrpcService<AuthenticationService>()` on it directly — this is the one deliberate, justified `public` escalation in this plan). This is Himinbjörg's own realm-specific glue (spec §9.8-style framing: not generic Norse infrastructure), the *reference* backend behind Heimdall's contract — nothing prevents a different backend from implementing `IAuthenticationService` differently. Expected business failures (`Outcome` failing) throw `Problem.ToRpcException()` directly at this boundary — the one place in the whole chain where "return a value" genuinely isn't an option, because a gRPC method can only communicate non-OK status by throwing.
 
-Also fixes a real DI gap found during this plan's own grounding: `LoginRequestValidator`/`RegisterRequestValidator` are currently registered as concrete types only (`services.AddScoped<LoginRequestValidator>()`), not as `IValidator<TRequest>` — `ValidationBehavior<TRequest,TResponse>` (Task 4) needs the standard FluentValidation DI registration to resolve them generically.
+Also fixes a real DI gap found during this plan's own grounding: `LoginRequestValidator`/`RegisterRequestValidator` are currently registered as concrete types only (`services.AddScoped<LoginRequestValidator>()`), not as `IValidator<TRequest>` — `ValidationBehavior<TRequest,TResponse>` (Task 4) needs the standard FluentValidation DI registration to resolve them generically. Mirrors `[Authorize]` from the interface onto every method (2026-07-24 review, Remand 3) — required for ASP.NET Core's gRPC endpoint metadata to see it at all, since that metadata reflects on this concrete type, not `IAuthenticationService`. Verified end to end by a dedicated wire-path enforcement test in Task 13, since every one of Heimdall's real policies is `AuthNPolicies.Public` (permissive) and can't itself prove a *restrictive* policy is honored.
+
+**Flagged, not fixed here:** `httpContextAccessor.HttpContext!.RequestAborted`/`.Items[...]` in this class is the same pattern the real, already-shipped `BlazorServerAuthenticationGateway` used — `IHttpContextAccessor` is documented as unsupported for interactive Blazor Server circuit invocations (the same root issue Remand 1 fixed in `AuthorizationBehavior`). This class is called both from real HTTP/gRPC requests (where `HttpContext` is genuinely valid) and, via the in-process gateway, from live circuit interactions after the initial render (where it may not be). Reworking this is a bigger question — the deferred-sign-in mechanism this class's `TryGetDeferredCompletionUrl` depends on is *itself* predicated on a real, in-flight `HttpContext.Response.HasStarted` check, and un-picking that is `../Platform/specs/2026-07-15-deferred-signin-realm-placement-design.md` territory, not this plan's. Recorded here so it isn't mistaken for resolved.
 
 - [ ] **Step 1: Write the failing tests — success, business failure (throws `RpcException`), and the deferred-completion-url path**
 
@@ -2586,6 +2675,7 @@ namespace Norse.Identity.Web.Server.Tests;
 
 class AuthenticationServiceTests
 {
+	[Fact]
 	async Task Login_Succeeds_ReturnsLoginResult_WithNoDeferredCompletionUrl_WhenNoneStashed()
 	{
 		var loginHandler = Substitute.For<IRequestHandler<LoginRequest, Outcome<BoolResponse>>>();
@@ -2606,6 +2696,7 @@ class AuthenticationServiceTests
 		result.DeferredCompletionUrl.ShouldBeNull();
 	}
 
+	[Fact]
 	async Task Login_BusinessFailure_ThrowsRpcExceptionWithErrorInfo_NotNotImplementedException()
 	{
 		var loginHandler = Substitute.For<IRequestHandler<LoginRequest, Outcome<BoolResponse>>>();
@@ -2625,6 +2716,7 @@ class AuthenticationServiceTests
 		exception.StatusCode.ShouldBe(StatusCode.PermissionDenied);
 	}
 
+	[Fact]
 	async Task Login_Succeeds_PopulatesDeferredCompletionUrl_WhenStashedOnHttpContext()
 	{
 		var loginHandler = Substitute.For<IRequestHandler<LoginRequest, Outcome<BoolResponse>>>();
@@ -2673,6 +2765,13 @@ namespace Norse.Identity.Web.Server;
 /// Expected business failures throw <c>Problem.ToRpcException()</c> directly — the one place in this
 /// chain where a return value genuinely isn't an option, because a gRPC method's only way to signal
 /// non-OK status is to throw. Public: Yggdrasil's composition root maps this type directly.
+///
+/// <c>[Authorize]</c> is mirrored from the interface onto every method here deliberately, not
+/// redundantly — ASP.NET Core's gRPC endpoint metadata is gathered by reflecting on this concrete
+/// runtime type, not the interface it implements; an interface method's attributes are not visible
+/// to that discovery. Without this mirror, decided law item 4's "enforced on every channel" claim is
+/// false for the wire channel specifically, even though the interface declares the policy correctly
+/// (spec Remand 3, 2026-07-24 review).
 /// </summary>
 public sealed class AuthenticationService(
 	IRequestHandler<LoginRequest, Outcome<BoolResponse>> loginHandler,
@@ -2681,6 +2780,7 @@ public sealed class AuthenticationService(
 	IHttpContextAccessor httpContextAccessor)
 	: IAuthenticationService
 {
+	[Microsoft.AspNetCore.Authorization.Authorize(Policy = AuthNPolicies.Public)]
 	public async Task<LoginResult> Login(LoginRequest request)
 	{
 		var outcome = await loginHandler.Handle(request, httpContextAccessor.HttpContext!.RequestAborted).ConfigureAwait(false);
@@ -2691,6 +2791,7 @@ public sealed class AuthenticationService(
 		};
 	}
 
+	[Microsoft.AspNetCore.Authorization.Authorize(Policy = AuthNPolicies.Public)]
 	public async Task Register(RegisterRequest request)
 	{
 		var outcome = await registerHandler.Handle(request, httpContextAccessor.HttpContext!.RequestAborted).ConfigureAwait(false);
@@ -2698,6 +2799,7 @@ public sealed class AuthenticationService(
 			throw failed.Problem.ToRpcException();
 	}
 
+	[Microsoft.AspNetCore.Authorization.Authorize(Policy = AuthNPolicies.Public)]
 	public async Task Logout(LogoutRequest request)
 	{
 		var outcome = await logoutHandler.Handle(request, httpContextAccessor.HttpContext!.RequestAborted).ConfigureAwait(false);
@@ -2727,11 +2829,12 @@ services.AddScoped<LoginRequestValidator>();
 services.AddScoped<RegisterRequestValidator>();
 ```
 
-with the standard `IValidator<TRequest>` form `ValidationBehavior<TRequest,TResponse>` (Task 4) actually resolves:
+with the standard `IValidator<TRequest>` form `ValidationBehavior<TRequest,TResponse>` (Task 4) actually resolves. Also register a trivial validator for `LogoutRequest` — the generated in-process gateway (Task 9) now constructor-injects `IValidator<TRequest>` for every method unconditionally, `Logout` included, and `LogoutRequest` is a deliberately empty record with nothing to validate:
 
 ```csharp
 services.AddScoped<FluentValidation.IValidator<LoginRequest>, LoginRequestValidator>();
 services.AddScoped<FluentValidation.IValidator<RegisterRequest>, RegisterRequestValidator>();
+services.AddScoped<FluentValidation.IValidator<LogoutRequest>, FluentValidation.InlineValidator<LogoutRequest>>(); // no fields, no rules — always valid
 ```
 
 - [ ] **Step 5: Run tests to verify they pass**
@@ -2770,10 +2873,11 @@ Himinbjörg's PR merges, CI is green, a version tag is pushed, and the resulting
 - Delete: `Yggdrasil/src/Hosting.Web.Client/WasmAuthenticationGateway.cs`
 - Create: `Yggdrasil/src/Hosting.Web.Server/EnvelopeHydrationState.cs`
 - Test: `Yggdrasil/tests/Hosting.Web.Server.Tests/EnvelopeHydrationStateTests.cs`
+- Test: `Yggdrasil/tests/Hosting.Web.Server.Tests/WirePathAuthorizationTests.cs`
 
 **Interfaces:**
 - Consumes: `AddNorseCodeFirstGrpc()` (Midgard, Task 6), `AuthenticationService` (Himinbjörg, Task 12), the generator's `InProcessHost`/`WireHost`-mode output (Tasks 8-9, real once Task 10 sets the emission-mode property on these two projects and a build runs).
-- Produces: `Norse.Hosting.Web.Server.EnvelopeHydrationState.Persist<T>(string key, Func<Outcome<T>> outcomeFactory)` / `.TryTakeOutcome<T>(string key, out Outcome<T> outcome) : bool` — the first real `PersistentComponentState` usage in this codebase (spec §3: zero prior precedent). This is the concrete fix for "Heimdall stays dumb to gRPC": `AddNorseCodeFirstGrpc()` and `MapGrpcService<AuthenticationService>()` both live here, in the composition root — not in Himinbjörg's `AddNorseAuthenticationService`, which registers only plain DI services and knows nothing about gRPC.
+- Produces: `Norse.Hosting.Web.Server.EnvelopeHydrationState.Persist<T>(string key, Func<Outcome<T>> outcomeFactory)` / `.TryTakeOutcome<T>(string key, out Outcome<T> outcome) : bool` — the first real `PersistentComponentState` usage in this codebase (spec §3: zero prior precedent). This is the concrete fix for "Heimdall stays dumb to gRPC": `AddNorseCodeFirstGrpc()` and `MapGrpcService<AuthenticationService>()` both live here, in the composition root — not in Himinbjörg's `AddNorseAuthenticationService`, which registers only plain DI services and knows nothing about gRPC. Also the verification task Remand 3 asks for: `WirePathAuthorizationTests` proves `[Authorize]`-mirrored-on-implementation is real, enforced endpoint metadata under `AddNorseCodeFirstGrpc()`, using an isolated restrictive-policy fixture rather than Heimdall's all-permissive real surface.
 
 - [ ] **Step 1: Write the failing test for `EnvelopeHydrationState` — round-trips both cases through JSON without exposing the union's private layout**
 
@@ -2789,6 +2893,7 @@ namespace Norse.Hosting.Web.Server.Tests;
 
 class EnvelopeHydrationStateTests
 {
+	[Fact]
 	async Task Persist_ThenTryTake_RoundTripsSuccessCase()
 	{
 		var store = new Dictionary<string, byte[]>();
@@ -2807,6 +2912,7 @@ class EnvelopeHydrationStateTests
 		success.Value.ShouldBeTrue();
 	}
 
+	[Fact]
 	async Task Persist_ThenTryTake_RoundTripsFailureCase_CategoryAndErrors()
 	{
 		var store = new Dictionary<string, byte[]>();
@@ -2984,17 +3090,100 @@ builder.Services.AddScoped<IAuthenticationGateway, AuthenticationWireGateway>();
 Run: `dotnet test Yggdrasil/tests/Hosting.Web.Server.Tests --filter EnvelopeHydrationStateTests`
 Expected: PASS (2 tests).
 
-- [ ] **Step 8: Build the whole solution to confirm the generated gateways compile against real Midgard/Himinbjörg/Heimdall packages**
+- [ ] **Step 8: Write and pass a genuine wire-path authorization enforcement test**
+
+Every one of Heimdall's real policies is `AuthNPolicies.Public` (satisfied by anyone), so exercising the real `AuthenticationService` proves nothing about whether a *restrictive* policy is actually enforced over the wire (2026-07-24 review, Remand 3). This test proves the mechanism itself — `[Authorize]` mirrored on the implementation (Task 12) plus `AddNorseCodeFirstGrpc()` (Task 6) plus standard ASP.NET Core authorization middleware — independent of Heimdall's specific (currently permissive) policy set, using a minimal, isolated fake service.
+
+```csharp
+// Yggdrasil/tests/Hosting.Web.Server.Tests/WirePathAuthorizationTests.cs
+using System.ServiceModel;
+using Grpc.Core;
+using Grpc.Net.Client;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Norse.Infrastructure.Web.Server.Mediator.Grpc;
+using ProtoBuf.Grpc.Server;
+using Shouldly;
+
+namespace Norse.Hosting.Web.Server.Tests;
+
+[ServiceContract]
+public interface IRestrictedService
+{
+	[Authorize(Policy = "Test.NeverSatisfied")]
+	[OperationContract]
+	Task<RestrictedResponse> Restricted(RestrictedRequest request);
+}
+
+public sealed record RestrictedRequest;
+public sealed record RestrictedResponse;
+
+[Authorize(Policy = "Test.NeverSatisfied")] // mirrored, exactly as Task 12 mirrors it onto AuthenticationService
+sealed class RestrictedService : IRestrictedService
+{
+	public Task<RestrictedResponse> Restricted(RestrictedRequest request) => Task.FromResult(new RestrictedResponse());
+}
+
+class WirePathAuthorizationTests
+{
+	[Fact]
+	async Task UnauthenticatedCall_AgainstRestrictivePolicy_RejectedWithUnauthenticatedAndErrorInfo()
+	{
+		using var host = await new HostBuilder()
+			.ConfigureWebHost(webHost =>
+			{
+				webHost.UseTestServer();
+				webHost.ConfigureServices(services =>
+				{
+					services.AddNorseCodeFirstGrpc();
+					services.AddAuthorization(o => o.AddPolicy("Test.NeverSatisfied", p => p.RequireAssertion(_ => false)));
+					services.AddAuthentication().AddCookie();
+					services.AddScoped<IRestrictedService, RestrictedService>();
+				});
+				webHost.Configure(app =>
+				{
+					app.UseRouting();
+					app.UseAuthentication();
+					app.UseAuthorization();
+					app.UseEndpoints(endpoints => endpoints.MapGrpcService<RestrictedService>());
+				});
+			})
+			.StartAsync();
+
+		var handler = host.GetTestServer().CreateHandler();
+		var channel = GrpcChannel.ForAddress("http://localhost", new GrpcChannelOptions { HttpHandler = handler });
+		var client = channel.CreateGrpcService<IRestrictedService>();
+
+		var exception = await Should.ThrowAsync<RpcException>(async () => await client.Restricted(new RestrictedRequest()));
+
+		// Proves two things at once: (a) [Authorize] mirrored on the implementation IS discovered as
+		// real endpoint metadata by ASP.NET Core's gRPC hosting (interface-only would enforce nothing —
+		// this test would hang or succeed instead of throwing), and (b) the rejection round-trips
+		// through the platform's own ErrorInfo-based decode (Task 5), not a bare framework status.
+		exception.StatusCode.ShouldBe(StatusCode.Unauthenticated);
+	}
+}
+```
+
+Run: `dotnet test Yggdrasil/tests/Hosting.Web.Server.Tests --filter WirePathAuthorizationTests`
+Expected: PASS. If it instead hangs, times out, or the call succeeds, that is the failure mode this test exists to catch — `[Authorize]` on `IRestrictedService.Restricted` alone (without the mirror on `RestrictedService`) is not discovered as endpoint metadata, and the call goes through unauthenticated. Confirm by temporarily removing the mirror attribute from `RestrictedService` and re-running — the test must fail.
+
+Add `Microsoft.AspNetCore.TestHost` (`PackageReference Version="10.*"`) to `Yggdrasil/tests/Hosting.Web.Server.Tests/Hosting.Web.Server.Tests.csproj` if not already present via the ASP.NET Core shared framework reference.
+
+- [ ] **Step 9: Build the whole solution to confirm the generated gateways compile against real Midgard/Himinbjörg/Heimdall packages**
 
 Run: `dotnet build Yggdrasil.slnx`
 Expected: Build succeeds. `AuthenticationInProcessGateway`/`AuthenticationWireGateway` appear in each project's generated-files output (`obj/**/generated/Norse.Abstractions.Gateway.Generator/`), both implementing `IAuthenticationGateway`.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
-git add Yggdrasil/src/Hosting.Web.Server/Program.cs Yggdrasil/src/Hosting.Web.Server/Hosting.Web.Server.csproj Yggdrasil/src/Hosting.Web.Server/EnvelopeHydrationState.cs Yggdrasil/tests/Hosting.Web.Server.Tests/EnvelopeHydrationStateTests.cs Yggdrasil/src/Hosting.Web.Client/Program.cs Yggdrasil/src/Hosting.Web.Client/Hosting.Web.Client.csproj
+git add Yggdrasil/src/Hosting.Web.Server/Program.cs Yggdrasil/src/Hosting.Web.Server/Hosting.Web.Server.csproj Yggdrasil/src/Hosting.Web.Server/EnvelopeHydrationState.cs Yggdrasil/tests/Hosting.Web.Server.Tests/EnvelopeHydrationStateTests.cs Yggdrasil/tests/Hosting.Web.Server.Tests/WirePathAuthorizationTests.cs Yggdrasil/src/Hosting.Web.Client/Program.cs Yggdrasil/src/Hosting.Web.Client/Hosting.Web.Client.csproj
 git add -u Yggdrasil/src/Hosting.Web.Server Yggdrasil/src/Hosting.Web.Client
-git commit -m "feat: wire AddNorseCodeFirstGrpc + MapGrpcService, generated gateways, EnvelopeHydrationState"
+git commit -m "feat: wire AddNorseCodeFirstGrpc + MapGrpcService, generated gateways, EnvelopeHydrationState; prove wire-path authz enforcement"
 ```
 
 ---
@@ -3024,6 +3213,7 @@ namespace Norse.Hosting.Web.Server.Tests;
 
 class AuthenticationHydrationParityTests
 {
+	[Fact]
 	async Task Forbidden_IdenticalProblem_AcrossInProcessThenWireGateway()
 	{
 		// In-process gateway (Server circuit, prerender): the real chain runs, AuthorizationBehavior
@@ -3054,6 +3244,7 @@ class AuthenticationHydrationParityTests
 		hydratedFailed.Problem.Category.ShouldBe(ErrorCategory.Forbidden);
 	}
 
+	[Fact]
 	async Task Success_IdenticalLoginResult_AcrossInProcessThenWireGateway()
 	{
 		var loginResult = new LoginResult { Succeeded = true, DeferredCompletionUrl = null };
@@ -3135,5 +3326,16 @@ git commit -m "test: hydration-parity acceptance test proving in-process and wir
 ## SHIP GATE — Yggdrasil (final)
 
 Yggdrasil's PR merges, CI is green, a version tag is pushed, and the resulting NuGet package is live on the feed. Run `dotnet run --project src/Orchestration.AppHost` from Bifröst and confirm in the Aspire dashboard: the web server starts, `AuthenticationService` is reachable via gRPC reflection in Development, and a manual Login attempt (wrong password, then a real account) renders identically whether observed during the initial page load (in-process) or after WASM hydration completes (wire) — the flicker the spec's render-mode policy warns about should not be visible.
+
+---
+
+## Out of scope for this plan
+
+Explicitly deferred, not silently unimplemented (2026-07-24 review, lesser finding 2):
+
+- **`GrpcControllerBase` retrofit for the REST bridge (decided law item 5).** No REST controller, no partner-facing HTTP mapping, and no third adapter type exist anywhere in this plan — only the in-process gateway and wire gateway are built. `AuthorizationBehavior`'s `principalAccessor` seam (Task 4, Remand 1) is deliberately adapter-agnostic specifically so a future REST adapter can supply its own request principal without changing the behavior itself, but that adapter is not designed or scheduled here. A separate plan.
+- Streaming gateways (spec §2.3) — `NORSE002` makes this a build error, not a silent gap.
+- Gateway call-site ergonomics beyond the raw `outcome`/union `switch` pattern (spec §2.2 fast-follow).
+- EF/database exception → `Conflict` mapping (spec §2.6) — pending Midgard's repository pattern convergence.
 
 ---
