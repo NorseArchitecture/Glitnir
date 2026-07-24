@@ -308,7 +308,7 @@ public readonly record struct Unit
 }
 ```
 
-`Asgard/src/Abstractions.Contracts/GlobalUsings.Outcome.cs` — new file, the platform-wide alias (copied verbatim into every project this plan adds an `Outcome<Unit>` dependency to — see Tasks 3, 10, 12, 13):
+`Asgard/src/Abstractions.Contracts/GlobalUsings.Outcome.cs` — new file, the platform-wide alias. **Generated code never uses it** — the gateway generator (Tasks 7-9) always spells `Outcome<Unit>` explicitly, on purpose, so a generated file's compilability never depends on the consuming project happening to carry this alias (2026-07-24 review — this is exactly the rule `ContractEmitter` initially missed and had to be fixed to follow, matching `WireHostEmitter`/`InProcessHostEmitter`). The alias exists purely for **hand-written** call sites that want to keep an existing bare-`Outcome` spelling — today that's Himinbjörg alone (Task 12, `LogoutHandler.cs`'s pre-existing `IRequestHandler<LogoutRequest, Outcome>` registration). Copy it to any other project only if and when a human writes new code there that wants the short spelling; nothing in this plan's generated output requires it:
 
 ```csharp
 global using Outcome = Norse.Abstractions.Contracts.Outcome<Norse.Abstractions.Contracts.Unit>;
@@ -1480,6 +1480,39 @@ class GatewayGeneratorTests
 	}
 
 	[Fact]
+	void ContractMode_VoidSuccessMethod_EmitsOutcomeOfUnitExplicitly_NeverBareAlias()
+	{
+		const string source = """
+			using System.ServiceModel;
+			using Microsoft.AspNetCore.Authorization;
+			using Norse.Abstractions.Contracts;
+
+			namespace TestRealm.Services;
+
+			[GenerateGateway]
+			[ServiceContract]
+			public interface IWidgetService
+			{
+				[Authorize(Policy = "Widget.Delete")]
+				[OperationContract]
+				Task DeleteWidget(WidgetRequest request, CancellationToken cancellationToken = default);
+			}
+
+			public sealed record WidgetRequest;
+			""";
+
+		var (diagnostics, sources) = GeneratorTestHarness.Run(source, "Contract");
+
+		diagnostics.ShouldBeEmpty();
+		var gatewaySource = sources.ShouldHaveSingleItem();
+		// Explicit Outcome<Unit> — never bare "ValueTask<Outcome>", which would only compile in a
+		// project that happens to carry the GlobalUsings.Outcome.cs alias. Generated code must never
+		// depend on that (2026-07-24 review) — this is exactly the gap that broke Task 10's build.
+		gatewaySource.ShouldContain("ValueTask<Outcome<Unit>> DeleteWidget(WidgetRequest request, CancellationToken cancellationToken = default)");
+		gatewaySource.ShouldNotContain("ValueTask<Outcome> ");
+	}
+
+	[Fact]
 	void MissingAuthorizeAttribute_ReportsNorse001Error()
 	{
 		const string source = """
@@ -1680,10 +1713,13 @@ static class ContractEmitter
 		builder.AppendLine("{");
 		foreach (var method in model.Methods)
 		{
-			var returnType = method.ResponseTypeName is { } responseType
-				? $"ValueTask<Outcome<{responseType}>>"
-				: "ValueTask<Outcome>";
-			builder.AppendLine($"\t{returnType} {method.Name}({method.RequestTypeName} request, CancellationToken cancellationToken = default);");
+			// Always Outcome<{responseType}>, responseType = "Unit" for void methods — never the bare
+			// "Outcome" alias spelling. Generated code must never depend on the consuming project
+			// happening to carry the alias file; only hand-written call sites opt into that ergonomic
+			// shorthand (2026-07-24 review — this emitter was the one branch the Unit-consolidation
+			// pass missed; WireHostEmitter/InProcessHostEmitter already follow this rule).
+			var responseType = method.ResponseTypeName ?? "Unit";
+			builder.AppendLine($"\tValueTask<Outcome<{responseType}>> {method.Name}({method.RequestTypeName} request, CancellationToken cancellationToken = default);");
 		}
 		builder.AppendLine("}");
 		return builder.ToString();
@@ -1822,7 +1858,7 @@ public sealed class GatewayGenerator : IIncrementalGenerator
 - [ ] **Step 7: Run tests to verify they pass**
 
 Run: `dotnet test Asgard/tests/Abstractions.Gateway.Generator.Tests --filter GatewayGeneratorTests`
-Expected: PASS (4 tests).
+Expected: PASS (5 tests).
 
 - [ ] **Step 8: Commit**
 
@@ -2131,7 +2167,7 @@ Expected: PASS (2 tests).
 - [ ] **Step 6: Run the full generator test suite**
 
 Run: `dotnet test Asgard/tests/Abstractions.Gateway.Generator.Tests`
-Expected: PASS (7 tests total — 4 from Task 7, 1 from Task 8, 2 from Task 9).
+Expected: PASS (8 tests total — 5 from Task 7, 1 from Task 8, 2 from Task 9).
 
 - [ ] **Step 7: Commit**
 
