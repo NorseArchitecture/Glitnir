@@ -17,6 +17,8 @@
 - **`Heimdall/src/AuthN.Components/AuthenticationResult.cs`**: `Errors: IReadOnlyDictionary<string,string[]>`, field-name-keyed, empty-string-key reserved for model-level errors — its own XML doc states this is deliberate, matching FluentValidation/Blazor's own convention "so both flow into the same ValidationSummary/ValidationMessageStore with no special-casing in the UI." The generalization opportunity is already recognized in writing; nothing has extracted it into a reusable mechanism yet.
 - **`Asgard/src/Abstractions.Web.Server/Mediator/Outcome.cs`**: `Outcome<T>.Problem.Errors` is the same `IReadOnlyDictionary<string,string[]>` shape, one level further back in the pipeline (server-only, pre-gateway-mapping).
 
+**Amendment (2026-07-25):** `IAuthenticationGateway`/`AuthenticationResult` were retired 2026-07-25 by Heimdall's `feature/transport-neutral-gateway` slice (merged, tag v0.0.3). `IAuthenticationService` now carries Asgard's `[GenerateGateway]` attribute and the generated gateway returns `ValueTask<Outcome<T>>` directly, so `Login.razor`'s error-handling seam is now `Outcome<T>.Problem.Errors` itself, not a hand-maintained `AuthenticationResult.Errors` copy — the two bullets above describing separate shapes now describe the same one.
+
 ### 1.2 What this session confirmed by decompiling the actual libraries (not just reading docs)
 
 **Blazilla 2.4.0** (`~/.nuget/packages/blazilla/2.4.0`, decompiled via `ilspycmd`):

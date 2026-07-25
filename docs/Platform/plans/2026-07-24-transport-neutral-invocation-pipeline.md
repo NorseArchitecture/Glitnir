@@ -2255,6 +2255,8 @@ static class InProcessHostEmitter
 }
 ```
 
+**Amendment (2026-07-25):** the generated code above constructs `ValidationBehavior<,>`/`AuthorizationBehavior<,>`/`ExceptionTranslationBehavior<,>`/`TelemetryBehavior<,>` directly, but those four types are `internal` by the `omit_if_default` convention (Tasks 3-4) and this consumer lives in a different assembly (e.g. Yggdrasil's `Hosting.Web.Server`). That requires a per-consumer `InternalsVisibleTo` grant from Midgard that this plan never adds. Found live, fixed and staged in Midgard — not yet shipped to NuGet.
+
 `GetPrincipalAsync` above is a private local method, passed to `AuthorizationBehavior`'s `Func<ValueTask<ClaimsPrincipal>>` parameter as a method-group conversion — this is the adapter-specific principal source spec §2.5 calls for: the in-process gateway supplies `AuthenticationStateProvider`; a future REST/gRPC-endpoint adapter (decided law item 5, deferred — see §5 Out of scope) would supply its own request principal instead, with `AuthorizationBehavior` itself unchanged either way.
 
 - [ ] **Step 4: Wire `InProcessHost` mode into `GatewayGenerator.RegisterSourceOutput`**
@@ -3241,6 +3243,8 @@ app.MapGrpcService<AuthenticationService>();
 ```
 
 (`Infrastructure.Web.Server` NorseRef is already present transitively today via Himinbjörg's `Identity.Web.Server`; this makes it explicit — same fix already applied once before, for `IDeferredSignIn`, in `../Platform/specs/2026-07-15-deferred-signin-realm-placement-design.md`. `Abstractions.Contracts` is also already present transitively; `Generator="true"` is the new, load-bearing part — omitting it means dev-mode builds silently skip gateway generation, no error, no diagnostic, just a missing generated type Step 7's tests would fail to find.)
+
+**Amendment (2026-07-25):** live during this task, `NorseGatewayEmissionMode` (set as a plain MSBuild property above) was found never declared `CompilerVisibleProperty` platform-wide — only worked around locally in these two Yggdrasil `.csproj` files, not fixed at the source (Asgard's generator packaging). Without that declaration the generator can't see the property via `AnalyzerConfigOptions`, and `InProcessHost` mode silently falls back to `Contract` mode — no error, no diagnostic. Scoped for a near-future session.
 
 - [ ] **Step 6: Delete `BlazorServerAuthenticationGateway.cs`; update `Hosting.Web.Client`'s gateway registration and emission mode**
 

@@ -164,6 +164,8 @@ Norse.Auth.Contracts.NorsePrincipal
   - SourceCookie / SourceToken:  discriminated source marker
 ```
 
+> **Amendment (2026-07-25):** this direction was not taken. `NorsePrincipal`/`Population` never shipped anywhere in the platform (confirmed by repo-wide grep) — the auth realm that shipped is Heimdall/Himinbjörg, whose `IAuthenticationService` (`[GenerateGateway]`) returns `Outcome<T>` directly, with no principal-envelope type of this shape. See `../../../../Heimdall/CLAUDE.md`.
+
 The wrapping is mechanical, but the contract matters: a `Policy` context handler reads `principal.Population` rather than `principal.HasClaim("population", "Customer")`. Compile-time checks beat string-keyed lookups everywhere — CLAUDE.md §2.7.
 
 ### 5.3 The population taxonomy

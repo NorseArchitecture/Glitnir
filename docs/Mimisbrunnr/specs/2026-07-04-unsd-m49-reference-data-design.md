@@ -40,6 +40,8 @@ The raw file stays exactly where it landed — `seeds/raw/UNSD — Methodology.c
 
 Two entities, both in `Norse.ReferenceData.Data`, both Tier 1 (`NorseEntityBase<TSelf>` + `INorseEntity<TSelf>`, per Urdarbrunnr's convention):
 
+**Amendment (2026-07-25):** `Norse.ReferenceData.Data` (here and at §6 below) is the working-title namespace; shipped source renamed the realm to `Norse.Reference.Data`. See Mímisbrunnr's current source and `docs/Mimisbrunnr/plans/2026-07-22-reference-data-migrations-project-split-design.md`.
+
 ```csharp
 namespace Norse.ReferenceData.Data;
 

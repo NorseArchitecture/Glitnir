@@ -31,6 +31,8 @@ This is a POC — throwaway spike code on an isolated branch/worktree, not a mer
 
 Net effect today: the "component is dumb about transport" goal is **already achieved**, but by hand, once, for exactly one feature (login/register/logout). It does not yet generalize.
 
+**Amendment (2026-07-25):** everything in this §1.1 bullet list describing `IAuthenticationGateway`/`AuthenticationResult`/`BlazorServerAuthenticationGateway`/`WasmAuthenticationGateway` was retired 2026-07-25 by Heimdall's `feature/transport-neutral-gateway` slice (merged, tag v0.0.3) — a more direct answer to this POC's §2.1 "generalize the shredder" question than the mapper-based approaches scoped below: `IAuthenticationService` carries Asgard's `[GenerateGateway]` attribute and `AuthN.Services`'s `GatewayGenerator` emits the gateway at compile time, returning `ValueTask<Outcome<T>>` directly — no per-feature `XxxResult` DTO, no hand-written shredder to generalize at all.
+
 ### 1.2 The platform's canonical, already-approved pattern this POC must conform to
 
 `Platform/specs/2026-05-26-mediator-design.md` (approved, completed 2026-06-03) plus `Platform/specs/2026-07-13-protobuf-net-grpc-reinstated-design.md` (approved, carries the door table forward unmodified, only swaps which attributes decorate the wire) together already rule:

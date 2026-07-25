@@ -14,6 +14,8 @@ Six assemblies under `Norse.Abstractions.*`, split by dependency wall and consum
 - **Project:** `src/Abstractions.Contracts/Abstractions.Contracts.csproj`
 - **Upstream dependencies:** none
 - **Contents:** `NorsePrincipal`, `Population`, published event interfaces, `IAccountApi`
+
+  **Amendment (2026-07-25):** this direction was not taken. `Abstractions.Contracts` shipped instead via the transport-neutral-gateway track (PR #36, tag v0.0.10) with `Outcome<T>`/`Problem`/`ErrorCategory`/`BoolResponse`/`Unit` and `GenerateGatewayAttribute` (driving `gen/Abstractions.Contracts.Generator`) — no `NorsePrincipal`, `Population`, or `IAccountApi` anywhere in current source. See `docs/the-two-unions.md`.
 - **Consumers:** `Norse.Abstractions.Worker`, `Norse.Abstractions.Web.Server`, all product `.Contracts` assemblies
 
 ### `Norse.Abstractions.Components`

@@ -363,6 +363,8 @@ Leaving Primitives runtime-async-neutral means it can be consumed by both runtim
 
 ### 9.2 Consumer tier policy
 
+**Amendment (2026-07-25):** `Norse.ReferenceData.*`, listed as a peer realm namespace in this section and in §11 below, dissolved 2026-06-11 — temporal contracts moved to Asgard, implementations to Midgard, universal content to a thin library named when real. See `docs/codenames.md` and `docs/the-crooked-path.md` #8.
+
 | Tier | Projects | `runtime-async` | AOT |
 |---|---|---|---|
 | Server | `Norse.Hosting.Web.Server`, `Norse.Hosting.Worker`, `Norse.Hosting.Migrations.Service`, `{Company}.{Context}.Server`, `{Company}.{Context}.Worker`, the `Norse.Hosting.*`, `Norse.Infrastructure.*`, `Norse.ReferenceData.*`, and `Norse.Warehouse.*` libraries, internal CLI | **on** | JIT (reflection allowed) |
@@ -433,7 +435,7 @@ Patch version bumps for bug fixes and performance work that does not change the 
 
 ## 11. F# Consumer Support
 
-Primitives — and every realm namespace (`Norse.Abstractions.*`, `Norse.Infrastructure.*`, `Norse.ReferenceData.*`, `Norse.Hosting.*`, `{Company}.*`) — is a **first-class consumer target for F#**. The design choices above already accommodate F# interop:
+Primitives — and every realm namespace (`Norse.Abstractions.*`, `Norse.Infrastructure.*`, `Norse.ReferenceData.*` [dissolved 2026-06-11, see §9.2 amendment], `Norse.Hosting.*`, `{Company}.*`) — is a **first-class consumer target for F#**. The design choices above already accommodate F# interop:
 
 1. **Public case types** — `Success<T>`, `Failure`, and the `ParseFailure` enum — so F# code can see them as concrete types.
 2. **No `out` parameters in the public surface** — the F# idiom for fallible operations is `Match`-style lambdas, which Primitives provides.

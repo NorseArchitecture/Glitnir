@@ -1356,6 +1356,8 @@ git add Bifrost.slnx
 3. **Task 3 (`NorseEntityBase<TSelf>`):** the plan's literal code (implementing `INorseEntity<TSelf>` with an unfulfilled `Configure`) does not compile — no legal C# leaves a `static abstract` interface member unfulfilled through an intervening class. Shipped fix: `NorseEntityBase<TSelf>` does **not** implement `INorseEntity<TSelf>` itself, only constrains `TSelf` to it. **Consequence relevant to Himinbjörg:** a concrete Tier-1 entity must declare BOTH `: NorseEntityBase<TSelf>` AND `: INorseEntity<TSelf>` explicitly — not "free by inheritance" as originally framed. Himinbjörg is 100% Tier 2 (every entity implements `INorseEntity<TSelf>` directly per Task 7 onward), so this doesn't block Task 7–15, but don't write Tier-1-style guidance elsewhere assuming the base class alone is sufficient.
 4. **Task 6 (the generator):** the plan's `StripGlobalPrefix` helper only stripped `global::`, never the namespace, so the Tier-1 partial-class emission produced invalid C# for any real namespaced `DbContext`. Fixed by wrapping in a proper `namespace { }` block. Not relevant to Himinbjörg (Tier 2 only), but relevant to any future Tier-1 bounded context.
 
+**Amendment (2026-07-25):** every `Norse.EntityFramework`/`Norse.EntityFramework.Generator` reference throughout this plan (Tasks 1–15, the ship-gate notes above included) names the namespace as it existed when this plan was written and shipped. Urðarbrunnr's own follow-on widening — `Norse.EntityFramework.*` → `Norse.Persistence.EntityFramework.*` — merged separately (PR #31, tag v0.0.4) and is what the platform builds against today. Read every `Norse.EntityFramework` in this document as historical.
+
 ---
 
 ## Task 7: Himinbjörg — `IdentityValueConverters` + `NorseUser`

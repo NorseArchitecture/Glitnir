@@ -12,6 +12,8 @@ hit the same two MSBuild gaps this doc fixes. Read this before wiring a new
 generator-bearing NorseRef consumer — the fix is already in place platform-wide;
 you should not need to re-derive it.
 
+**Amendment (2026-07-25):** `Norse.EntityFramework.Migrations.PostgreSQL` (the worked example above and in "The Problem" below) named Urðarbrunnr's namespace as it stood on 2026-07-01. It has since widened to `Norse.Persistence.EntityFramework.*` (PR #31, tag v0.0.4). The forwarding mechanism this doc describes is namespace-agnostic and unaffected.
+
 ## The Problem
 
 A source generator packaged inside a Norse library (e.g.

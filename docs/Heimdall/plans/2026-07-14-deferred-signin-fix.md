@@ -138,6 +138,8 @@ public static class DeferredSignInEndpointRouteBuilderExtensions
 
 ### 2. Himinbjörg — `Identity` (the base project, alongside `NorseUser`/`IdentityBuilderExtensions`)
 
+**Amendment (2026-07-25):** the `Identity` project this section places `NorseSignInManager` in was deleted 2026-07-23, folded into `src/Identity.Web.Server`. Current shape is four live projects: `Identity.Web.Server`, `Identity.Migrations`, `Identity.Migrations.PostgreSQL`, `Identity.Migrations.SqlServer`.
+
 `NorseSignInManager.cs`:
 ```csharp
 namespace Norse.Identity;
@@ -199,6 +201,8 @@ sealed class NorseSignInManager(
 **Verification requirement, not optional**: a real integration test proving `NorseSignInManager`'s override actually intercepts — e.g. force `HttpContext.Response.HasStarted` true in a test (write to the response body / call `StartAsync()`), call `PasswordSignInAsync`, assert `Context.Items` contains the deferred key and no exception was thrown. Don't accept "it compiles" as proof this works — that's exactly the class of assumption that broke twice already tonight.
 
 ### 3. Heimdall — `AuthN.Components` — contract addition
+
+**Amendment (2026-07-25):** `AuthenticationResult` was retired 2026-07-25 (Heimdall `feature/transport-neutral-gateway`, tag v0.0.3) — replaced by `IAuthenticationService` carrying Asgard's `[GenerateGateway]` attribute, with the generated gateway returning `ValueTask<Outcome<T>>` directly. See `../specs/2026-07-13-authn-identity-split-design.md` §9.8's amendment for the full picture.
 
 `AuthenticationResult` gains one new optional field:
 ```csharp

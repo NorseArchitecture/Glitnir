@@ -246,6 +246,8 @@ The postgres primary+replica topology is unchanged from `2026-06-16-apphost-post
 | Midgard | `Norse.Infrastructure` | `MigrationRunnerService` (`IHostedService`); `AddNorseMigrationsRunner()` extension |
 | Yggdrasil | `Norse.Hosting.Migrations.Service` | `Program.cs` stub replaced with the three-line production form |
 
+**Amendment (2026-07-25):** the `Norse.EntityFramework` / `Norse.EntityFramework.Migrations` names in this table are pre-rename, historically accurate as of 2026-06-28. Both (and their `.PostgreSQL` siblings) were renamed/widened to `Norse.Persistence.EntityFramework.*` on Urdarbrunnr's `feature/persistence-namespace-widening` branch, merged to `master` and published (PR #31, tag v0.0.4, 2026-07-22). See `../../Urdarbrunnr/specs/2026-07-22-design-time-ddl-emission-and-chassis-rename-design.md`.
+
 ---
 
 ## 6. Success Criterion

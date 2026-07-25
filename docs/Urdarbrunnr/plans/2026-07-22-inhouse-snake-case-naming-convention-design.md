@@ -1,5 +1,10 @@
 # Norse.EntityFramework In-House Snake_Case Naming Convention Implementation Plan
 
+**Amendment (2026-07-25):** every `Norse.EntityFramework`/`src/EntityFramework*` reference below (title
+included) predates the widening rename to `Norse.Persistence.EntityFramework`/`src/Persistence.EntityFramework*`
+(PR #31, merged 2026-07-22, shipped v0.0.4) — the code this plan produced lives under the new namespace
+and path today; see the paired spec's own 2026-07-25 amendment for the confirming file path.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (default for this repo) paired with superpowers:test-driven-development on every task — never one without the other. `superpowers:executing-plans` is the narrow separate-session fallback only; do not substitute it silently. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the stubbed-out `NorseDbContextOptionsExtensions.ApplyNorseConventions` (dead since `EFCore.NamingConventions` was pulled for EF Core 11 compatibility) with an in-house snake_case naming convention, ported from the pasted `SnakeCaseNameRewriter` algorithm and prior-art model-walking code, wired through EF Core's real convention-plugin pipeline.

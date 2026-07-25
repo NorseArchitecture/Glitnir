@@ -45,7 +45,7 @@ A benchmark project is **exempt** when the submodule is:
 | `norse-infrastructure-persistence` | **Required** | Repository pipeline, entity materialization, snake_case/MaxLength conventions, `IConnectionResolver` resolution |
 | `norse-infrastructure-api` | **Required** | JSON door: request/response serialization through the source-generated contexts |
 | `norse-infrastructure-ui-composition` | **Required** | Widget registry resolution, layout composition, `WidgetContext` construction — the C# framework only (§3) |
-| `Norse.ReferenceData` | **Required** | Temporal projection, as-of traversal, seed-engine parsing |
+| `Norse.ReferenceData` | **Required** | Temporal projection, as-of traversal, seed-engine parsing. **Amendment (2026-07-25):** this realm dissolved 2026-06-11 — temporal contracts moved to Asgard, implementations to Midgard. See `docs/codenames.md` and `docs/the-crooked-path.md` #8. |
 | `norse-primitives-architecture` | Exempt | Build-time tooling |
 | `norse-abstractions-hosting` / `norse-abstractions-infrastructure` / contracts assemblies | Exempt | Declaration-only |
 | `norse-hosting` / `norse-hosting-host` | Exempt (boot path) | Startup cost is real but is a cold-start/container metric (§7), not a BenchmarkDotNet microbenchmark |

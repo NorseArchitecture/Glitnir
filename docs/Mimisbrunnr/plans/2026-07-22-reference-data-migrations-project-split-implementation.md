@@ -1,5 +1,7 @@
 # Reference.Data.Migrations Project Split Implementation Plan
 
+**Amendment (2026-07-25):** This plan already reflects the `Norse.Reference.Data` namespace rename, but every occurrence below of `ReferenceDataDbContext` and `NorseReferenceDataMigrationContributor` is still the pre-rename class name. Shipped source has since renamed these to `ReferenceDbContext` and `NorseReferenceMigrationContributor` respectively. None of these renames are reflected below.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Split Mímisbrunnr's `src/Reference.Data.Migrations` project into three — a provider-agnostic project (contributor + seed contributor + TSVs) and two new provider projects (`Reference.Data.Migrations.PostgreSQL`, `Reference.Data.Migrations.SqlServer`), each holding its own `IDesignTimeDbContextFactory`.

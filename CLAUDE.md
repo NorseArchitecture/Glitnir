@@ -93,7 +93,7 @@ Full concern table and ownership boundaries: `docs/decomposition.md`. Consult it
 
 **Core domain contexts (insurance):** Product · Distribution · Underwriting · Policy · Billing · Customer · Claims · Reporting.
 
-**Cross-cutting platform services** (not bounded contexts): `Norse.Identity` · `Norse.AuthN` · `Norse.ReferenceData` · `Norse.Observability` · `Norse.AI`. Fraud detection and claims triage are unplaced — platform-vs-product unsettled, and unnamed (`Tyr`/`Valkyrie` returned to the bench 2026-07-03, see `docs/the-crooked-path.md` #9 — a provisional name is still a premature one).
+**Cross-cutting platform services** (not bounded contexts): `Norse.Identity` · `Norse.AuthN` · `Norse.Reference` · `Norse.Observability` · `Norse.AI`. Fraud detection and claims triage are unplaced — platform-vs-product unsettled, and unnamed (`Tyr`/`Valkyrie` returned to the bench 2026-07-03, see `docs/the-crooked-path.md` #9 — a provisional name is still a premature one).
 
 **Integration rules:** contexts publish on their own logical endpoint; subscribers bind queues; publishers don't know who's listening. Events are versioned from day one; breaking changes ship a new type. No synchronous cross-context RPC for writes. Fraud and AI are advisors, not authorities — the originating context retains the decision. Reporting is the only context permitted to maintain denormalized cross-context state. Full design: `docs/Platform/specs/2026-06-03-messaging-foundation-design.md`.
 
@@ -116,7 +116,7 @@ Key decisions only — full rationale in linked specs.
 PostgreSQL (Neon) — primary OLTP. TimescaleDB — time series. pgvector — embeddings. MongoDB — operational read store (`.Server` tier); also system of record for identity and UI layout (deliberate inversions). Full design: `docs/Midgard/specs/2026-05-21-midgard-persistence-design.md`.
 
 Key decisions:
-- Abstract base context (audit stamping, conventions) → `Norse.EntityFramework` (Urðarbrunnr).
+- Abstract base context (audit stamping, conventions) → `Norse.Persistence.EntityFramework` (Urðarbrunnr).
 - Concrete per-service DbContexts are **source-generated, `file`-scoped** — unreferenceable by construction.
 - Four repository contracts in `Norse.Abstractions.Infrastructure`: `IDocumentRepository<T>`, `ICommandRepository<T>`, `ICachedRepository<T>`, `ITemporalRepository<T>`. **No `IUnitOfWork`** — the messaging library's per-handler session owns the transaction.
 - Services never inject a DbContext or call `SaveChangesAsync`.

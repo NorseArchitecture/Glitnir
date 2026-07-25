@@ -16,6 +16,8 @@ This spec resolves the tenancy question: single tenant or multi-tenant from day 
 - The realistic client shape is **tens of B2B tenants, sales-led** — each tenant a company (an MGA, an energy retailer) landed through a sales process. Not hundreds-to-thousands of self-serve signups.
 - Two deployment sizes were named up front: dedicated infrastructure carved off for large clients, and a lighter-weight, lower-cost option to spin up something compelling quickly.
 
+**Amendment (2026-07-25):** `NorsePrincipal` — the type this spec's `TenantId` decision is written against throughout (§0, §1, §3, §7) — no longer exists. Asgard's shipped `Abstractions.Contracts` carries `Outcome<T>`/`Problem`/`ErrorCategory`/`GenerateGatewayAttribute` instead of the `NorsePrincipal`/`Population`/`IAccountApi` design this spec assumed. The **decision itself stands** — stamp-per-tenant, no runtime tenancy, no `TenantId` anywhere in the schema, per Glitnir's own CLAUDE.md — only the vehicle named throughout (`NorsePrincipal`) is historical.
+
 **Related specs:**
 
 - `2026-05-21-midgard-persistence-design.md` — reserved the `IConnectionResolver` slot and deferred the entity-side tenancy contract (its §12). Amended by §7 of this spec.

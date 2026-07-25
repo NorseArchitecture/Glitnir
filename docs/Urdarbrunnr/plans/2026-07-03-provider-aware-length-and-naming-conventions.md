@@ -6,6 +6,14 @@ merged and released as v0.0.4. Full per-task ledger: `Urdarbrunnr/.superpowers/s
 (git-ignored scratch, local to whichever checkout ran the plan — not a durable record; this status
 line is the durable one).
 
+**Amendment (2026-07-25):** every `Norse.EntityFramework.*` project/namespace/path in this plan
+(`EntityFramework.SqlServer`, `EntityFramework.Migrations.PostgreSQL.Generator`, etc.) predates the
+widening rename to `Norse.Persistence.EntityFramework.*` (PR #31, merged 2026-07-22, shipped v0.0.4) —
+the shipped SQL Server trio lives under the new namespace and `src/Persistence.EntityFramework*` paths
+today. Separately, the `MigrationContributorGenerator` built in Tasks 4–5 as pure `EfMigrationContributor<TContext>`
+discovery now also discovers Asgard's `ISeedContributor` and wires `AddNorseSeedingRunner()` into the
+same generated `AddNorseMigrations()` call — see `../../Platform/specs/2026-07-03-seeding-framework-design.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make `[FixedLength(n)]` and table/column naming provider-aware in `Norse.EntityFramework`, ship full SQL Server package parity alongside the existing PostgreSQL packages, and fix the pre-existing bug where snake_case naming was applied to every provider unconditionally.

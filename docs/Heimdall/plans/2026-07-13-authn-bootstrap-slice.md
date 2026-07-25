@@ -83,6 +83,8 @@
 | Modify | `Himinbjorg/Himinbjorg.slnx` |
 | Modify | `Himinbjorg/src/Identity/Identity.csproj` (stale `Norse.Auth.Server` comment → `Norse.Identity.Web.Server`) |
 
+**Amendment (2026-07-25):** `Himinbjorg/src/Identity/Identity.csproj` no longer exists — deleted 2026-07-23, folded into `src/Identity.Web.Server`. Current shape is four live projects: `Identity.Web.Server`, `Identity.Migrations`, `Identity.Migrations.PostgreSQL`, `Identity.Migrations.SqlServer`.
+
 ### Yggdrasil
 | Action | Path |
 |---|---|
@@ -671,6 +673,8 @@ public sealed record AuthenticationResult
 }
 ```
 
+**Amendment (2026-07-25):** `AuthenticationResult` was retired 2026-07-25 by Heimdall's `feature/transport-neutral-gateway` slice (merged, tag v0.0.3). `IAuthenticationService` now carries Asgard's `[GenerateGateway]` attribute and Asgard's `GatewayGenerator` emits the generated `IAuthenticationGateway` directly off it; Login/Register/Logout components consume `ValueTask<Outcome<T>>` straight from the generated gateway. No hand-written result-wrapper type exists anywhere on this path anymore.
+
 - [ ] **Step 6: Implement the validators**
 
 `Heimdall/src/AuthN.Components/LoginRequestValidator.cs`:
@@ -1160,6 +1164,8 @@ Rewritten in full 2026-07-14 to match spec addendum `Glitnir/docs/Heimdall/specs
 ```xml
 <Description>Norse.Identity: ASP.NET Core Identity v3 entity types, NorseIdentityDbContext (Identity + OpenIddict), NorseUserStore with projection overrides, and DI extension. Runtime library — referenced by Norse.Identity.Web.Server; never by migration tooling.</Description>
 ```
+
+**Amendment (2026-07-25):** the base `Identity` project this step edits was deleted 2026-07-23 and folded into `Identity.Web.Server` — this comment-fix step, and the `ProjectReference` to it in Step 2 below, describe a project shape that no longer exists. See `Identity.Web.Server`'s current `.csproj` for the live description.
 
 - [ ] **Step 2: Create the project file**
 
@@ -1696,6 +1702,8 @@ public interface IAuthenticationGateway
 	Task<AuthenticationResult> Logout(LogoutRequest request);
 }
 ```
+
+**Amendment (2026-07-25):** this hand-written `IAuthenticationGateway` was retired 2026-07-25 (Heimdall `feature/transport-neutral-gateway`, merged, tag v0.0.3). `IAuthenticationService` (in `AuthN.Services`) now carries Asgard's `[GenerateGateway]` attribute, and `AuthN.Services` (`NorseGatewayEmissionMode=Contract`) is where Asgard's `GatewayGenerator` emits the equivalent interface at compile time instead — no hand-authored file, no `BlazorServerAuthenticationGateway`/`WasmAuthenticationGateway` split as such. See `../specs/2026-07-13-authn-identity-split-design.md` §9.8 for where this shape originated.
 
 Build/test `Heimdall/tests/AuthN.Components.Tests` to confirm this compiles cleanly alongside the existing Task 2 work (no test needed for a plain interface declaration).
 

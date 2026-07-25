@@ -119,6 +119,8 @@ Himinbjörg's shipped schema (`NorseUser`, `NorseRole`, …) is plain ASP.NET Id
 
 Himinbjörg's existing `Identity` / `Identity.Migrations` projects are unchanged.
 
+**Amendment (2026-07-25):** the `Identity` project referenced throughout this section was deleted 2026-07-23, folded into `Identity.Web.Server`. Current shape is four live projects: `Identity.Web.Server`, `Identity.Migrations`, `Identity.Migrations.PostgreSQL`, `Identity.Migrations.SqlServer` — the old single-assembly `Norse.Identity` framing is gone.
+
 ---
 
 ## 6. Explicitly Out of Scope (Deferred)
@@ -357,6 +359,8 @@ public static class RpcExceptionExtensions
 
 **`AuthenticationResult { bool Succeeded; IReadOnlyDictionary<string,string[]> Errors }`** — new type, `AuthN.Components` (Heimdall), plain record, WASM-safe, no protobuf-net.Grpc dependency. This is what any Razor component actually reads — never `IAuthenticationService` directly, never a caught exception. Convention for `Errors`: field name → messages for field-level errors (unchanged, matches existing FluentValidation `ToDictionary()` output); **empty string (`""`) key → general/model-level messages** (`LockedOut`, `NotAllowed`, `Conflict` — failures not tied to a specific field), matching FluentValidation/Blazor's own convention for a validation message with no associated property, so these flow into the exact same `ValidationSummary`/`ValidationMessageStore` rendering as field errors — no special-casing needed in the UI for "this one isn't about a specific input."
 
+**Amendment (2026-07-25):** `AuthenticationResult` was retired 2026-07-25 by Heimdall's `feature/transport-neutral-gateway` slice (merged, tag v0.0.3) — see §9.8's amendment below for the replacement shape (`IAuthenticationService` + Asgard's `[GenerateGateway]`, returning `Outcome<T>` directly, no wrapper type).
+
 - **`Hosting.Web.Client`** (Task 5) wraps the real gRPC-Web client proxy, using Midgard's `Infrastructure.Web.Client` interceptor to decode `RpcException`, producing `AuthenticationResult`.
 - **`Hosting.Web.Server`** (Task 4), for Blazor Server's own Razor components specifically (never for the real gRPC-hosted endpoint, which stays as described in §9.5) — calls the handler directly, no wire, no gRPC concept involved, gets `Outcome<BoolResponse>` back, maps it directly to `AuthenticationResult`. This transform lives in Midgard's `Infrastructure.Web.Server/Mediator/Grpc/`, alongside the server interceptor — same non-WASM constraint, same realm.
 - Net effect: whichever host a Razor component renders on, the thing it injects returns `AuthenticationResult` — the component reads `.Succeeded` and populates its `ValidationMessageStore` from `.Errors`. No `try`/`catch` in `Login.razor`/`Register.razor` at all. Exact wiring (what the injected type is called, how it reaches the component — return value vs. some other mechanism) is explicitly left open, Buvy's call: *"the machinery to get there doesn't matter to me as long as everyone else is dumb along the way."* Task 2 (client-facing gateway shape) / Task 7 (component wiring) decide concretely.
@@ -397,6 +401,8 @@ public interface IAuthenticationGateway
 	Task<AuthenticationResult> Logout(LogoutRequest request);
 }
 ```
+
+**Amendment (2026-07-25):** this hand-written `IAuthenticationGateway`/`AuthenticationResult` pair — and the per-host `BlazorServerAuthenticationGateway`/`WasmAuthenticationGateway` implementations below — were retired 2026-07-25 by Heimdall's `feature/transport-neutral-gateway` slice (merged, tag v0.0.3). `IAuthenticationService` (in `AuthN.Services`) now carries Asgard's `[GenerateGateway]` attribute; `AuthN.Services` (`NorseGatewayEmissionMode=Contract`) is where Asgard's `GatewayGenerator` emits the equivalent `IAuthenticationGateway` at compile time instead. Login/Register/Logout components inject the generated interface and consume `ValueTask<Outcome<T>>` directly — there is no hand-written gateway type or `AuthenticationResult` wrapper anywhere on this path anymore.
 
 **Yggdrasil `Hosting.Web.Server`'s implementation** — calls the handlers directly (registered by Task 4's `AddNorseAuthenticationService`), no wire, no gRPC, maps `Outcome<T>` to `AuthenticationResult` inline (two branches, not a shared helper — this is realm-specific glue, not generic infrastructure):
 

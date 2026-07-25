@@ -4,6 +4,12 @@
 **Status:** Shipped. Hardened 2026-07-23 — see the addendum at the end of this document; the `NorseSnakeCaseNamingConvention` pseudocode in §2 below now undersells the real implementation on two points that were bugs, not design gaps.
 **Owner:** Buvy
 
+**Amendment (2026-07-25):** every `Norse.EntityFramework` reference below (title and code samples
+included) predates the widening rename to `Norse.Persistence.EntityFramework` (PR #31, merged
+2026-07-22, shipped v0.0.4) — confirmed by the 2026-07-23 addendum's own file path,
+`src/Persistence.EntityFramework/NorseSnakeCaseNamingConvention.cs`. The design and the shipped code
+match; only the namespace in this doc's prose and snippets is stale.
+
 ## Finding
 
 Urðarbrunnr is moving the whole EF stack onto the 11.x train, and `EFCore.NamingConventions` does not

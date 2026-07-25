@@ -1,6 +1,8 @@
 # Auth Result Shape & gRPC-able Surface — Decision Inputs (NOT a spec)
 
 **Status:** DISCHARGED 2026-06-07 by `2026-06-07-auth-design.md`. Decision inputs were captured here; the design session convened the same day and ratified the thrust (issuance = OAuth/cookie; lifecycle = `IAccountApi` → `Outcome<T>`; `AuthResponse`/`AuthResult` retired; no `SignInAsync` in handlers) plus the open forks (registration server-rendered inside the OAuth flow — no `Register`/`EmailRegistered`/`GetExternalLogins` API; `GetClaims` dropped; Auth ships the standard six-project shape *including* `.Backend`, persistence inverted). Retained as history of the framing. — This was **not** a design spec and decided nothing on its own.
+>
+> **Amendment (2026-07-25):** the `IAccountApi` thrust this doc fed into was itself not the direction ultimately taken. Heimdall shipped `IAuthenticationService` (`[GenerateGateway]`, `Login`/`Register`/`Logout` returning `Outcome<T>`) instead — narrower, and outside `Norse.Auth.Contracts` (that assembly doesn't exist). See `../../../../Heimdall/CLAUDE.md`.
 
 **Read alongside:** `2026-05-20-auth-federation-design.md` (the authoritative auth spec — **read it first; this doc has not reconciled against its current text**), reconciliation tracker `spec-reconciliation-2026-06-04.md` §1.6 (the `Outcome<T>` / three-result-families ruling), §5.7 + §5.8 (webhook auth-handler ruling + auth-spec absorption), and `2026-05-26-mediator-design.md` §3.3/§7 (`Outcome<T>`, service-entry authorization).
 

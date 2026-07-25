@@ -4,6 +4,11 @@
 **Status:** Ruled — design session complete same-day (see §Repository-surface law, §Pressure-tests ruled); formal verdict gated on one PoC (design-time twin, §Remaining before verdict)
 **Owner:** Buvy
 
+**Amendment (2026-07-25):** `Norse.EntityFramework` throughout this document (title included) is the
+pre-rename name. Urðarbrunnr's `Norse.EntityFramework.*` widened to `Norse.Persistence.EntityFramework.*`
+(PR #31, merged 2026-07-22, shipped v0.0.4) — the ruling recorded here still stands, just under the new
+namespace.
+
 ## Ruled now (2026-06-11)
 
 **The abstract DbContext — the one that does the stamping and enforces the laws — belongs to `Norse.EntityFramework` (Urdarbrunnr).** Audit stamping, convention enforcement at model finalize, and the invariants every context inherits are realm law there, not Infrastructure code. CLAUDE.md §4 → Persistence carries the pointer.

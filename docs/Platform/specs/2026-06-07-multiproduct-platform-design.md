@@ -88,6 +88,8 @@ There is **no shared cross-product business-context layer.** Duplication of a *c
 
 **Auth is shared code, not shared identity data.** This is the stamp-per-tenant decision asked across products: single identity *mechanism* (the Auth realm — OpenIddict server, Identity stores, `IAccountApi`, the gate), isolated identity *data* per stamp, where a stamp = (product × tenant). Each stamp runs its own OpenIddict/IdP (per the auth spec). A human is a **separate principal in the insurance product and in the energy product**; nothing crosses the covers. This is consistent with the auth spec's per-stamp model and required by §7 (separate entities, separate customer data, separate compliance).
 
+> **Amendment (2026-07-25):** `IAccountApi` was never built; the shared identity-mechanism claim stands, but the gate's actual surface is Heimdall's `IAuthenticationService` (`[GenerateGateway]`). See `../../../../Heimdall/CLAUDE.md`.
+
 **Re-entry trigger:** portfolio SSO ("one Norse account across all entities") as a *business* requirement re-opens this — via stamp federation or a shared identity plane — and would re-introduce a product discriminator on the principal. Not built until that requirement is real.
 
 **Open follow-on (Auth):** internal staff may live in one corporate Google Workspace that naturally spans entities, even while customer identity is strictly per-product. Resolved in an Auth follow-on, not here.

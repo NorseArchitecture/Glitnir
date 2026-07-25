@@ -9,6 +9,8 @@
 **Discharges:** `2026-06-07-auth-result-shape-decision-inputs.md` (the §1.6 follow-on); reconciliation tracker items 2.11, 2.17, 5.8; the §1.6 "auth uses `Result<T>`?" flag.
 **Companion specs:** `2026-05-26-mediator-design.md` (`Outcome<T>`, service-entry authorization, `I{Context}Api` dispatch); `2026-06-03-messaging-foundation-design.md` (endpoint flavors, hard walls); `2026-05-21-midgard-persistence-design.md` (CQRS tiers, `IDocumentRepository<T>`); `2026-06-03-tenancy-model-design.md` (stamp-per-tenant); `2026-05-20-yggdrasil-hosting-design.md` (plugin model, webhook auth handlers); future `EncryptedString` spec (credential/secret storage); future Notifications spec (outbound confirm/reset email).
 
+> **Amendment (2026-07-25):** this "Approved design, pre-implementation" was never carried out as written. The realm that actually shipped is Heimdall (`Norse.AuthN.*`) on Himinbjörg (`Norse.Identity.*`): `IAuthenticationService` (`[GenerateGateway]`, currently `Login`/`Register`/`Logout`) returns `Outcome<T>` directly — no `NorsePrincipal`, `Population`, or `IAccountApi` exists anywhere in current source. See `../../../../Heimdall/CLAUDE.md`.
+
 ---
 
 ## 1. Why This Spec Supersedes the Federation Spec
@@ -193,6 +195,8 @@ Norse.Abstractions.Identity.NorsePrincipal
   Source      : discriminated source marker (cookie | token)
 ```
 
+> **Amendment (2026-07-25):** this direction was not taken — `NorsePrincipal`/`Population` were never built (zero hits repo-wide outside stale docs). Heimdall's shipped shape has no principal-envelope type; `IAuthenticationService` handlers return `Outcome<T>` directly. See `../../../../Heimdall/CLAUDE.md`.
+
 No `TenantId` — stamp-per-tenant means each stamp is its own IdP and principals never cross stamps. Enum values are explicit integers per CLAUDE.md §5; `0` is reserved sentinel. A handler reads `principal.Population`, never `principal.HasClaim("population", "Customer")`.
 
 ### 5.3 Population taxonomy
@@ -221,6 +225,8 @@ The customer's id stays bound to their customer row; the post-logout anonymous p
 ## 6. `IAccountApi` — The Lifecycle Surface in Detail
 
 `IAccountApi` lives in `Norse.Auth.Contracts`, is annotated `[MediatorService]`, and is dispatched by the source-generated `AuthService` forwarder (the generated mediator forwarder — not the OG/Assurely hand-written `AuthService` this spec retires) inside `Norse.Auth.Server` (mediator §8). Handlers run against the Mongo Identity stores (`UserManager`/`SignInManager` over the custom `IUserStore`/`IRoleStore` — §10). No EF, no DbContext, no `HttpContext`.
+
+> **Amendment (2026-07-25):** this direction was not taken. `IAccountApi` never shipped. What shipped instead, narrower in scope, is Heimdall's `IAuthenticationService` (`Norse.AuthN.Services`, `[GenerateGateway]`) — `Login`/`Register`/`Logout` only; no `ConfirmEmail`/`ForgotPassword`/`ResetPassword`/`ManageProfile` members. See `../../../../Heimdall/CLAUDE.md`.
 
 ### 6.1 The members
 

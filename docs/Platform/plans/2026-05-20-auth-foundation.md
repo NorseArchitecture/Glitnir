@@ -13,6 +13,8 @@
 > **Amended 2026-06-03:** CLAUDE.md §7 #4 (tenancy) resolved as stamp-per-tenant (`docs/Platform/specs/2026-06-03-tenancy-model-design.md`). `NorsePrincipal` carries **no** `TenantId` and `ClaimNames` has **no** `nrs:tenant` — the code listings below have been updated; do not re-introduce them.
 >
 > **Also amended 2026-06-03 (identity storage):** Mongo is the identity system of record (OpenIddict first-party Mongo stores; custom ASP.NET Identity stores) — see auth spec §3. `Norse.Auth.Server` carries **no** EF reference; Task 20 is void; the Postgres `auth` schema is a reporting projection owned by `Norse.Auth.Worker` (Plan B).
+>
+> **Amendment (2026-07-25):** this direction was not taken. The `norse-auth` submodule and its `NorsePrincipal`/`Population`/`IAccountApi` shape never shipped — the auth realm was rebuilt as Heimdall (`Norse.AuthN.*`) on Himinbjörg (`Norse.Identity.*`), with `IAuthenticationService` (`[GenerateGateway]`, `Login`/`Register`/`Logout`) returning `Outcome<T>` directly. See `../../../../Heimdall/CLAUDE.md`.
 
 ---
 
@@ -2655,6 +2657,8 @@ Proposed commit message: `docs(auth): cross-reference Plan A from the auth-feder
 ---
 
 ## Plan A — Summary
+
+> **Amendment (2026-07-25):** this plan halted at the plan stage (see the header note) and was never executed against `norse-auth` — the summary below describes an intended outcome, not a shipped one. The auth realm that actually shipped is Heimdall/Himinbjörg, with `IAuthenticationService`/`Outcome<T>`/`[GenerateGateway]` in place of `NorsePrincipal`/`Population`/`IAccountApi`. See `../../../../Heimdall/CLAUDE.md`.
 
 After executing Tasks 1–29:
 

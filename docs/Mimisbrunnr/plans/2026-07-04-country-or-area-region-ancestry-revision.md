@@ -1,5 +1,7 @@
 # CountryOrArea RegionAncestry Revision Implementation Plan
 
+**Amendment (2026-07-25):** Every renamed identifier below is written in its 2026-07-04/05 working-title form throughout this plan (including the file's own title, which still reads "RegionAncestry"). Shipped source has since renamed: `RegionAncestry` (the column/property on `CountryOrArea`) → `View` (see `../specs/2026-07-04-unsd-m49-reference-data-design.md` §5, Revision 2); namespace `Norse.ReferenceData.Data` → `Norse.Reference.Data`; `ReferenceDataDbContext` → `ReferenceDbContext`; `NorseReferenceDataMigrationContributor` → `NorseReferenceMigrationContributor`. None of these renames are reflected below — read every occurrence accordingly.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the hand-written `country_or_area_dossier` Postgres view with an EF Core native owned-JSON column (`CountryOrArea.RegionAncestry`), hydrated in C# by the seed contributor at seed time instead of derived by the database at read time.

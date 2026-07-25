@@ -54,13 +54,13 @@ One repository per platform realm, named for the myth; every project inside name
 | **Asgard** | `Norse.Abstractions.*` | Declared law — contracts, attribute model, plugin interfaces, mediator law |
 | **Midgard** | `Norse.Infrastructure.*` | Embodied law — persistence, API, the source-generated mediator runtime, UI composition |
 | **Svartálfheim** | `Norse.Primitives.*` | The forge — primitives (`Result<T>`, `Money`) and the analyzers that strike when law is broken |
-| **Urðarbrunnr** | `Norse.EntityFramework.*` | The Well of Urð — entity base types, DbContext foundations, conventions, value converters, and the migrations chassis: the record of all that has become |
-| **Ratatoskr** | `Norse.NServiceBus.*` | The squirrel — NServiceBus endpoint configuration, saga infrastructure, message conventions, and transport wiring; Asgard declares the messaging surface, Ratatoskr carries it |
+| **Urðarbrunnr** | `Norse.Persistence.*` | The Well of Urð — the persistence realm; `Norse.Persistence.EntityFramework.*` (entity base types, DbContext foundations, conventions, value converters, and the migrations chassis) is the live vendor family: the record of all that has become |
+| **Ratatoskr** | `Norse.Messaging.*` | The squirrel — the messaging realm; `Norse.Messaging.NServiceBus.*` (endpoint configuration, saga infrastructure, message conventions, transport wiring) is the live vendor family; Asgard declares the messaging surface, Ratatoskr carries it |
 | **Yggdrasil** | `Norse.Hosting.*` | The world tree — hosting runtimes and deployables the cosmos hangs on |
 | **Himinbjörg** | `Norse.Identity.*` | Heimdall's hall — EF persistence for ASP.NET Identity and OpenIddict: entities, conventions, and migrations; sealed server-side, never referenced from WASM or MAUI |
 | **Heimdall** | `Norse.AuthN.*` | The watchman — the authn story on Himinbjörg's identity record: login, register, forgot-password, 2FA setup, recovery, and reset, uniform across Blazor Server, WASM, and MAUI, with the backing gRPC service |
-| **Mímisbrunnr** | `Norse.ReferenceData.Data` | The well of what's known — entities, view models, TSV seeders (nietras Sep), and migrations for canonical reference data: ISO country/currency codes, IANA time zones |
-| **Mímir** | `Norse.ReferenceData.Components` / `.Web.Server` / `.Worker` | The severed head Odin still consults — the serving layer on Mímisbrunnr: Blazor components, gRPC service host, and the background worker that keeps reference data current |
+| **Mímisbrunnr** | `Norse.Reference.Data` | The well of what's known — entities, view models, TSV seeders (nietras Sep), and migrations for canonical reference data: ISO country/currency codes, IANA time zones |
+| **Mímir** | `Norse.Reference.Components` / `.Web.Server` / `.Worker` | The severed head Odin still consults — the serving layer on Mímisbrunnr: Blazor components, gRPC service host, and the background worker that keeps reference data current |
 | **Naglfar** | `Norse.DesignSystem.*` | The ship of the dead — design tokens, radii, and component primitives assembled into something seaworthy enough to carry every product UI |
 | **Bragi** | `Norse.DesignSystem.Stories` | The skald — content-only Razor Class Library of `.stories.razor` catalog pages for the platform's Blazor components; split from Naglfar 2026-07-12 |
 | **Glitnir** | *(docs only)* | This repo — the design court and court of record |

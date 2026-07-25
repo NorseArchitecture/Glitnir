@@ -33,6 +33,8 @@ Platform-wide; not bounded contexts. Namespace (code); codename (lore) maps in `
 | *(unplaced)* | Fraud detection / legal enforcement: signals, case management, SIU referral, recovery — **platform-vs-product placement unsettled** | *(unnamed — placement isn't settled and the component isn't real; a codename attached to either half of that uncertainty is the same rule-#4 violation, just dressed as "provisional." `Tyr` and `Valkyrie` returned to the bench 2026-07-03, see `codenames.md`.)* |
 | *(unplaced)* | Claims triage: routing by severity, complexity, fraud signals — **placement unsettled** | *(same as above)* |
 
+**Amendment (2026-07-25):** `Norse.ReferenceData` (Mímisbrunnr/Mímir row above) renamed to `Norse.Reference` — now `Norse.Reference.Data` (Mímisbrunnr) and `Norse.Reference.Components`/`.Web.Server`/`.Worker` (Mímir). See `docs/codenames.md`.
+
 ## Repository Map
 
 **Amended 2026-06-11:** the `norse-{function}` one-repo-per-concern model is superseded. **One repository per platform realm, named for the lore; the projects and namespaces inside are named for function** (`Norse.{Function}.*`). Open the org and you tour the cosmos; open the `.slnx` and every project says what it does. Live at `github.com/NorseArchitecture`:
@@ -52,6 +54,8 @@ Platform-wide; not bounded contexts. Namespace (code); codename (lore) maps in `
 | **Naglfar** | `Norse.DesignSystem.*` | The token pipeline (design tokens, radii, spacing, typography) — npm-first, with one 100%-generated .NET package (`DesignSystem.Tokens`, consumed by Midgard's `Infrastructure.Components.Theme.FluentUI`). `DesignSystem.Stories` split out to Bragi 2026-07-12. |
 | **Bragi** | `Norse.DesignSystem.Stories` | Content-only Razor Class Library of `.stories.razor` catalog pages, split from Naglfar 2026-07-12. Rides `NorseRef` on every realm that publishes Blazor components — Asgard's `Abstractions.Components` today, `AuthN.Components.FluentUI` (Heimdall) and `ReferenceData.Components.FluentUI` (Mímir) as each ships. Hosted at runtime by Yggdrasil's `Hosting.Stories.Client`/`.Server`. |
 | **Bifröst** | `Norse.Orchestration.*` | Local developer meta-repository: the .NET Aspire AppHost composing services, databases, queues, and configuration; carries the realm repos as submodules (relative URLs, tracking `master`). A reference composition — consumers are expected to build their own bridge from the constituent realms. |
+
+**Amendment (2026-07-25):** three rows above are stale. Urðarbrunnr widened from `Norse.EntityFramework.*` to `Norse.Persistence.*` (live vendor family `Norse.Persistence.EntityFramework.*`) — merged PR #31, shipped tag v0.0.4. Ratatoskr renamed in documentation from `Norse.NServiceBus.*` to `Norse.Messaging.*` (live vendor family `Norse.Messaging.NServiceBus.*`) — documentation-only, made this session (2026-07-25); Ratatoskr remains an unimplemented bare shell, no code has migrated. Mímisbrunnr/Mímir renamed from `Norse.ReferenceData.*` to `Norse.Reference.*`. See `docs/codenames.md`.
 
 Consequences and rulings of the amendment:
 

@@ -41,6 +41,8 @@ Applying this discipline surfaced a live example: OpenIddict's own EF Core entit
 
 The attributes, the enforcing conventions, and the two-tier entity-configuration machinery are all generic, provider-agnostic platform machinery — any bounded context that rides on `Norse.EntityFramework` gets the same guarantee without writing it twice. Himinbjörg is the first consumer, not a special case.
 
+**Amendment (2026-07-25):** every `Norse.EntityFramework`/`Norse.EntityFramework.Generator` reference in this spec (the placement table above included) names the namespace as it stood when this spec was written. Urðarbrunnr's own follow-on widening — `Norse.EntityFramework.*` → `Norse.Persistence.EntityFramework.*` — merged separately (PR #31, tag v0.0.4) and is what the platform builds against today.
+
 ---
 
 ## 2. The Attribute Trio (Urdarbrunnr)

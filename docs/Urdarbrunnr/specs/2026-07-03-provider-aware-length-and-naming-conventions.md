@@ -7,6 +7,14 @@ GitHub Packages feed alongside the rest of the trio). Plan:
 `../plans/2026-07-03-provider-aware-length-and-naming-conventions.md`.
 **Owner:** Buvy
 
+**Amendment (2026-07-25):** every `Norse.EntityFramework.*` name below (the title included) predates
+the widening rename to `Norse.Persistence.EntityFramework.*` (Urðarbrunnr PR #31, merged 2026-07-22,
+shipped v0.0.4) — the SQL Server trio this spec shipped lives under the new namespace today. Separately,
+the `MigrationContributorGenerator`/`AddNorseMigrations()` mechanism described here as discovering only
+`EfMigrationContributor<TContext>` implementations now also discovers Asgard's `ISeedContributor` and
+wires `AddNorseSeedingRunner()` into the same generated call — see
+`../../Platform/specs/2026-07-03-seeding-framework-design.md`.
+
 ## Finding
 
 PostgreSQL's own documentation states `character(n)` has no storage or performance advantage over

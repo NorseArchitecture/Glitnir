@@ -4,6 +4,8 @@
 **Status:** Approved design, ready for planning
 **Owner:** Buvy
 
+**Amendment (2026-07-25):** Every occurrence below of `ReferenceDataDbContext` and `NorseReferenceDataMigrationContributor` (including in the Current State/Target Layout tables and code blocks) is the pre-rename class name. Shipped source has since renamed these to `ReferenceDbContext` and `NorseReferenceMigrationContributor` respectively — see `docs/Mimisbrunnr/plans/2026-07-22-reference-data-migrations-project-split-implementation.md`.
+
 ---
 
 ## 0. Why This Comes Next

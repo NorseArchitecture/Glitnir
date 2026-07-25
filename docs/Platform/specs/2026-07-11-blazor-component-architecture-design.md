@@ -44,7 +44,7 @@ This requires Naglfar's first `Naglfar.slnx` and `Directory.Build.props` — boo
 Heimdall's charter is the authn story specifically — login, register, forgot-password, 2FA setup, recovery, reset — not authorization ("can this principal do X"), which "Access" reads as. Two candidate root words were rejected first:
 
 - **"Access"** (the currently-documented name in `Glitnir/docs/codenames.md` and `decomposition.md`) — rejected for reading authz-first when the actual scope is authn.
-- **"Principal"** — rejected because `NorsePrincipal` is already a real, existing operational type (the Yggdrasil→Norse brand-flush rename recorded in `codenames.md`); reusing it as a namespace root would be a fresh collision, not a fix to one.
+- **"Principal"** — rejected because `NorsePrincipal` is already a real, existing operational type (the Yggdrasil→Norse brand-flush rename recorded in `codenames.md`); reusing it as a namespace root would be a fresh collision, not a fix to one. **Amendment (2026-07-25):** `NorsePrincipal` itself is superseded — Asgard's shipped `Abstractions.Contracts` carries `Outcome<T>`/`Problem`/`ErrorCategory`/`GenerateGatewayAttribute` instead. The naming rationale (avoid a fresh collision) held at the time; the collision risk itself no longer applies, but the `AuthN` decision below stands on its own merits regardless.
 
 **`AuthN` is the new root word.** `Norse.AuthN.*`, projects `AuthN.Components` and `AuthN.Components.FluentUI`. Because Heimdall is currently a bare shell (LICENSE only, no code), this rename costs nothing at the code level — but see §4 for the documentation updates it requires.
 

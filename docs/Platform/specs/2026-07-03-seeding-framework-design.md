@@ -160,7 +160,7 @@ sealed partial class SeedRunnerService(
 | Realm | Namespace / Project | What lands |
 |---|---|---|
 | Asgard | `Norse.Abstractions.Migrations` (existing) | `ISeedContributor`, `DeterministicGuid` — new `Norse.Abstractions.Migrations.Seeding` namespace within the existing project |
-| Urdarbrunnr | `Norse.EntityFramework.Migrations.PostgreSQL.Generator` (existing) | Discovery of `ISeedContributor`; emits `ConfigureServices` calls, seed-contributor DI registration, and `AddNorseSeedingRunner()` call into the existing generated `AddNorseMigrations()` |
+| Urdarbrunnr | `Norse.EntityFramework.Migrations.PostgreSQL.Generator` (existing) — **Amendment (2026-07-25):** namespace as it stood 2026-07-03; widened since to `Norse.Persistence.EntityFramework.*` (PR #31, tag v0.0.4) | Discovery of `ISeedContributor`; emits `ConfigureServices` calls, seed-contributor DI registration, and `AddNorseSeedingRunner()` call into the existing generated `AddNorseMigrations()` |
 | Midgard | `Norse.Infrastructure.Migrations` (existing) | `SeedRunnerService`; `AddNorseSeedingRunner()` extension; `MigrationRunnerService.StartAsync` no longer calls `StopApplication()` |
 | Yggdrasil | `Norse.Hosting.Migrations.Service` | No change — `Program.cs` stays three lines |
 

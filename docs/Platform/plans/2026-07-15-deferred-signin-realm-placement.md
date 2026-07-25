@@ -676,6 +676,8 @@ Modify `Himinbjorg/src/Identity/Identity.csproj`:
 </Project>
 ```
 
+**Amendment (2026-07-25):** `<NorseRef Include="EntityFramework">` is the pre-rename project name, historically accurate as of 2026-07-15. Urdarbrunnr's project folder itself (not just the namespace) was renamed to `Persistence.EntityFramework` on the `feature/persistence-namespace-widening` branch, merged to `master` and published (PR #31, tag v0.0.4, 2026-07-22) — confirmed live at `Urdarbrunnr/src/Persistence.EntityFramework/`. See `../../Urdarbrunnr/specs/2026-07-22-design-time-ddl-emission-and-chassis-rename-design.md`.
+
 - [ ] **Step 10: Fix the return-type test in `Identity.Tests`**
 
 Modify `Himinbjorg/tests/Identity.Tests/IdentityBuilderExtensionsTests.cs` — replace the `_returns_same_services_for_chaining` fact:
@@ -792,6 +794,8 @@ Expected: FAIL — the last matching descriptor's `ImplementationType` is `SignI
 - [ ] **Step 15: Wire `NorseSignInManager` into `AddNorseAuthenticationService`**
 
 Modify `Himinbjorg/src/Identity.Web.Server/ServiceCollectionExtensions.cs`:
+
+<!-- Amendment (2026-07-25): the `using Norse.EntityFramework;` line below is the pre-rename namespace, historically accurate as of 2026-07-15. It is now `Norse.Persistence.EntityFramework` (Urdarbrunnr's `feature/persistence-namespace-widening` branch, merged to `master` and published, PR #31, tag v0.0.4, 2026-07-22). See `../../Urdarbrunnr/specs/2026-07-22-design-time-ddl-emission-and-chassis-rename-design.md`. -->
 
 ```csharp
 using Microsoft.AspNetCore.Identity;

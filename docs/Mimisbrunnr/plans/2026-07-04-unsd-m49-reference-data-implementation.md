@@ -1,5 +1,7 @@
 # UN M49 Reference Data — Implementation Plan
 
+**Amendment (2026-07-25):** Every occurrence below of namespace `Norse.ReferenceData.Data` (and its `.Migrations`/`.Tests` variants), the class `ReferenceDataDbContext`, and the class `NorseReferenceDataMigrationContributor` is written in its 2026-07-04 working-title form. Shipped source has since renamed the realm's namespace to `Norse.Reference.Data`, the DbContext to `ReferenceDbContext`, and the migration contributor to `NorseReferenceMigrationContributor`. None of these renames are reflected below.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Mímisbrunnr seeds the UN M49 TSVs into real Postgres tables (`Region`, `CountryOrArea`) through the shipped `ISeedContributor` chassis, and exposes a JSONB "dossier" query view — giving the platform its first end-to-end proof of both the relational surface and the query-viewmodel surface for reference data, wired all the way through Yggdrasil's migrations service and Bifröst's AppHost.

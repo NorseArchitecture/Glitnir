@@ -218,6 +218,8 @@ No upstream dependencies — the project carries no `ProjectReference` items.
 </Project>
 ```
 
+> **Amendment (2026-07-25):** this description was never shipped as written. `Abstractions.Contracts` carries `Outcome<T>`/`Problem`/`ErrorCategory`/`BoolResponse`/`Unit` and `GenerateGatewayAttribute` instead — no `NorsePrincipal`, `Population`, or `IAccountApi` in current source. See `docs/Asgard/specs/2026-06-25-asgard-project-structure-design.md`.
+
 - [ ] **Step 7: Write `Asgard/src/Abstractions.Components/Abstractions.Components.csproj`**
 
 No upstream dependencies; must never pull in ASP.NET Core or any server-side infrastructure — MAUI and WASM bundles reference this directly.
@@ -451,6 +453,8 @@ Replace with:
 > | Assembly | Upstream Dependencies | Purpose |
 > |---|---|---|
 > | `Norse.Abstractions.Contracts` | none | `NorsePrincipal`, `Population`, published event interfaces, `IAccountApi` |
+>
+> **Amendment (2026-07-25):** superseded — the shipped contents are `Outcome<T>`/`Problem`/`ErrorCategory`/`BoolResponse`/`Unit` and `GenerateGatewayAttribute`, not `NorsePrincipal`/`Population`/`IAccountApi`. See `docs/Asgard/specs/2026-06-25-asgard-project-structure-design.md`.
 > | `Norse.Abstractions.Components` | none | Razor component base abstractions (MAUI/WASM-safe — no server-side infrastructure) |
 > | `Norse.Abstractions.Backend` | `Norse.Primitives`, `Norse.Abstractions.Contracts` | Shared server-side contracts (egress contracts under `.Egress` namespace) |
 > | `Norse.Abstractions.Worker` | `Norse.Abstractions.Backend` (transitive) | `IWorkerHostPlugin`, `ICommandRepository<T>`, `ICachedRepository<T>`, NServiceBus seams |
