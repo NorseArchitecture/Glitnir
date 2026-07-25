@@ -29,6 +29,28 @@
 
 ---
 
+## v5 Amendment (2026-07-24, mid-execution — supersedes conflicting task text below)
+
+**Full rationale and the amended law itself: spec §9.** Summary for implementers working task-by-task: decided law item 3's first clause ("service interfaces keep returning plain `TResponse`") is **reversed** — Asgard-contracted service interfaces (including Heimdall's `IAuthenticationService`) now return `Task<Outcome<TPayload>>` directly. The second clause ("nothing in-process throws to communicate") is **unchanged** — the throw point moves to the gRPC server interceptor, a transport-boundary adapter, not in-process code. `OutcomeServerInterceptor` (Task 5's retirement target) is **reinstated**, redesigned to pattern-match the `Outcome<T>` return value (`response is IUnion { Value: Failed failed }` → throw `failed.Problem.ToRpcException()`) instead of catching a thrown exception — the mechanism changes, the interceptor's role as wire-boundary throw point does not.
+
+**Trigger:** Himinbjörg's `AuthenticationService` (Task 12) has no data channel to signal failure to a caller under the original law without either naming Midgard/`Grpc.*` types directly (Himinbjörg and Midgard are peer realms — neither may depend on the other, full stop) or relocating the class to Yggdrasil (rejected as unnecessary churn once the interceptor can carry the throw instead).
+
+**Task-by-task effect (this section governs; do not follow superseded text in a task's own body without cross-checking here first):**
+
+- **Task 1 (Asgard, already shipped `3f70b37`/`3f8a1bc`):** no `Outcome<T>` shape change. Retire the platform-wide `Outcome`/`Outcome<Unit>` alias (`GlobalUsings.Outcome.cs` + its plan prose) — no remaining hand-written consumer once Task 5's rework lands (Himinbjörg's `LogoutHandler` registration becomes `IRequestHandler<LogoutRequest, Outcome<LogoutResult>>`, spelled out, not aliased). Delete the file, remove references to it from every later task's steps.
+- **Task 5 (Midgard, ErrorInfo wire encoding):** `OutcomeServerInterceptor` is **not** retired — it is rewritten. New shape: `UnaryServerHandler` runs the continuation, inspects the returned `TResponse` via `is IUnion { Value: Failed failed }`, throws `failed.Problem.ToRpcException()` on match, returns the response unchanged otherwise (including the `Success<T>` arm, unwrapped-not — the wire payload carries the whole envelope's success case; see spec §9's "known accepted consequence"). `ProblemExtensions.ToRpcException()` (already shipped, ErrorInfo-based) is unchanged and is what this interceptor calls. Protobuf-net surrogate registration for `Outcome<T>`'s success arm is new required scope here (spec §9) — own step, own test, HALT AND ESCALATE per spec §9 if surrogate mechanics prove unworkable rather than routing around it.
+- **Task 6 (Midgard, `AddNorseCodeFirstGrpc`):** registers `OutcomeServerInterceptor` alongside `UnhandledExceptionInterceptor` — order: `OutcomeServerInterceptor` innermost (closest to the handler), `UnhandledExceptionInterceptor` outermost (the safety net for anything the Outcome interceptor didn't recognize as `IUnion`).
+- **Tasks 7-9 (Asgard/gen, already shipped):** `ContractEmitter`'s response-type extraction changes from "wrap the service's bare return type in `Outcome<T>`" to "the service already returns `Outcome<T>`; the gateway surface mirrors it" — no double-wrap. `InProcessHostEmitter`'s innermost call already returns `Outcome<T>`; delete the `Ok`-wrapping/`AwaitThenUnit` ceremony that assumed a bare-payload return. Keep Task 7's `ContractMode_VoidSuccessMethod_...` harness test — the `Unit` emission path still needs coverage even with fewer production consumers.
+- **Task 10 (Heimdall, already shipped `7137b96`/`efa4e00`):** `IAuthenticationService.Login`/`Register`/`Logout` change from `Task<LoginResult>`/`Task`/`Task<LogoutResult>` to `Task<Outcome<LoginResult>>`/`Task<Outcome<Unit>>`/`Task<Outcome<LogoutResult>>`. `LoginResult`/`LogoutResult` are unaffected in shape (still carry `DeferredCompletionUrl`).
+- **Task 11 (Heimdall components, already shipped `122d80c`/`2efee7b`):** `Login.razor`/`Register.razor`/`Logout.razor` already pattern-match `Outcome<T>` from the *generated gateway* — unaffected. No change; the gateway's own shape (`ValueTask<Outcome<T>>`) was already correct for the in-process/wire adapters regardless of what the *service interface itself* returns underneath.
+- **Task 12 (Himinbjörg, `AuthenticationService`):** stays in Himinbjörg. Rewritten to be **trivially thin and Midgard-blind**: per method, invoke the handler, return its `Outcome<T>` verbatim (`Logout` additionally populates `LogoutResult.DeferredCompletionUrl` via `IDeferredSignIn.BuildCompletionUrl`, Asgard contract only). Zero throw statements, zero `RpcException`, zero `Grpc.*`, zero Midgard `NorseRef`. `[Authorize]` mirrors stay as originally planned (still required for gRPC endpoint metadata discovery, unrelated to this amendment). `LoginHandler`/`RegisterHandler`/`LogoutHandler` are unaffected — they already do 100% of the identity-domain (`SignInResult`/`IdentityResult` → `ErrorCategory`) mapping; that was always Himinbjörg's whole job and stays exactly there.
+- **Task 13 (Yggdrasil):** two new registration lines in the gRPC composition (`OutcomeServerInterceptor` + the protobuf-net surrogate registration from Task 5), nothing else new from this amendment.
+- **New: parity regression test** (not in the original 14 tasks) — a handler returning `Failed(LockedOut)` invoked through the in-process gateway renders `LockedOut`; the same failure through the wire gateway (service → interceptor → client decode) also decodes to `LockedOut`. Same category, both paths, asserted side by side — this is exactly the class of defect an in-process/wire divergence would hide, and the original plan's §4 suite never had a way to write it (business failures used to reach the wire only via a thrown exception the in-process path never exercised).
+
+**Explicitly out of scope for this amendment:** the generic-dispatcher/generated-adapter fast-follow (its motivating "parity defect" is cured structurally by this change — no in-process throw exists to diverge from the wire path anymore); any new behavior, envelope, or emission-mode work beyond the mechanical updates listed above.
+
+---
+
 ## File Map
 
 ### Asgard
@@ -46,15 +68,15 @@
 | Create | `Asgard/src/Abstractions.Web.Server/Mediator/IBehavior.cs` |
 | Create | `Asgard/src/Abstractions.Web.Server/Mediator/BehaviorAttribute.cs` |
 | Create | `Asgard/tests/Abstractions.Web.Server.Tests/BehaviorAttributeTests.cs` |
-| Create | `Asgard/gen/Abstractions.Gateway.Generator/Abstractions.Gateway.Generator.csproj` |
-| Create | `Asgard/gen/Abstractions.Gateway.Generator/GatewayGenerator.cs` |
-| Create | `Asgard/gen/Abstractions.Gateway.Generator/GatewayInterfaceModel.cs` |
-| Create | `Asgard/gen/Abstractions.Gateway.Generator/GatewayMethodModel.cs` |
-| Create | `Asgard/gen/Abstractions.Gateway.Generator/ContractEmitter.cs` |
-| Create | `Asgard/gen/Abstractions.Gateway.Generator/WireHostEmitter.cs` |
-| Create | `Asgard/gen/Abstractions.Gateway.Generator/InProcessHostEmitter.cs` |
-| Create | `Asgard/tests/Abstractions.Gateway.Generator.Tests/Abstractions.Gateway.Generator.Tests.csproj` |
-| Create | `Asgard/tests/Abstractions.Gateway.Generator.Tests/GatewayGeneratorTests.cs` |
+| Create | `Asgard/gen/Abstractions.Contracts.Generator/Abstractions.Contracts.Generator.csproj` |
+| Create | `Asgard/gen/Abstractions.Contracts.Generator/GatewayGenerator.cs` |
+| Create | `Asgard/gen/Abstractions.Contracts.Generator/GatewayInterfaceModel.cs` |
+| Create | `Asgard/gen/Abstractions.Contracts.Generator/GatewayMethodModel.cs` |
+| Create | `Asgard/gen/Abstractions.Contracts.Generator/ContractEmitter.cs` |
+| Create | `Asgard/gen/Abstractions.Contracts.Generator/WireHostEmitter.cs` |
+| Create | `Asgard/gen/Abstractions.Contracts.Generator/InProcessHostEmitter.cs` |
+| Create | `Asgard/tests/Abstractions.Contracts.Generator.Tests/Abstractions.Contracts.Generator.Tests.csproj` |
+| Create | `Asgard/tests/Abstractions.Contracts.Generator.Tests/GatewayGeneratorTests.cs` |
 
 ### Midgard
 | Action | Path |
@@ -135,13 +157,14 @@ Expected: no output (project is scaffolding-only today).
 
 ```csharp
 // Asgard/tests/Abstractions.Contracts.Tests/OutcomeTests.cs
+using System.Runtime.CompilerServices;
 using Norse.Abstractions.Contracts;
 using Norse.Primitives;
 using Shouldly;
 
 namespace Norse.Abstractions.Contracts.Tests;
 
-class OutcomeTests
+public sealed class OutcomeTests
 {
 	[Fact]
 	void OutcomeOfUnit_Ok_IsTheVoidSuccessShape()
@@ -198,6 +221,23 @@ class OutcomeTests
 		((byte)ErrorCategory.Unauthorized).ShouldBe((byte)7);
 		((byte)ErrorCategory.Forbidden).ShouldBe((byte)8);
 		((byte)ErrorCategory.Fault).ShouldBe((byte)9);
+	}
+
+	[Fact]
+	void OutcomeOfT_TryGetValue_ReturnsFalse_ForTheOtherCase()
+	{
+		var success = Outcome<BoolResponse>.Ok(new BoolResponse { Value = true });
+		success.TryGetValue(out Failed _).ShouldBeFalse();
+
+		var failure = Outcome<BoolResponse>.Err(ErrorCategory.NotFound);
+		failure.TryGetValue(out Success<BoolResponse> _).ShouldBeFalse();
+	}
+
+	[Fact]
+	void OutcomeOfT_Default_ThrowsOnMatch_MalformedByConstruction()
+	{
+		var defaulted = default(Outcome<BoolResponse>);
+		Should.Throw<SwitchExpressionException>(() => defaulted.Match(value => value.Value, _ => false));
 	}
 }
 ```
@@ -317,7 +357,7 @@ global using Outcome = Norse.Abstractions.Contracts.Outcome<Norse.Abstractions.C
 `Asgard/src/Abstractions.Contracts/Outcome{T}.cs` — full replacement contents. A native `[Union]` readonly record struct, matching Svartalfheim's `Result<T>` exactly (hand-authored, not a shorthand `union` declaration — both cases stored inline, zero boxing on either path; `[MustConsume]` so a caller can't silently drop the failure case; `outcome is Outcome<T>` is CS8121, pattern match `Success<T>`/`Failed` directly). One generic type only — void-success operations use `T = Unit` via the alias above, never a separate non-generic type:
 
 ```csharp
-using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using Norse.Primitives;
 
 namespace Norse.Abstractions.Contracts;
@@ -350,8 +390,10 @@ public readonly record struct Outcome<T> : IUnion where T : notnull
 	}
 
 	/// <summary>Creates a failed outcome. Also reachable as an implicit union conversion.</summary>
+	/// <exception cref="ArgumentNullException"><paramref name="value"/> carries a null <see cref="Problem"/> — a smuggled <c>default(Failed)</c> past the case type's own guard.</exception>
 	public Outcome(Failed value)
 	{
+		ArgumentNullException.ThrowIfNull(value.Problem);
 		_failed = value;
 		_state = State.Failure;
 	}
@@ -378,12 +420,18 @@ public readonly record struct Outcome<T> : IUnion where T : notnull
 		new(new Failed(new Problem { Category = category, Errors = errors ?? new Dictionary<string, string[]>(), CorrelationId = correlationId }));
 
 	/// <summary>Consumes the outcome by handling both cases.</summary>
-	public TResult Match<TResult>(Func<T, TResult> success, Func<Problem, TResult> failure) =>
-		this switch
+	/// <exception cref="ArgumentNullException"><paramref name="success"/> or <paramref name="failure"/> is null.</exception>
+	/// <exception cref="SwitchExpressionException">This value was defaulted rather than constructed.</exception>
+	public TResult Match<TResult>(Func<T, TResult> success, Func<Problem, TResult> failure)
+	{
+		ArgumentNullException.ThrowIfNull(success);
+		ArgumentNullException.ThrowIfNull(failure);
+		return this switch
 		{
 			Success<T>(var value) => success(value),
 			Failed(var problem) => failure(problem),
 		};
+	}
 }
 ```
 
@@ -414,17 +462,21 @@ Add `using Norse.Abstractions.Contracts;` to any file in `Abstractions.Web.Serve
 - [ ] **Step 6: Run test to verify it passes**
 
 Run: `dotnet test Asgard/tests/Abstractions.Contracts.Tests --filter OutcomeTests`
-Expected: PASS (3 tests).
+Expected: PASS (7 tests).
 
 - [ ] **Step 7: Run the full Asgard test suite to confirm nothing else broke**
 
 Run: `dotnet test Asgard.slnx`
 Expected: PASS. (Any test file that referenced `Norse.Abstractions.Web.Server.Mediator.Outcome`/`Problem`/`ErrorCategory`/`BoolResponse` needs its `using` updated to `Norse.Abstractions.Contracts` — fix any resulting compile errors before this step passes.)
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 8: Fix `Asgard/CLAUDE.md`'s now-stale file description**
+
+`Asgard/CLAUDE.md` currently describes `Abstractions.Web.Server` as carrying "the mediator law surface (`IRequestHandler`, `ICommandRequest`, `Outcome`, `Problem`, `ErrorCategory`, `BoolResponse`)" — remove `Outcome`, `Problem`, `ErrorCategory`, `BoolResponse` from that sentence (they moved to `Abstractions.Contracts` in this task); keep `IRequestHandler`/`ICommandRequest`, which didn't move.
+
+- [ ] **Step 9: Commit**
 
 ```bash
-git add Asgard/src/Abstractions.Contracts Asgard/src/Abstractions.Web.Server Asgard/tests/Abstractions.Contracts.Tests
+git add Asgard/src/Abstractions.Contracts Asgard/src/Abstractions.Web.Server Asgard/tests/Abstractions.Contracts.Tests Asgard/CLAUDE.md
 git commit -m "feat: relocate envelope to Abstractions.Contracts as a native union, extend ErrorCategory and Problem"
 ```
 
@@ -452,7 +504,7 @@ using Shouldly;
 
 namespace Norse.Abstractions.Web.Server.Tests;
 
-class BehaviorAttributeTests
+public sealed class BehaviorAttributeTests
 {
 	[Fact]
 	void BehaviorAttribute_TargetsClassAndMethod_NotInterface()
@@ -594,7 +646,7 @@ using Shouldly;
 
 namespace Norse.Infrastructure.Web.Server.Tests.Mediator;
 
-class TelemetryBehaviorTests
+public sealed class TelemetryBehaviorTests
 {
 	[Fact]
 	async Task Chain_UnhandledException_BecomesFaultOutcome_NotRethrown()
@@ -773,7 +825,7 @@ using Shouldly;
 
 namespace Norse.Infrastructure.Web.Server.Tests.Mediator;
 
-class AuthorizationBehaviorTests
+public sealed class AuthorizationBehaviorTests
 {
 	[Fact]
 	async Task NotAuthenticated_ReturnsUnauthorized()
@@ -833,7 +885,7 @@ using Shouldly;
 
 namespace Norse.Infrastructure.Web.Server.Tests.Mediator;
 
-class ValidationBehaviorTests
+public sealed class ValidationBehaviorTests
 {
 	[Fact]
 	async Task Invalid_ReturnsValidationOutcome_GroupedByField()
@@ -991,7 +1043,7 @@ using Shouldly;
 
 namespace Norse.Infrastructure.Web.Server.Tests.Mediator.Grpc;
 
-class ProblemExtensionsTests
+public sealed class ProblemExtensionsTests
 {
 	[Fact]
 	void LockedOut_And_Forbidden_ShareStatusCode_ButDistinctErrorInfoReason()
@@ -1036,7 +1088,7 @@ using Shouldly;
 
 namespace Norse.Infrastructure.Web.Client.Tests.Grpc;
 
-class RpcExceptionExtensionsTests
+public sealed class RpcExceptionExtensionsTests
 {
 	[Fact]
 	void DecodeProblem_ReadsReason_NotStatusCode_DisambiguatesSharedStatus()
@@ -1259,7 +1311,7 @@ using Shouldly;
 
 namespace Norse.Infrastructure.Web.Server.Tests.Mediator.Grpc;
 
-class UnhandledExceptionInterceptorTests
+public sealed class UnhandledExceptionInterceptorTests
 {
 	[Fact]
 	async Task UnhandledException_BecomesInternalRpcException_WithErrorInfoFault()
@@ -1396,30 +1448,30 @@ Midgard's PR merges, CI is green, a version tag is pushed, and the resulting NuG
 ## Task 7: Asgard/gen — Generator skeleton, discovery, Contract-mode emission
 
 **Files:**
-- Create: `Asgard/gen/Abstractions.Gateway.Generator/Abstractions.Gateway.Generator.csproj`
-- Create: `Asgard/gen/Abstractions.Gateway.Generator/GatewayInterfaceModel.cs`
-- Create: `Asgard/gen/Abstractions.Gateway.Generator/GatewayMethodModel.cs`
-- Create: `Asgard/gen/Abstractions.Gateway.Generator/GatewayGenerator.cs`
-- Create: `Asgard/gen/Abstractions.Gateway.Generator/ContractEmitter.cs`
-- Create: `Asgard/tests/Abstractions.Gateway.Generator.Tests/Abstractions.Gateway.Generator.Tests.csproj`
-- Test: `Asgard/tests/Abstractions.Gateway.Generator.Tests/GatewayGeneratorTests.cs`
+- Create: `Asgard/gen/Abstractions.Contracts.Generator/Abstractions.Contracts.Generator.csproj`
+- Create: `Asgard/gen/Abstractions.Contracts.Generator/GatewayInterfaceModel.cs`
+- Create: `Asgard/gen/Abstractions.Contracts.Generator/GatewayMethodModel.cs`
+- Create: `Asgard/gen/Abstractions.Contracts.Generator/GatewayGenerator.cs`
+- Create: `Asgard/gen/Abstractions.Contracts.Generator/ContractEmitter.cs`
+- Create: `Asgard/tests/Abstractions.Contracts.Generator.Tests/Abstractions.Contracts.Generator.Tests.csproj`
+- Test: `Asgard/tests/Abstractions.Contracts.Generator.Tests/GatewayGeneratorTests.cs`
 
 **Interfaces:**
 - Consumes: `GenerateGatewayAttribute` (Task 2), `System.ServiceModel.ServiceContractAttribute`/`OperationContractAttribute` (protobuf-net.Grpc's WCF-derived attributes), `Microsoft.AspNetCore.Authorization.AuthorizeAttribute`.
-- Produces: `Norse.Abstractions.Gateway.Generator.GatewayGenerator : IIncrementalGenerator` — discovers every `[GenerateGateway]`-decorated interface reachable from the compilation (own symbols and referenced assembly symbols, per the compiled-symbols constraint) and, in `Contract` emission mode, emits `I{Context}Gateway`. Diagnostic `NORSE001` (error) fires for any `[OperationContract]` method missing `[Authorize(Policy=...)]` (decided law item 4). Diagnostic `NORSE002` (error) fires for any method returning `IAsyncEnumerable<T>` (spec §2.3 — streaming excluded entirely from v1). Diagnostic `NORSE003` (error) fires when a `[GenerateGateway]` interface's name isn't `I{Context}Service` — the context-name derivation refuses to guess for any other shape (e.g. `I{Context}Api`, also real per spec §9.8) rather than silently slicing an arbitrary suffix (2026-07-24 review, lesser finding 1). Tasks 8 and 9 add the other two emission modes to this same generator.
+- Produces: `Norse.Abstractions.Contracts.Generator.GatewayGenerator : IIncrementalGenerator` — discovers every `[GenerateGateway]`-decorated interface reachable from the compilation (own symbols and referenced assembly symbols, per the compiled-symbols constraint) and, in `Contract` emission mode, emits `I{Context}Gateway`. Diagnostic `NORSE001` (error) fires for any `[OperationContract]` method missing `[Authorize(Policy=...)]` (decided law item 4). Diagnostic `NORSE002` (error) fires for any method returning `IAsyncEnumerable<T>` (spec §2.3 — streaming excluded entirely from v1). Diagnostic `NORSE003` (error) fires when a `[GenerateGateway]` interface's name isn't `I{Context}Service` — the context-name derivation refuses to guess for any other shape (e.g. `I{Context}Api`, also real per spec §9.8) rather than silently slicing an arbitrary suffix (2026-07-24 review, lesser finding 1). Diagnostic `NORSE004` (error) fires for a method with zero parameters — a malformed method shape the generator refuses to crash on (2026-07-24 review: an unguarded `member.Parameters[0]` access would throw `ArgumentOutOfRangeException` mid-compilation instead of failing loudly with a diagnostic, the exact opposite of the platform's own convention). Tasks 8 and 9 add the other two emission modes to this same generator.
 
 - [ ] **Step 1: Write the failing generator test — Contract mode emits the gateway interface**
 
 ```csharp
-// Asgard/tests/Abstractions.Gateway.Generator.Tests/GatewayGeneratorTests.cs
+// Asgard/tests/Abstractions.Contracts.Generator.Tests/GatewayGeneratorTests.cs
 using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Diagnostics;
-using Norse.Abstractions.Gateway.Generator;
+using Norse.Abstractions.Contracts.Generator;
 using Shouldly;
 
-namespace Norse.Abstractions.Gateway.Generator.Tests;
+namespace Norse.Abstractions.Contracts.Generator.Tests;
 
 static class GeneratorTestHarness
 {
@@ -1446,7 +1498,7 @@ static class GeneratorTestHarness
 	}
 }
 
-class GatewayGeneratorTests
+public sealed class GatewayGeneratorTests
 {
 	const string ServiceInterfaceSource = """
 		using System.ServiceModel;
@@ -1595,14 +1647,42 @@ class GatewayGeneratorTests
 		diagnostics.ShouldContain(d => d.Id == "NORSE003" && d.Severity == DiagnosticSeverity.Error);
 		sources.ShouldBeEmpty();
 	}
+
+	[Fact]
+	void MethodWithNoParameters_ReportsNorse004Error_DoesNotCrash()
+	{
+		const string source = """
+			using System.ServiceModel;
+			using Microsoft.AspNetCore.Authorization;
+			using Norse.Abstractions.Contracts;
+
+			namespace TestRealm.Services;
+
+			[GenerateGateway]
+			[ServiceContract]
+			public interface IWidgetService
+			{
+				[Authorize(Policy = "Widget.Read")]
+				[OperationContract]
+				Task<WidgetResponse> GetWidget(CancellationToken cancellationToken = default);
+			}
+
+			public sealed record WidgetResponse;
+			""";
+
+		var (diagnostics, sources) = GeneratorTestHarness.Run(source, "Contract");
+
+		diagnostics.ShouldContain(d => d.Id == "NORSE004" && d.Severity == DiagnosticSeverity.Error);
+		sources.ShouldBeEmpty();
+	}
 }
 ```
 
 ```csharp
-// Asgard/tests/Abstractions.Gateway.Generator.Tests/TestAnalyzerConfigOptionsProvider.cs
+// Asgard/tests/Abstractions.Contracts.Generator.Tests/TestAnalyzerConfigOptionsProvider.cs
 using Microsoft.CodeAnalysis.Diagnostics;
 
-namespace Norse.Abstractions.Gateway.Generator.Tests;
+namespace Norse.Abstractions.Contracts.Generator.Tests;
 
 sealed class TestAnalyzerConfigOptionsProvider(string emissionMode) : AnalyzerConfigOptionsProvider
 {
@@ -1629,10 +1709,10 @@ sealed class TestAnalyzerConfigOptionsProvider(string emissionMode) : AnalyzerCo
 `ReferenceAssemblies.Net110` is a small local helper (not a NuGet package) returning the BCL reference set — add it alongside the harness:
 
 ```csharp
-// Asgard/tests/Abstractions.Gateway.Generator.Tests/ReferenceAssemblies.cs
+// Asgard/tests/Abstractions.Contracts.Generator.Tests/ReferenceAssemblies.cs
 using Microsoft.CodeAnalysis;
 
-namespace Norse.Abstractions.Gateway.Generator.Tests;
+namespace Norse.Abstractions.Contracts.Generator.Tests;
 
 static class ReferenceAssemblies
 {
@@ -1650,43 +1730,60 @@ static class ReferenceAssemblies
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `dotnet test Asgard/tests/Abstractions.Gateway.Generator.Tests --filter GatewayGeneratorTests`
+Run: `dotnet test Asgard/tests/Abstractions.Contracts.Generator.Tests --filter GatewayGeneratorTests`
 Expected: FAIL — `GatewayGenerator` does not exist.
 
 - [ ] **Step 3: Create the generator project**
 
+**Correction (2026-07-24 review):** the original plan text here had the generator self-pack via a `None`/`Pack="true"` item — dead on arrival, since `Asgard/gen/Directory.Build.props` (already scattered platform-wide, already governing this project) sets `IsPackable=false` for every project under `gen/` specifically *because* the platform's real, already-shipped convention (Urðarbrunnr's `Persistence.EntityFramework.Generator`) is for the generator to be bundled into the **host runtime package** — never a standalone package a consumer separately `PackageReference`s. Fixed here: the generator project itself only needs a `Description` (everything else — `TargetFramework`, `IsRoslynComponent`, `EnforceExtendedAnalyzerRules`, the `Microsoft.CodeAnalysis.CSharp` reference — already comes from `gen/Directory.Build.props`, redundant to restate per the platform's "hoist shared props" convention). The actual bundling wiring lives in `Abstractions.Contracts.csproj` instead — see the note after this code block.
+
 ```xml
-<!-- Asgard/gen/Abstractions.Gateway.Generator/Abstractions.Gateway.Generator.csproj -->
+<!-- Asgard/gen/Abstractions.Contracts.Generator/Abstractions.Contracts.Generator.csproj -->
 <Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
-		<TargetFramework>netstandard2.0</TargetFramework>
-		<Description>Norse.Abstractions.Gateway.Generator: emits per-service, Result-native Blazor gateways from a [GenerateGateway]-decorated service interface (contracts, WASM host, and composition-root artifacts — none of which is a Web.Server-only concern, hence the name). Own analyzer package, netstandard2.0, sibling to Asgard's runtime contracts.</Description>
-		<IncludeBuildOutput>false</IncludeBuildOutput>
-		<EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+		<Description>Norse.Abstractions.Contracts.Generator: emits per-service, Result-native Blazor gateways from a [GenerateGateway]-decorated service interface (contracts, WASM host, and composition-root artifacts — none of which is a Web.Server-only concern, hence the name). Bundled into Abstractions.Contracts's package (analyzers/dotnet/cs/), never referenced or packed standalone — see Abstractions.Contracts.csproj's IncludeGeneratorInPackage target.</Description>
 	</PropertyGroup>
-	<ItemGroup>
-		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.*" PrivateAssets="all" />
-	</ItemGroup>
-	<ItemGroup>
-		<None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
-	</ItemGroup>
 </Project>
 ```
+
+**`Asgard/src/Abstractions.Contracts/Abstractions.Contracts.csproj` gains the bundling wiring** (matching `Urdarbrunnr/src/Persistence.EntityFramework/Persistence.EntityFramework.csproj`'s real, shipped pattern exactly — every consumer of `Abstractions.Contracts` gets the generator automatically, no separate `PackageReference` anywhere in this plan from here on; Tasks 10, 12, 13 do **not** add a `Norse.Abstractions.Contracts.Generator` package reference, only Task 1's already-shipped `Abstractions.Contracts` reference, which every gateway-generating project needs anyway for `Outcome<T>`/`Unit`/`GenerateGatewayAttribute`):
+
+```xml
+<ItemGroup>
+	<ProjectReference
+		Include="../../gen/Abstractions.Contracts.Generator/Abstractions.Contracts.Generator.csproj"
+		OutputItemType="Analyzer"
+		ReferenceOutputAssembly="false" />
+</ItemGroup>
+<Target Name="IncludeGeneratorInPackage" BeforeTargets="_GetPackageFiles">
+	<MSBuild Projects="../../gen/Abstractions.Contracts.Generator/Abstractions.Contracts.Generator.csproj"
+		Targets="Build"
+		Properties="Configuration=$(Configuration)" />
+	<ItemGroup>
+		<None Include="../../gen/Abstractions.Contracts.Generator/bin/$(Configuration)/netstandard2.0/Norse.Abstractions.Contracts.Generator.dll"
+			Pack="true"
+			PackagePath="analyzers/dotnet/cs/"
+			Visible="false" />
+	</ItemGroup>
+</Target>
+```
+
+This is a follow-up change to `Abstractions.Contracts.csproj` — already shipped by Task 1 (merged, PR #33) without this wiring, since Task 1 predates the generator existing at all. Add it as part of this task's own commit (it lives in `src/`, not `gen/`, but the two are inseparable — the generator is inert without this).
 
 - [ ] **Step 4: Implement the model records**
 
 ```csharp
-// Asgard/gen/Abstractions.Gateway.Generator/GatewayMethodModel.cs
-namespace Norse.Abstractions.Gateway.Generator;
+// Asgard/gen/Abstractions.Contracts.Generator/GatewayMethodModel.cs
+namespace Norse.Abstractions.Contracts.Generator;
 
 sealed record GatewayMethodModel(string Name, string RequestTypeName, string? ResponseTypeName, string PolicyName);
 ```
 
 ```csharp
-// Asgard/gen/Abstractions.Gateway.Generator/GatewayInterfaceModel.cs
+// Asgard/gen/Abstractions.Contracts.Generator/GatewayInterfaceModel.cs
 using System.Collections.Immutable;
 
-namespace Norse.Abstractions.Gateway.Generator;
+namespace Norse.Abstractions.Contracts.Generator;
 
 sealed record GatewayInterfaceModel(string Namespace, string ServiceInterfaceName, string ContextName, ImmutableArray<GatewayMethodModel> Methods);
 ```
@@ -1694,10 +1791,10 @@ sealed record GatewayInterfaceModel(string Namespace, string ServiceInterfaceNam
 - [ ] **Step 5: Implement `ContractEmitter.cs`**
 
 ```csharp
-// Asgard/gen/Abstractions.Gateway.Generator/ContractEmitter.cs
+// Asgard/gen/Abstractions.Contracts.Generator/ContractEmitter.cs
 using System.Text;
 
-namespace Norse.Abstractions.Gateway.Generator;
+namespace Norse.Abstractions.Contracts.Generator;
 
 static class ContractEmitter
 {
@@ -1730,11 +1827,11 @@ static class ContractEmitter
 - [ ] **Step 6: Implement `GatewayGenerator.cs` — discovery + Contract-mode emission + `NORSE001` diagnostic**
 
 ```csharp
-// Asgard/gen/Abstractions.Gateway.Generator/GatewayGenerator.cs
+// Asgard/gen/Abstractions.Contracts.Generator/GatewayGenerator.cs
 using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 
-namespace Norse.Abstractions.Gateway.Generator;
+namespace Norse.Abstractions.Contracts.Generator;
 
 [Generator(LanguageNames.CSharp)]
 public sealed class GatewayGenerator : IIncrementalGenerator
@@ -1752,6 +1849,11 @@ public sealed class GatewayGenerator : IIncrementalGenerator
 	static readonly DiagnosticDescriptor UnrecognizedInterfaceSuffix = new(
 		"NORSE003", "[GenerateGateway] interface name is not I{Context}Service",
 		"Interface '{0}' is decorated [GenerateGateway] but its name doesn't match I{{Context}}Service — the generator derives the gateway's name from that suffix and refuses to guess for any other shape (e.g. I{{Context}}Api); rename the interface or extend this generator's naming rule deliberately",
+		"Norse.Gateway", DiagnosticSeverity.Error, isEnabledByDefault: true);
+
+	static readonly DiagnosticDescriptor MissingRequestParameter = new(
+		"NORSE004", "Service method has no request parameter",
+		"Method '{0}' on a [GenerateGateway] interface takes no parameters — every gateway-generated method requires exactly one request parameter (spec §2.2); this is a malformed service interface, not a shape the generator can emit code for",
 		"Norse.Gateway", DiagnosticSeverity.Error, isEnabledByDefault: true);
 
 	public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -1813,6 +1915,11 @@ public sealed class GatewayGenerator : IIncrementalGenerator
 						diagnostics.Add(Diagnostic.Create(MissingAuthorize, member.Locations.FirstOrDefault() ?? Location.None, member.Name));
 						continue;
 					}
+					if (member.Parameters.Length == 0)
+					{
+						diagnostics.Add(Diagnostic.Create(MissingRequestParameter, member.Locations.FirstOrDefault() ?? Location.None, member.Name));
+						continue;
+					}
 					var policyName = authorize.NamedArguments.FirstOrDefault(kv => kv.Key == "Policy").Value.Value as string ?? "";
 					var requestType = member.Parameters[0].Type.Name;
 					var isGenericTask = member.ReturnType is INamedTypeSymbol { IsGenericType: true, TypeArguments.Length: 1 } namedReturn;
@@ -1857,13 +1964,13 @@ public sealed class GatewayGenerator : IIncrementalGenerator
 
 - [ ] **Step 7: Run tests to verify they pass**
 
-Run: `dotnet test Asgard/tests/Abstractions.Gateway.Generator.Tests --filter GatewayGeneratorTests`
-Expected: PASS (5 tests).
+Run: `dotnet test Asgard/tests/Abstractions.Contracts.Generator.Tests --filter GatewayGeneratorTests`
+Expected: PASS (6 tests).
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add Asgard/gen/Abstractions.Gateway.Generator Asgard/tests/Abstractions.Gateway.Generator.Tests
+git add Asgard/gen/Abstractions.Contracts.Generator Asgard/tests/Abstractions.Contracts.Generator.Tests
 git commit -m "feat: gateway generator skeleton, compiled-symbol discovery, Contract-mode emission"
 ```
 
@@ -1872,9 +1979,9 @@ git commit -m "feat: gateway generator skeleton, compiled-symbol discovery, Cont
 ## Task 8: Asgard/gen — WireHost-mode emission
 
 **Files:**
-- Create: `Asgard/gen/Abstractions.Gateway.Generator/WireHostEmitter.cs`
-- Modify: `Asgard/gen/Abstractions.Gateway.Generator/GatewayGenerator.cs`
-- Test: `Asgard/tests/Abstractions.Gateway.Generator.Tests/GatewayGeneratorTests.cs` (add cases)
+- Create: `Asgard/gen/Abstractions.Contracts.Generator/WireHostEmitter.cs`
+- Modify: `Asgard/gen/Abstractions.Contracts.Generator/GatewayGenerator.cs`
+- Test: `Asgard/tests/Abstractions.Contracts.Generator.Tests/GatewayGeneratorTests.cs` (add cases)
 
 **Interfaces:**
 - Consumes: `GatewayInterfaceModel`/`GatewayMethodModel` (Task 7), `RpcExceptionExtensions.DecodeProblem` (Task 5, referenced by fully-qualified name in emitted text — this project has no compile-time dependency on Midgard).
@@ -1900,16 +2007,16 @@ Append to `GatewayGeneratorTests`:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `dotnet test Asgard/tests/Abstractions.Gateway.Generator.Tests --filter WireHostMode_EmitsWireGateway`
+Run: `dotnet test Asgard/tests/Abstractions.Contracts.Generator.Tests --filter WireHostMode_EmitsWireGateway`
 Expected: FAIL — `WireHostEmitter` does not exist; `GatewayGenerator` doesn't branch on `WireHost` yet.
 
 - [ ] **Step 3: Implement `WireHostEmitter.cs`**
 
 ```csharp
-// Asgard/gen/Abstractions.Gateway.Generator/WireHostEmitter.cs
+// Asgard/gen/Abstractions.Contracts.Generator/WireHostEmitter.cs
 using System.Text;
 
-namespace Norse.Abstractions.Gateway.Generator;
+namespace Norse.Abstractions.Contracts.Generator;
 
 static class WireHostEmitter
 {
@@ -1971,18 +2078,18 @@ Replace the `// WireHost and InProcessHost modes added in Task 8 and Task 9.` co
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `dotnet test Asgard/tests/Abstractions.Gateway.Generator.Tests --filter WireHostMode_EmitsWireGateway`
+Run: `dotnet test Asgard/tests/Abstractions.Contracts.Generator.Tests --filter WireHostMode_EmitsWireGateway`
 Expected: PASS.
 
 - [ ] **Step 6: Run the full generator test suite**
 
-Run: `dotnet test Asgard/tests/Abstractions.Gateway.Generator.Tests`
+Run: `dotnet test Asgard/tests/Abstractions.Contracts.Generator.Tests`
 Expected: PASS (all cases from Task 7 and Task 8).
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add Asgard/gen/Abstractions.Gateway.Generator/WireHostEmitter.cs Asgard/gen/Abstractions.Gateway.Generator/GatewayGenerator.cs Asgard/tests/Abstractions.Gateway.Generator.Tests/GatewayGeneratorTests.cs
+git add Asgard/gen/Abstractions.Contracts.Generator/WireHostEmitter.cs Asgard/gen/Abstractions.Contracts.Generator/GatewayGenerator.cs Asgard/tests/Abstractions.Contracts.Generator.Tests/GatewayGeneratorTests.cs
 git commit -m "feat: WireHost-mode gateway emission, ErrorInfo-decoded failure path"
 ```
 
@@ -1991,9 +2098,9 @@ git commit -m "feat: WireHost-mode gateway emission, ErrorInfo-decoded failure p
 ## Task 9: Asgard/gen — InProcessHost-mode emission
 
 **Files:**
-- Create: `Asgard/gen/Abstractions.Gateway.Generator/InProcessHostEmitter.cs`
-- Modify: `Asgard/gen/Abstractions.Gateway.Generator/GatewayGenerator.cs`
-- Test: `Asgard/tests/Abstractions.Gateway.Generator.Tests/GatewayGeneratorTests.cs` (add cases)
+- Create: `Asgard/gen/Abstractions.Contracts.Generator/InProcessHostEmitter.cs`
+- Modify: `Asgard/gen/Abstractions.Contracts.Generator/GatewayGenerator.cs`
+- Test: `Asgard/tests/Abstractions.Contracts.Generator.Tests/GatewayGeneratorTests.cs` (add cases)
 
 **Interfaces:**
 - Consumes: `GatewayInterfaceModel`/`GatewayMethodModel` (Task 7). Emits fully-qualified references to Midgard's `TelemetryBehavior<,>`, `ExceptionTranslationBehavior<,>`, `AuthorizationBehavior<,>`, `ValidationBehavior<,>` (Task 3, 4) by name only — no compile-time reference from the generator project itself.
@@ -2063,16 +2170,16 @@ Append to `GatewayGeneratorTests`:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `dotnet test Asgard/tests/Abstractions.Gateway.Generator.Tests --filter InProcessHostMode_EmitsChainInCorrectOrder`
+Run: `dotnet test Asgard/tests/Abstractions.Contracts.Generator.Tests --filter InProcessHostMode_EmitsChainInCorrectOrder`
 Expected: FAIL — `InProcessHostEmitter` does not exist.
 
 - [ ] **Step 3: Implement `InProcessHostEmitter.cs`**
 
 ```csharp
-// Asgard/gen/Abstractions.Gateway.Generator/InProcessHostEmitter.cs
+// Asgard/gen/Abstractions.Contracts.Generator/InProcessHostEmitter.cs
 using System.Text;
 
-namespace Norse.Abstractions.Gateway.Generator;
+namespace Norse.Abstractions.Contracts.Generator;
 
 static class InProcessHostEmitter
 {
@@ -2161,24 +2268,24 @@ Replace the `// InProcessHost mode added in Task 9.` comment in `GatewayGenerato
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `dotnet test Asgard/tests/Abstractions.Gateway.Generator.Tests --filter "InProcessHostMode_EmitsChainInCorrectOrder|InProcessHostMode_VoidSuccessMethod"`
+Run: `dotnet test Asgard/tests/Abstractions.Contracts.Generator.Tests --filter "InProcessHostMode_EmitsChainInCorrectOrder|InProcessHostMode_VoidSuccessMethod"`
 Expected: PASS (2 tests).
 
 - [ ] **Step 6: Run the full generator test suite**
 
-Run: `dotnet test Asgard/tests/Abstractions.Gateway.Generator.Tests`
-Expected: PASS (8 tests total — 5 from Task 7, 1 from Task 8, 2 from Task 9).
+Run: `dotnet test Asgard/tests/Abstractions.Contracts.Generator.Tests`
+Expected: PASS (9 tests total — 6 from Task 7, 1 from Task 8, 2 from Task 9).
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add Asgard/gen/Abstractions.Gateway.Generator/InProcessHostEmitter.cs Asgard/gen/Abstractions.Gateway.Generator/GatewayGenerator.cs Asgard/tests/Abstractions.Gateway.Generator.Tests/GatewayGeneratorTests.cs
+git add Asgard/gen/Abstractions.Contracts.Generator/InProcessHostEmitter.cs Asgard/gen/Abstractions.Contracts.Generator/GatewayGenerator.cs Asgard/tests/Abstractions.Contracts.Generator.Tests/GatewayGeneratorTests.cs
 git commit -m "feat: InProcessHost-mode gateway emission, standard behavior chain composed telemetry-outermost"
 ```
 
 ---
 
-## SHIP GATE — Asgard/gen (`Abstractions.Gateway.Generator`)
+## SHIP GATE — Asgard/gen (`Abstractions.Contracts.Generator`)
 
 A second, separate NuGet package from Asgard's `Abstractions.Contracts`/`Abstractions.Web.Server` (Task 1-2's ship gate already covered those). This package's own PR merges, CI is green, a version tag is pushed, and it's live on the feed before Task 10 starts — Heimdall/Yggdrasil (next phases) `PackageReference` this analyzer package directly, they do not `ProjectReference` the generator project.
 
@@ -2188,13 +2295,14 @@ A second, separate NuGet package from Asgard's `Abstractions.Contracts`/`Abstrac
 
 **Files:**
 - Create: `Heimdall/src/AuthN.Services/AuthNPolicies.cs`
+- Create: `Heimdall/src/AuthN.Services/LogoutResult.cs`
 - Modify: `Heimdall/src/AuthN.Services/IAuthenticationService.cs`
 - Modify: `Heimdall/src/AuthN.Services/LoginResult.cs`
 - Modify: `Heimdall/src/AuthN.Services/AuthN.Services.csproj`
 
 **Interfaces:**
 - Consumes: `GenerateGatewayAttribute` (Task 2), `Microsoft.AspNetCore.Authorization.AuthorizeAttribute` (already WASM-compatible, no new package risk — same package family already used for `AuthorizeView` on Blazor client components elsewhere in the platform).
-- Produces: `Norse.AuthN.Services.AuthNPolicies.Public` (`const string = "AuthN.Public"`) — a permissive policy satisfied by any principal, including the anonymous-role cookie; still explicitly declared per method, never an undecorated escape hatch. `IAuthenticationService.Login`/`Register`/`Logout` all carry `[Authorize(Policy = AuthNPolicies.Public)]`. `LoginResult` gains `string? DeferredCompletionUrl` (moved off the old `AuthenticationResult`, correctly scoped to the wire type since Himinbjörg's single implementation naturally leaves it `null` for every real gRPC/WASM call — the deferred-sign-in stash only ever exists on the Blazor-Server-circuit code path per `../Platform/specs/2026-07-15-deferred-signin-realm-placement-design.md`). No test file for this task — it's a pure contract/attribute change verified by the compile step itself and by Task 12/13's tests exercising it end to end.
+- Produces: `Norse.AuthN.Services.AuthNPolicies.Public` (`const string = "AuthN.Public"`) — a permissive policy satisfied by any principal, including the anonymous-role cookie; still explicitly declared per method, never an undecorated escape hatch. `IAuthenticationService.Login`/`Register`/`Logout` all carry `[Authorize(Policy = AuthNPolicies.Public)]`. `LoginResult` gains `string? DeferredCompletionUrl` (moved off the old `AuthenticationResult`, correctly scoped to the wire type since Himinbjörg's single implementation naturally leaves it `null` for every real gRPC/WASM call — the deferred-sign-in stash only ever exists on the Blazor-Server-circuit code path per `../Platform/specs/2026-07-15-deferred-signin-realm-placement-design.md`). **`Logout` changes from bare `Task` to `Task<LogoutResult>` (2026-07-24 correction, found while scoping Task 11):** clearing the auth cookie on sign-out hits the identical `Response.HasStarted` constraint as setting one on sign-in — the platform's existing deferred-sign-in mechanism already handles this for Login; shipping Logout without an equivalent would silently regress a previously-proven, live-tested capability (the earlier AuthN bootstrap plan's sign-out deferral path). `LogoutResult` mirrors `LoginResult`'s shape minus `Succeeded` — Logout has no anti-enumeration collapse case, real failures still throw via `ToRpcException()`. No test file for this task — it's a pure contract/attribute change verified by the compile step itself and by Task 12/13's tests exercising it end to end.
 
 - [ ] **Step 1: Add `AuthNPolicies.cs`**
 
@@ -2248,11 +2356,11 @@ public interface IAuthenticationService
 	/// <summary>Logs out the currently authenticated user.</summary>
 	[Authorize(Policy = AuthNPolicies.Public)]
 	[OperationContract]
-	Task Logout(LogoutRequest request);
+	Task<LogoutResult> Logout(LogoutRequest request);
 }
 ```
 
-- [ ] **Step 3: Add `DeferredCompletionUrl` to `LoginResult`**
+- [ ] **Step 3: Add `DeferredCompletionUrl` to `LoginResult`; add `LogoutResult`**
 
 Full replacement of `Heimdall/src/AuthN.Services/LoginResult.cs`:
 
@@ -2277,12 +2385,45 @@ public sealed record LoginResult
 }
 ```
 
-- [ ] **Step 4: Add `Microsoft.AspNetCore.Authorization` and the generator `PackageReference` to `AuthN.Services.csproj`**
+New file, `Heimdall/src/AuthN.Services/LogoutResult.cs`:
+
+```csharp
+using System.Runtime.Serialization;
+
+namespace Norse.AuthN.Services;
+
+/// <summary>
+/// The wire response for <see cref="IAuthenticationService.Logout"/>. Clearing the auth cookie hits
+/// the same <c>Response.HasStarted</c> constraint as setting one (spec: circuits can't Set-Cookie
+/// once the response has started), so sign-out needs the identical deferred-completion mechanism as
+/// <see cref="LoginResult"/> — a bare success/failure signal alone would silently regress the
+/// already-proven sign-out deferral path.
+/// </summary>
+[DataContract]
+public sealed record LogoutResult
+{
+	/// <summary>
+	/// Non-null only on the Blazor-Server in-process path, when the sign-out had to be deferred to a
+	/// forced-reload completion request. Always null for real gRPC/WASM calls — that path never
+	/// stashes a deferred sign-out.
+	/// </summary>
+	[DataMember(Order = 1)]
+	public string? DeferredCompletionUrl { get; init; }
+}
+```
+
+- [ ] **Step 4: Add `Microsoft.AspNetCore.Authorization` and a `NorseRef` to `Abstractions.Contracts` to `AuthN.Services.csproj`; set the emission mode**
+
+Today `AuthN.Services.csproj` has zero cross-realm references — it's a self-contained wire-contract project (verified against the real, currently-shipped file). It needs an explicit `NorseRef` to Asgard's `Abstractions.Contracts` now, both for `GenerateGatewayAttribute`/`Outcome<T>` this task's `IAuthenticationService.cs`/`LoginResult.cs` changes reference directly, and — as a consequence, not a separate step — for the generator itself, which is bundled into that same package (`analyzers/dotnet/cs/`, 2026-07-24 correction from Task 7's review) rather than shipped as its own standalone package. No separate `PackageReference Include="Norse.Abstractions.Contracts.Generator"` exists anywhere in this plan.
+
+The `Generator="true"` metadata is required, not optional: Bifröst's root `Directory.Build.targets` NorseRef `Choose` block only adds the second `ProjectReference OutputItemType="Analyzer"` (pointed at `Asgard/gen/Abstractions.Contracts.Generator/Abstractions.Contracts.Generator.csproj`) when that metadata is present. Without it, a `-p:UseProjectReferences=true` dev-mode build gets the plain runtime `ProjectReference` and silently never runs the generator — no error, no `NORSE00x` diagnostics, no generated file, just a missing `IAuthenticationGateway` that Task 13 would fail to find. Verified live (2026-07-24): a throwaway consumer project with `NorseRef Include="Abstractions.Contracts" Generator="true"` and `-p:UseProjectReferences=true` correctly ran the analyzer and reported a real `NORSE00x` diagnostic against a malformed test interface, confirming the mechanism fires end to end. The generator project itself was renamed from `Abstractions.Gateway.Generator` to `Abstractions.Contracts.Generator` for exactly this reason — the root convention resolves the generator path from the runtime NorseRef's own `%(Identity)`, so the two names must match.
 
 ```xml
 <ItemGroup>
 	<PackageReference Include="Microsoft.AspNetCore.Authorization" Version="10.*" />
-	<PackageReference Include="Norse.Abstractions.Gateway.Generator" Version="0.*" PrivateAssets="all" />
+	<NorseRef Include="Abstractions.Contracts" Generator="true">
+		<Repo>Asgard</Repo>
+	</NorseRef>
 </ItemGroup>
 <PropertyGroup>
 	<NorseGatewayEmissionMode>Contract</NorseGatewayEmissionMode>
@@ -2292,28 +2433,33 @@ public sealed record LoginResult
 - [ ] **Step 5: Build to confirm the generator emits `IAuthenticationGateway` and there are no `NORSE001` diagnostics**
 
 Run: `dotnet build Heimdall/src/AuthN.Services`
-Expected: Build succeeds; `dotnet build -v:diag` output (or inspecting `obj/Debug/net*/generated/`) shows `AuthenticationGateway.g.cs` containing `public interface IAuthenticationGateway` with `Login`/`Register`/`Logout` each returning `ValueTask<Outcome<LoginResult>>`/`ValueTask<Outcome>`. Zero `NORSE001` diagnostics — every method already carries `[Authorize]`.
+Expected: Build succeeds; `dotnet build -v:diag` output (or inspecting `obj/Debug/net*/generated/`) shows `AuthenticationGateway.g.cs` containing `public interface IAuthenticationGateway` with `Login` returning `ValueTask<Outcome<LoginResult>>`, `Register` returning `ValueTask<Outcome<Unit>>`, and `Logout` returning `ValueTask<Outcome<LogoutResult>>`. Zero `NORSE001` diagnostics — every method already carries `[Authorize]`.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add Heimdall/src/AuthN.Services/AuthNPolicies.cs Heimdall/src/AuthN.Services/IAuthenticationService.cs Heimdall/src/AuthN.Services/LoginResult.cs Heimdall/src/AuthN.Services/AuthN.Services.csproj
-git commit -m "feat: decorate IAuthenticationService for gateway generation, add LoginResult.DeferredCompletionUrl"
+git add Heimdall/src/AuthN.Services/AuthNPolicies.cs Heimdall/src/AuthN.Services/LogoutResult.cs Heimdall/src/AuthN.Services/IAuthenticationService.cs Heimdall/src/AuthN.Services/LoginResult.cs Heimdall/src/AuthN.Services/AuthN.Services.csproj
+git commit -m "feat: decorate IAuthenticationService for gateway generation, add LoginResult.DeferredCompletionUrl, add LogoutResult"
 ```
 
 ---
 
-## Task 11: Heimdall — Retire the hand-written gateway trio, update `Login.razor`
+## Task 11: Heimdall — Retire the hand-written gateway trio, update `Login.razor` and `Logout.razor`
 
 **Files:**
 - Delete: `Heimdall/src/AuthN.Components/IAuthenticationGateway.cs`
 - Delete: `Heimdall/src/AuthN.Components/AuthenticationResult.cs`
 - Modify: `Heimdall/src/AuthN.Components.FluentUI/Login.razor`
-- Modify: any test in `Heimdall/tests/AuthN.Components.Tests/` referencing the deleted types
+- Modify: `Heimdall/src/AuthN.Components.FluentUI/Register.razor`
+- Modify: `Heimdall/src/AuthN.Components/Logout.razor`
+- Modify: `Heimdall/tests/AuthN.Components.Tests/LogoutTests.cs`
+- Modify: any other test in `Heimdall/tests/AuthN.Components.Tests/`/`Heimdall/tests/AuthN.Components.FluentUI.Tests/` referencing the deleted types
 
 **Interfaces:**
-- Consumes: the generated `IAuthenticationGateway` (Task 10's build output) — `ValueTask<Outcome<LoginResult>> Login(LoginRequest, CancellationToken)`.
-- Produces: nothing new — this task is a pure consumer swap. `Login.razor` keeps its existing manual `EditContext`/`ValidationMessageStore` mechanism (no Blazilla adoption in this plan — spec §2.2 fast-follow, out of scope here), just reads from `Outcome<LoginResult>.Problem.Errors` instead of the old `AuthenticationResult.Errors`.
+- Consumes: the generated `IAuthenticationGateway` (Task 10's build output) — `ValueTask<Outcome<LoginResult>> Login(LoginRequest, CancellationToken)`, `ValueTask<Outcome<LogoutResult>> Logout(LogoutRequest, CancellationToken)`.
+- Produces: nothing new — this task is a pure consumer swap. `Login.razor` keeps its existing manual `EditContext`/`ValidationMessageStore` mechanism (no Blazilla adoption in this plan — spec §2.2 fast-follow, out of scope here), just reads from `Outcome<LoginResult>.Problem.Errors` instead of the old `AuthenticationResult.Errors`. `Logout.razor` reads `LogoutResult.DeferredCompletionUrl` the same way it previously read it off `AuthenticationResult` — its own `IAuthenticationGateway.Logout` call and `OnInitializedAsync` shape are otherwise unchanged, only the return type it pattern-matches on.
+
+**`Logout.razor` and `Register.razor` are in scope here, not Task 10 afterthoughts** (2026-07-24 correction, found while scoping this task): `IAuthenticationGateway.cs`/`AuthenticationResult.cs` are deleted in Step 3 below, and `Logout.razor`/`LogoutTests.cs`/`Register.razor` all already reference them (confirmed by grep against the real, currently-shipped files) — leaving any of them untouched would break the build the moment Step 3 runs. `Logout.razor` lives in the base `AuthN.Components` project (pure `@code`, no markup, moved there in an earlier session — see `Heimdall/CLAUDE.md`), not `.FluentUI` alongside `Login.razor`/`Register.razor`; its test correspondingly lives in `AuthN.Components.Tests`, not `AuthN.Components.FluentUI.Tests`. `Register.razor` has no dedicated component test today (only `RegisterRequestValidatorTests.cs`, which tests the FluentValidation rules and doesn't touch the gateway at all) — its update is production-code-only, no test file to write or fix.
 
 - [ ] **Step 1: Write the failing component test — `Login.razor` renders the anti-enumeration message on a collapsed failure, and a distinguishable message on `LockedOut`**
 
@@ -2329,7 +2475,7 @@ using Shouldly;
 
 namespace Norse.AuthN.Components.FluentUI.Tests;
 
-class LoginTests : TestContext
+public sealed class LoginTests : TestContext
 {
 	[Fact]
 	void WrongCredentials_CollapsedFailure_ShowsGenericMessage()
@@ -2367,10 +2513,59 @@ class LoginTests : TestContext
 
 `Outcome<LoginResult>.Ok`/`.Err` above are the union's own public factories — unaffected by the rewrite. Only `Login.razor`'s own consumption (Step 4) changes, from flat property reads to a `Match`.
 
-- [ ] **Step 2: Run test to verify it fails**
+Full replacement of `Heimdall/tests/AuthN.Components.Tests/LogoutTests.cs` (same two cases as the currently-shipped file — direct sign-out, and deferred-to-completion-url sign-out — updated to mock the generated gateway's `Outcome<LogoutResult>` return instead of the retired `AuthenticationResult`):
+
+```csharp
+// Heimdall/tests/AuthN.Components.Tests/LogoutTests.cs
+using Bunit;
+using Bunit.TestDoubles;
+using Microsoft.Extensions.DependencyInjection;
+using Norse.Abstractions.Contracts;
+using Norse.AuthN.Services;
+
+namespace Norse.AuthN.Components.Tests;
+
+public sealed class LogoutTests : BunitContext
+{
+	[Fact]
+	void Navigates_to_root_when_the_gateway_completes_sign_out_directly()
+	{
+		var gateway = Substitute.For<IAuthenticationGateway>();
+		gateway.Logout(Arg.Any<LogoutRequest>(), Arg.Any<CancellationToken>())
+			.Returns(ValueTask.FromResult(Outcome<LogoutResult>.Ok(new LogoutResult())));
+		Services.AddSingleton(gateway);
+		var navigation = Services.GetRequiredService<BunitNavigationManager>();
+
+		Render<Logout>();
+
+		navigation.Uri.ShouldBe(navigation.BaseUri);
+		navigation.History.ShouldHaveSingleItem().Options.ForceLoad.ShouldBeTrue();
+	}
+
+	[Fact]
+	void Navigates_to_the_deferred_completion_url_when_the_gateway_could_not_sign_out_directly()
+	{
+		var gateway = Substitute.For<IAuthenticationGateway>();
+		gateway.Logout(Arg.Any<LogoutRequest>(), Arg.Any<CancellationToken>())
+			.Returns(ValueTask.FromResult(Outcome<LogoutResult>.Ok(new LogoutResult { DeferredCompletionUrl = "/_auth/complete?key=abc&returnUrl=%2F" })));
+		Services.AddSingleton(gateway);
+		var navigation = Services.GetRequiredService<BunitNavigationManager>();
+
+		Render<Logout>();
+
+		navigation.Uri.ShouldBe(navigation.ToAbsoluteUri("/_auth/complete?key=abc&returnUrl=%2F").ToString());
+		navigation.History.ShouldHaveSingleItem().Options.ForceLoad.ShouldBeTrue();
+	}
+}
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
 
 Run: `dotnet test Heimdall/tests/AuthN.Components.FluentUI.Tests --filter LoginTests`
 Expected: FAIL — `Login.razor` still injects the old `IAuthenticationGateway` returning `AuthenticationResult`, not `Outcome<LoginResult>`.
+
+Run: `dotnet test Heimdall/tests/AuthN.Components.Tests --filter LogoutTests`
+Expected: FAIL — same reason, `AuthenticationResult` vs `Outcome<LogoutResult>`.
 
 - [ ] **Step 3: Delete the retired types**
 
@@ -2437,26 +2632,106 @@ Replace the `HandleLoginAsync` method (and add the gateway injection, which now 
 }
 ```
 
-- [ ] **Step 5: Fix any other test in `Heimdall/tests/AuthN.Components.Tests/` referencing the deleted `IAuthenticationGateway`/`AuthenticationResult`**
+- [ ] **Step 5: Update `Register.razor`'s `@code` block to consume `Outcome<Unit>`**
 
-Run: `dotnet build Heimdall.slnx` and fix each resulting compile error by updating the `using`/type to the generated `Norse.AuthN.Services.IAuthenticationGateway` and `Outcome<LoginResult>`.
+Full replacement of the `@code` block in `Heimdall/src/AuthN.Components.FluentUI/Register.razor` (the `@page`/`@inject`/markup above it are unchanged, only the injected type resolves differently now that `IAuthenticationGateway` is generated):
 
-- [ ] **Step 6: Run test to verify it passes**
+```razor
+@code {
+	readonly RegisterRequest _request = new() { Email = "", Password = "" };
+	EditContext _editContext = null!;
+	ValidationMessageStore _messageStore = null!;
+
+	/// <inheritdoc />
+	protected override void OnInitialized()
+	{
+		_editContext = new EditContext(_request);
+		_messageStore = new ValidationMessageStore(_editContext);
+	}
+
+	async Task HandleRegisterAsync()
+	{
+		_messageStore.Clear();
+		var outcome = await AuthenticationGateway.Register(_request, CancellationToken.None);
+
+		if (outcome.TryGetValue(out Failed failed))
+		{
+			// Register never produces an empty Errors dictionary on failure — Conflict/Validation are
+			// always populated (spec §9.3), unlike Login's anti-enumeration collapse. No fallback needed.
+			foreach (var (field, messages) in failed.Problem.Errors)
+			{
+				var identifier = new FieldIdentifier(_request, field);
+				foreach (var message in messages)
+					_messageStore.Add(identifier, message);
+			}
+
+			_editContext.NotifyValidationStateChanged();
+			return;
+		}
+
+		Navigation.NavigateTo("/Account/Login");
+	}
+}
+```
+
+Also add `@using Norse.Abstractions.Contracts` to the top of the file, above the existing `@inject` lines — needed for `Failed`/`Outcome<T>` to resolve (`Norse.AuthN.Services`, where `RegisterRequest` already lives, is already project-wide via `AuthN.Components.FluentUI/_Imports.razor` — no change needed there, unlike the brief's Login.razor snippet which restates it explicitly).
+
+- [ ] **Step 6: Update `Logout.razor`'s `@code` block to consume `Outcome<LogoutResult>`**
+
+Full replacement of `Heimdall/src/AuthN.Components/Logout.razor`:
+
+```razor
+@page "/Account/Logout"
+@using Norse.AuthN.Services
+@using Norse.Abstractions.Contracts
+@inject IAuthenticationGateway AuthenticationGateway
+@inject NavigationManager Navigation
+
+@code {
+	/// <inheritdoc />
+	protected override async Task OnInitializedAsync()
+	{
+		var outcome = await AuthenticationGateway.Logout(new LogoutRequest(), CancellationToken.None);
+
+		// Non-null only when this request couldn't complete the sign-out itself (an established Blazor
+		// Server interactive circuit, where the response has already started) — a forced full-page
+		// navigation to the completion endpoint finishes it on a genuine new request instead. A failed
+		// sign-out (Failed case, rare) still routes home — there's no cookie state left for the UI to
+		// usefully recover, matching this component's pre-existing lack of any error-display path.
+		var url = outcome switch
+		{
+			Success<LogoutResult>(var logoutResult) => logoutResult.DeferredCompletionUrl ?? "/",
+			Failed => "/",
+		};
+		Navigation.NavigateTo(url, forceLoad: true);
+	}
+}
+```
+
+- [ ] **Step 7: Fix any other test in `Heimdall/tests/AuthN.Components.Tests/`/`Heimdall/tests/AuthN.Components.FluentUI.Tests/` referencing the deleted `IAuthenticationGateway`/`AuthenticationResult`**
+
+Run: `dotnet build Heimdall.slnx` and fix each resulting compile error by updating the `using`/type to the generated `Norse.AuthN.Services.IAuthenticationGateway` and `Outcome<LoginResult>`/`Outcome<Unit>`/`Outcome<LogoutResult>`.
+
+- [ ] **Step 8: Run tests to verify they pass**
 
 Run: `dotnet test Heimdall/tests/AuthN.Components.FluentUI.Tests --filter LoginTests`
 Expected: PASS (2 tests).
 
-- [ ] **Step 7: Run the full Heimdall test suite**
+Run: `dotnet test Heimdall/tests/AuthN.Components.Tests --filter LogoutTests`
+Expected: PASS (2 tests).
+
+- [ ] **Step 9: Run the full Heimdall test suite**
 
 Run: `dotnet test Heimdall.slnx`
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
-git add Heimdall/src/AuthN.Components.FluentUI/Login.razor Heimdall/tests/AuthN.Components.FluentUI.Tests/LoginTests.cs
+git add Heimdall/src/AuthN.Components.FluentUI/Login.razor Heimdall/src/AuthN.Components.FluentUI/Register.razor Heimdall/tests/AuthN.Components.FluentUI.Tests/LoginTests.cs
+git add Heimdall/src/AuthN.Components/Logout.razor Heimdall/tests/AuthN.Components.Tests/LogoutTests.cs
 git add -u Heimdall/src/AuthN.Components Heimdall/tests
-git commit -m "feat: retire hand-written IAuthenticationGateway/AuthenticationResult, consume generated gateway in Login.razor"
+git commit -m "feat: retire hand-written IAuthenticationGateway/AuthenticationResult, consume generated gateway in Login.razor, Register.razor, Logout.razor"
 ```
 
 ---
@@ -2516,7 +2791,7 @@ using Shouldly;
 
 namespace Norse.Identity.Web.Server.Tests;
 
-class AuthenticationServiceTests
+public sealed class AuthenticationServiceTests
 {
 	[Fact]
 	async Task Login_Succeeds_ReturnsLoginResult_WithNoDeferredCompletionUrl_WhenNoneStashed()
@@ -2579,6 +2854,68 @@ class AuthenticationServiceTests
 
 		result.DeferredCompletionUrl.ShouldNotBeNull();
 		result.DeferredCompletionUrl.ShouldContain("stashed-key");
+	}
+
+	// Logout needs the identical deferred-completion coverage as Login (2026-07-24 correction, found
+	// while scoping Task 11) — clearing the auth cookie hits the same Response.HasStarted constraint
+	// as setting one, so Logout's TryGetDeferredCompletionUrl() call isn't optional plumbing.
+
+	[Fact]
+	async Task Logout_Succeeds_ReturnsLogoutResult_WithNoDeferredCompletionUrl_WhenNoneStashed()
+	{
+		var logoutHandler = Substitute.For<IRequestHandler<LogoutRequest, Outcome>>();
+		logoutHandler.Handle(Arg.Any<LogoutRequest>(), Arg.Any<CancellationToken>())
+			.Returns(ValueTask.FromResult(Outcome.Ok(Unit.Value)));
+		var accessor = Substitute.For<IHttpContextAccessor>();
+		accessor.HttpContext.Returns(new DefaultHttpContext());
+		var service = new AuthenticationService(
+			Substitute.For<IRequestHandler<LoginRequest, Outcome<BoolResponse>>>(),
+			Substitute.For<IRequestHandler<RegisterRequest, Outcome<BoolResponse>>>(),
+			logoutHandler,
+			accessor);
+
+		var result = await service.Logout(new LogoutRequest());
+
+		result.DeferredCompletionUrl.ShouldBeNull();
+	}
+
+	[Fact]
+	async Task Logout_Succeeds_PopulatesDeferredCompletionUrl_WhenStashedOnHttpContext()
+	{
+		var logoutHandler = Substitute.For<IRequestHandler<LogoutRequest, Outcome>>();
+		logoutHandler.Handle(Arg.Any<LogoutRequest>(), Arg.Any<CancellationToken>())
+			.Returns(ValueTask.FromResult(Outcome.Ok(Unit.Value)));
+		var httpContext = new DefaultHttpContext();
+		httpContext.Items[NorseSignInManager.DeferredSignInKeyItemName] = "stashed-key";
+		var accessor = Substitute.For<IHttpContextAccessor>();
+		accessor.HttpContext.Returns(httpContext);
+		var service = new AuthenticationService(
+			Substitute.For<IRequestHandler<LoginRequest, Outcome<BoolResponse>>>(),
+			Substitute.For<IRequestHandler<RegisterRequest, Outcome<BoolResponse>>>(),
+			logoutHandler,
+			accessor);
+
+		var result = await service.Logout(new LogoutRequest());
+
+		result.DeferredCompletionUrl.ShouldNotBeNull();
+		result.DeferredCompletionUrl.ShouldContain("stashed-key");
+	}
+
+	[Fact]
+	async Task Logout_BusinessFailure_ThrowsRpcExceptionWithErrorInfo()
+	{
+		var logoutHandler = Substitute.For<IRequestHandler<LogoutRequest, Outcome>>();
+		logoutHandler.Handle(Arg.Any<LogoutRequest>(), Arg.Any<CancellationToken>())
+			.Returns(ValueTask.FromResult(Outcome.Err(ErrorCategory.Fault)));
+		var accessor = Substitute.For<IHttpContextAccessor>();
+		accessor.HttpContext.Returns(new DefaultHttpContext());
+		var service = new AuthenticationService(
+			Substitute.For<IRequestHandler<LoginRequest, Outcome<BoolResponse>>>(),
+			Substitute.For<IRequestHandler<RegisterRequest, Outcome<BoolResponse>>>(),
+			logoutHandler,
+			accessor);
+
+		await Should.ThrowAsync<RpcException>(async () => await service.Logout(new LogoutRequest()));
 	}
 }
 ```
@@ -2643,11 +2980,14 @@ public sealed class AuthenticationService(
 	}
 
 	[Microsoft.AspNetCore.Authorization.Authorize(Policy = AuthNPolicies.Public)]
-	public async Task Logout(LogoutRequest request)
+	public async Task<LogoutResult> Logout(LogoutRequest request)
 	{
 		var outcome = await logoutHandler.Handle(request, httpContextAccessor.HttpContext!.RequestAborted).ConfigureAwait(false);
-		if (outcome.TryGetValue(out Failed failed))
-			throw failed.Problem.ToRpcException();
+		return outcome switch
+		{
+			Success<Unit> => new LogoutResult { DeferredCompletionUrl = TryGetDeferredCompletionUrl() },
+			Failed(var problem) => throw problem.ToRpcException(),
+		};
 	}
 
 	string? TryGetDeferredCompletionUrl()
@@ -2683,7 +3023,7 @@ services.AddScoped<FluentValidation.IValidator<LogoutRequest>, FluentValidation.
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `dotnet test Himinbjorg/tests/Identity.Web.Server.Tests --filter AuthenticationServiceTests`
-Expected: PASS (3 tests).
+Expected: PASS (6 tests — 3 Login, 3 Logout).
 
 - [ ] **Step 6: Run the full Himinbjörg test suite**
 
@@ -2734,7 +3074,7 @@ using Shouldly;
 
 namespace Norse.Hosting.Web.Server.Tests;
 
-class EnvelopeHydrationStateTests
+public sealed class EnvelopeHydrationStateTests
 {
 	[Fact]
 	async Task Persist_ThenTryTake_RoundTripsSuccessCase()
@@ -2880,21 +3220,27 @@ app.MapGrpcService<AuthenticationService>();
 
 (`AuthenticationService` resolves via the existing `using Norse.Identity.Web.Server;`, already present in this file.)
 
-- [ ] **Step 5: Set the `InProcessHost` emission mode and add the generator + Midgard `PackageReference`s to `Hosting.Web.Server.csproj`**
+- [ ] **Step 5: Set the `InProcessHost` emission mode and add the Midgard `NorseRef` to `Hosting.Web.Server.csproj`**
+
+**No separate generator `PackageReference` needed once published** (2026-07-24 correction, Task 7 review): the generator is bundled into `Abstractions.Contracts`'s own package, which `Hosting.Web.Server` already reaches transitively (through Himinbjörg's `Identity.Web.Server` → Heimdall's `AuthN.Services` → Asgard's `Abstractions.Contracts`) — NuGet analyzer packages apply to a project's own compilation through a transitive `PackageReference` chain, not only a direct one.
+
+**Dev mode (`-p:UseProjectReferences=true`) is the exception, and it's the mode this plan actually builds and tests under** (2026-07-24 correction, generator-propagation investigation ahead of Task 10 dispatch): unlike NuGet's package-level analyzer propagation, Bifröst's root `Directory.Build.targets` resolves `NorseRef` into a plain `ProjectReference` in dev mode, and a plain `ProjectReference`'s `OutputItemType="Analyzer"` metadata does **not** cascade through multiple hops — `Hosting.Web.Server` needs its own direct `NorseRef` to `Abstractions.Contracts` with `Generator="true"` to get the generator running on *its own* compilation (which is where `NorseGatewayEmissionMode=InProcessHost` is read and `AuthenticationInProcessGateway.g.cs` needs to land — the generator's compiled-symbol walk discovers `IAuthenticationService` in a referenced assembly, but the analyzer itself must be wired directly). Verified live: a throwaway `NorseRef Generator="true"` consumer under `-p:UseProjectReferences=true` correctly triggered the analyzer.
 
 ```xml
 <PropertyGroup>
 	<NorseGatewayEmissionMode>InProcessHost</NorseGatewayEmissionMode>
 </PropertyGroup>
 <ItemGroup>
-	<PackageReference Include="Norse.Abstractions.Gateway.Generator" Version="0.*" PrivateAssets="all" />
 	<NorseRef Include="Infrastructure.Web.Server">
 		<Repo>Midgard</Repo>
+	</NorseRef>
+	<NorseRef Include="Abstractions.Contracts" Generator="true">
+		<Repo>Asgard</Repo>
 	</NorseRef>
 </ItemGroup>
 ```
 
-(`Infrastructure.Web.Server` NorseRef is already present transitively today via Himinbjörg's `Identity.Web.Server`; this makes it explicit — same fix already applied once before, for `IDeferredSignIn`, in `../Platform/specs/2026-07-15-deferred-signin-realm-placement-design.md`.)
+(`Infrastructure.Web.Server` NorseRef is already present transitively today via Himinbjörg's `Identity.Web.Server`; this makes it explicit — same fix already applied once before, for `IDeferredSignIn`, in `../Platform/specs/2026-07-15-deferred-signin-realm-placement-design.md`. `Abstractions.Contracts` is also already present transitively; `Generator="true"` is the new, load-bearing part — omitting it means dev-mode builds silently skip gateway generation, no error, no diagnostic, just a missing generated type Step 7's tests would fail to find.)
 
 - [ ] **Step 6: Delete `BlazorServerAuthenticationGateway.cs`; update `Hosting.Web.Client`'s gateway registration and emission mode**
 
@@ -2917,14 +3263,16 @@ builder.Services.AddSingleton(authNChannel.CreateGrpcService<IAuthenticationServ
 builder.Services.AddScoped<IAuthenticationGateway, AuthenticationWireGateway>(); // generated, Task 8
 ```
 
-`Yggdrasil/src/Hosting.Web.Client/Hosting.Web.Client.csproj` gains the same generator `PackageReference` with `WireHost` mode instead:
+`Yggdrasil/src/Hosting.Web.Client/Hosting.Web.Client.csproj` gets the `WireHost` emission mode instead — no `PackageReference` needed once published, for the same reason as `Hosting.Web.Server` above (the generator rides along transitively via `Abstractions.Contracts`, already reached through Heimdall's `AuthN.Components`/`AuthN.Services`). Same dev-mode exception applies too: an explicit `NorseRef Generator="true"` to `Abstractions.Contracts` is required for the analyzer to run on `Hosting.Web.Client`'s own compilation under `-p:UseProjectReferences=true`.
 
 ```xml
 <PropertyGroup>
 	<NorseGatewayEmissionMode>WireHost</NorseGatewayEmissionMode>
 </PropertyGroup>
 <ItemGroup>
-	<PackageReference Include="Norse.Abstractions.Gateway.Generator" Version="0.*" PrivateAssets="all" />
+	<NorseRef Include="Abstractions.Contracts" Generator="true">
+		<Repo>Asgard</Repo>
+	</NorseRef>
 </ItemGroup>
 ```
 
@@ -2970,7 +3318,7 @@ sealed class RestrictedService : IRestrictedService
 	public Task<RestrictedResponse> Restricted(RestrictedRequest request) => Task.FromResult(new RestrictedResponse());
 }
 
-class WirePathAuthorizationTests
+public sealed class WirePathAuthorizationTests
 {
 	[Fact]
 	async Task UnauthenticatedCall_AgainstRestrictivePolicy_RejectedWithUnauthenticatedAndErrorInfo()
@@ -3019,7 +3367,7 @@ Add `Microsoft.AspNetCore.TestHost` (`PackageReference Version="10.*"`) to `Yggd
 - [ ] **Step 9: Build the whole solution to confirm the generated gateways compile against real Midgard/Himinbjörg/Heimdall packages**
 
 Run: `dotnet build Yggdrasil.slnx`
-Expected: Build succeeds. `AuthenticationInProcessGateway`/`AuthenticationWireGateway` appear in each project's generated-files output (`obj/**/generated/Norse.Abstractions.Gateway.Generator/`), both implementing `IAuthenticationGateway`.
+Expected: Build succeeds. `AuthenticationInProcessGateway`/`AuthenticationWireGateway` appear in each project's generated-files output (`obj/**/generated/Norse.Abstractions.Contracts.Generator/`), both implementing `IAuthenticationGateway`.
 
 - [ ] **Step 10: Commit**
 
@@ -3054,7 +3402,7 @@ using Shouldly;
 
 namespace Norse.Hosting.Web.Server.Tests;
 
-class AuthenticationHydrationParityTests
+public sealed class AuthenticationHydrationParityTests
 {
 	[Fact]
 	async Task Forbidden_IdenticalProblem_AcrossInProcessThenWireGateway()
