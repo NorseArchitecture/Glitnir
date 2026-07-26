@@ -14,7 +14,7 @@
 
 - Tabs for indentation everywhere; US English spelling in code, comments, and commit copy.
 - `TreatWarningsAsErrors=true` platform-wide — a malformed raw string literal (mismatched closing-delimiter indentation) is a compile error, not a warning; if a task's build fails on a raw string, fix the offending line's leading whitespace to match its literal's closing `"""` and re-run.
-- **No automatic git commits.** Every task ends with `git add` (stage) and a stop — never `git commit`. The human reviews the staged diff and commits. This applies even though the generic plan template below shows a "Commit" step; wherever it appears, it means stage-and-stop, not commit.
+- **Commits happen in Asgard, on the local unpushed `house_style` branch only.** Tasks 1–6 live entirely in Asgard, which is already checked out on `house_style` (clean, unpushed) — implementer subagents commit per task there, per standing policy: subagents may commit on a local unpushed branch the human is watching, never on `master`, never pushed. Task 7 edits Bifröst's own root `CLAUDE.md`, which stays on `master` per Bifröst's own hard law (never branched, never committed by an agent) — that task ends with `git add` (stage) and a stop; the human reviews and commits it.
 - No new/changed generated-code *behavior* anywhere in this plan (Tasks 2–6 are structural/formatting only) — every task's verification is the existing `Abstractions.Contracts.Generator.Tests` suite (`GatewayGeneratorTests.cs`) staying green, not a new test asserting new output.
 - **Raw string interpolation mechanic** (relevant from Task 3 onward): inside a `$$"""..."""` literal, only the *first* line of a multi-line interpolated value (`{{SomeHelper(...)}}`) lands at the hole's column — every subsequent line of that value is inserted verbatim, with no re-indentation. Helper methods that produce multi-line fragments (e.g. `Methods(model)` below) therefore bake their **full real output indentation** into every line they return, and the hole itself sits flush at the template's own baseline (no extra leading whitespace in the template source), not nested deeper to "look right" next to neighboring static lines.
 
@@ -190,14 +190,22 @@ public static class IsExternalInit;
 Run: `dotnet test Asgard/tests/Abstractions.Generator.Tests/Abstractions.Generator.Tests.csproj`
 Expected: PASS.
 
-- [ ] **Step 6: Stage**
+- [ ] **Step 6: Commit in Asgard; stage-only in the Bifröst root**
+
+In Asgard (commits to the local, unpushed `house_style` branch):
 
 ```bash
 git -C Asgard add src/Abstractions.Generator tests/Abstractions.Generator.Tests Asgard.slnx
-git -C . add Bifrost.slnx
+git -C Asgard commit -m "Add Norse.Abstractions.Generator toolkit project"
 ```
 
-Show the diff and stop — do not commit.
+In the Bifröst root — Bifröst itself stays on `master` and is never committed by an agent:
+
+```bash
+git add Bifrost.slnx
+```
+
+Show the Bifröst-root diff and stop there — do not commit it.
 
 ---
 
@@ -272,13 +280,12 @@ Run: `dotnet pack Asgard/src/Abstractions.Contracts/Abstractions.Contracts.cspro
 Run: `unzip -l /tmp/norse-pack-check/Norse.Abstractions.Contracts.*.nupkg | grep analyzers/dotnet/cs/`
 Expected: both `Norse.Abstractions.Contracts.Generator.dll` and `Norse.Abstractions.Generator.dll` listed.
 
-- [ ] **Step 6: Stage**
+- [ ] **Step 6: Commit**
 
 ```bash
 git -C Asgard add gen/Abstractions.Contracts.Generator src/Abstractions.Contracts/Abstractions.Contracts.csproj
+git -C Asgard commit -m "Wire Abstractions.Contracts.Generator to Norse.Abstractions.Generator"
 ```
-
-Show the diff and stop — do not commit.
 
 ---
 
@@ -345,13 +352,12 @@ Expected: PASS, identical to Step 1.
 
 If it fails to *compile* with a raw-string-literal indentation error, align the offending line's leading tabs with the closing `"""` on the line above `return builder.ToString();` — see Global Constraints.
 
-- [ ] **Step 4: Stage**
+- [ ] **Step 4: Commit**
 
 ```bash
 git -C Asgard add gen/Abstractions.Contracts.Generator/ContractEmitter.cs
+git -C Asgard commit -m "Retrofit ContractEmitter to AppendCSharp raw-string house style"
 ```
-
-Show the diff and stop — do not commit.
 
 ---
 
@@ -425,13 +431,12 @@ static class OutcomeSurrogatesEmitter
 Run: `dotnet test Asgard/tests/Abstractions.Contracts.Generator.Tests/Abstractions.Contracts.Generator.Tests.csproj --filter "OutcomeSurrogates|NeverEmitsProtobufNetReferences"`
 Expected: PASS, identical to Step 1.
 
-- [ ] **Step 4: Stage**
+- [ ] **Step 4: Commit**
 
 ```bash
 git -C Asgard add gen/Abstractions.Contracts.Generator/OutcomeSurrogatesEmitter.cs
+git -C Asgard commit -m "Retrofit OutcomeSurrogatesEmitter to AppendCSharp raw-string house style"
 ```
-
-Show the diff and stop — do not commit.
 
 ---
 
@@ -512,13 +517,12 @@ static class WireHostEmitter
 Run: `dotnet test Asgard/tests/Abstractions.Contracts.Generator.Tests/Abstractions.Contracts.Generator.Tests.csproj --filter "WireHostMode"`
 Expected: PASS, identical to Step 1.
 
-- [ ] **Step 4: Stage**
+- [ ] **Step 4: Commit**
 
 ```bash
 git -C Asgard add gen/Abstractions.Contracts.Generator/WireHostEmitter.cs
+git -C Asgard commit -m "Retrofit WireHostEmitter to AppendCSharp raw-string house style"
 ```
-
-Show the diff and stop — do not commit.
 
 ---
 
@@ -657,13 +661,12 @@ Expected: PASS, identical to Step 1.
 Run: `dotnet test Asgard/tests/Abstractions.Contracts.Generator.Tests/Abstractions.Contracts.Generator.Tests.csproj`
 Expected: PASS — every test in the file, confirming Tasks 3–6 together didn't regress anything across modes.
 
-- [ ] **Step 5: Stage**
+- [ ] **Step 5: Commit**
 
 ```bash
 git -C Asgard add gen/Abstractions.Contracts.Generator/InProcessHostEmitter.cs
+git -C Asgard commit -m "Retrofit InProcessHostEmitter to AppendCSharp raw-string house style"
 ```
-
-Show the diff and stop — do not commit.
 
 ---
 
