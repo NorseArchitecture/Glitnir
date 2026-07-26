@@ -1,4 +1,4 @@
-﻿export function init(elem) {
+export function init(elem) {
     elem.focus();
 
     // Auto-resize whenever the user types or if the value is set programmatically

@@ -1,4 +1,4 @@
-﻿// The following logic provides auto-scroll behavior for the chat messages list.
+// The following logic provides auto-scroll behavior for the chat messages list.
 // If you don't want that behavior, you can simply not load this module.
 
 window.customElements.define('chat-messages', class chatMessages extends HTMLElement {

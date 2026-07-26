@@ -1,4 +1,4 @@
-﻿#if CANARY
+#if CANARY
 namespace Glitnir.Probe;
 
 /// <summary>One member per rule the law must catch. Compiled only when EnableCanaries=true.</summary>
