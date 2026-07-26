@@ -154,6 +154,8 @@ To-one relationships (ancestors, peers — anywhere the cardinality is exactly o
 
 This means a future generic "projection expression" helper over any entity's `View` cannot assume collections never appear — it must support narrowing into an already-embedded bounded collection (select fields off each element) while still only ever *whittling down* what's already materialized in the JSON, never triggering a new join/query to expand into something that wasn't hydrated in.
 
+**SUPERSEDED 2026-07-26 — `View` is now a self-contained document, not ancestor-chain-only.** Buvy reversed this call: `View`'s type is `CountryOrAreaView` (`Id`, `Code`, `Alpha2`, `Alpha3`, `Name`, `Classification`, `Region: RegionNode?`) — the row's own peer fields are duplicated into the JSON alongside the ancestor chain, so `.Select(c => c.View)` alone is "everything about country X," no C#-side combining with the row's own columns needed. This also retired the Antarctica special case below: `View` itself is never null (peer fields always exist for every row); only the nested `Region` is null for Antarctica, exactly like Algeria's null `IntermediateRegion`. `RegionNode`/`SubregionNode`/`IntermediateRegionNode` also each gained an `Id` (sourced from the real `Region` row) so a projection can hand a region id downstream without a join. Original paragraph kept below for historical record:
+
 **Contents are the ancestor chain only — not a self-contained document.** `View` does not repeat `CountryOrArea`'s own `M49Code`/`IsoAlpha2Code`/`IsoAlpha3Code`/`Name`/the three booleans — those are already plain relational columns on the same row, and duplicating them into JSON would add nothing. A caller wanting "everything about country X" as one document combines the row's own columns with `View` in C#, not via a single database-side projection.
 
 **Two more rules for the generalized pattern (not yet exercised by this entity, recorded for the next one that is):**
@@ -172,7 +174,7 @@ builder.OwnsOne(c => c.View, region =>
 
 `.ToJson()` is called once, on the outermost owned type — nested owned types in the same chain map into the same JSON column automatically.
 
-**Hydration happens in the seed contributor, in C#** — not the database. After `Region` rows are resolved (§4), the seed contributor walks each `CountryOrArea`'s parent chain upward through the in-memory region rows to build its `RegionNode` graph, and sets `View` on the entity before `Add`. Algeria's `View.Subregion.IntermediateRegion` is `null` (Northern Africa has none); Antarctica's `View` is `null` entirely (no ancestor at all).
+**Hydration happens in the seed contributor, in C#** — not the database. After `Region` rows are resolved (§4), the seed contributor walks each `CountryOrArea`'s parent chain upward through the in-memory region rows to build its `RegionNode` graph, and sets `View` on the entity before `Add`. Algeria's `View.Region.Subregion.IntermediateRegion` is `null` (Northern Africa has none); Antarctica's `View.Region` is `null` entirely (no ancestor at all) — `View` itself is always present (see the 2026-07-26 supersession above).
 
 **Querying is a plain LINQ projection, translated to native JSON path expressions server-side** — on both Npgsql and SQL Server's EF provider, not a hand-written view or raw SQL:
 
@@ -202,7 +204,7 @@ A caller can project into a specific nested field (`.Select(c => c.View!.Subregi
 
 - `dotnet run` against the migrations service stands up `Region` and `CountryOrArea` tables in Mimisbrunnr's database and seeds all 248 `CountryOrArea` rows plus their deduplicated `Region` ancestors, with zero rows requiring a null `M49Code`/ISO code.
 - Re-running the seed contributor against an already-seeded database is a no-op (idempotency proven by primary-key lookup, not a full content diff).
-- `CountryOrArea.View` carries the correct nested shape for all three verified cases: a country with an Intermediate Region (Nigeria), a country with only Region/Subregion (Algeria, `IntermediateRegion` null), and the one country with no ancestor at all (Antarctica, `View` null).
+- `CountryOrArea.View` carries the correct nested shape for all three verified cases: a country with an Intermediate Region (Nigeria), a country with only Region/Subregion (Algeria, `IntermediateRegion` null), and the one country with no ancestor at all (Antarctica, `View.Region` null — `View` itself is never null, see the 2026-07-26 supersession in §5).
 - Every `Region`/`CountryOrArea` row's `Id` is reproducible: re-running the CSV→TSV conversion and reseeding from scratch produces byte-identical GUIDs for every row.
 
 ---
