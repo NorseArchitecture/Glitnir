@@ -4,6 +4,28 @@
 **Status:** Approved, ready for planning
 **Realm:** Asgard (new project), Bifröst (CLAUDE.md convention)
 
+**Addendum (final review, 2026-07-25):** two corrections from the whole-branch review, recorded here
+rather than rewritten into the body — the body below is the historical record of what was designed.
+
+1. **The project shipped as `Norse.Abstractions.Emit`, not `Norse.Abstractions.Generator`.** The
+   original name collided with the platform's duplicate-generator strip target
+   (`_NorseRemoveUnwantedGeneratorAnalyzers` in each realm's `src/Directory.Build.targets`), which
+   drops any `@(Analyzer)` item matching `^Norse\..+\.Generator$` that isn't the consumer's own
+   wanted generator — it stripped the toolkit right back out of every consumer's analyzer set. The
+   name was semantically wrong anyway: on this platform `Norse.X.Generator` means "the Roslyn
+   generator serving `Norse.X`", and this assembly is a generator-*authoring toolkit* serving every
+   realm's generator projects, not a generator and not specific to `Norse.Abstractions`.
+2. **Rollout step 2's "plain in-repo `ProjectReference`" is not sufficient on its own.** MSBuild's
+   `OutputItemType="Analyzer"` wiring pulls only the referenced project's own `GetTargetPath` output
+   into `@(Analyzer)` — never that project's transitive `ProjectReference`s. A Roslyn generator
+   project with a real assembly dependency must explicitly forward it by hooking
+   `GetTargetPathDependsOn` with a target that appends the dependency to
+   `@(TargetPathWithTargetPlatformMoniker)`; without it the generator loads and then dies with
+   `FileNotFoundException`, surfaced to the consumer as `CS8785`. Rollout step 3's `dotnet pack` +
+   `unzip` check proves the *package's* contents only — it says nothing about whether a
+   ProjectReference-mode consumer actually loads the dependency. The acceptance test is building a
+   real downstream consumer.
+
 ## Problem
 
 Source generators across the platform emit code via repeated `sb.AppendLine(...)` calls, one

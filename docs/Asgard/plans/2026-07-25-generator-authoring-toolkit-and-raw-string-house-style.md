@@ -10,6 +10,32 @@
 
 **Spec:** `../Glitnir/docs/Asgard/specs/2026-07-25-generator-authoring-toolkit-and-raw-string-house-style-design.md`
 
+**Addendum (final review, 2026-07-25):** the whole-branch review — run after all six tasks were
+individually reviewed and approved — found two things only visible across the whole branch. Recorded
+here; the task bodies below are left as the historical record of what was planned and executed.
+
+1. **The project shipped as `Norse.Abstractions.Emit`, not `Norse.Abstractions.Generator`** —
+   everywhere this plan says `Abstractions.Generator` / `Norse.Abstractions.Generator` (project
+   folder, csproj, namespace, test project, slnx entries, packed DLL name), read
+   `Abstractions.Emit` / `Norse.Abstractions.Emit`. The planned name collided with the platform's
+   duplicate-generator strip target (`_NorseRemoveUnwantedGeneratorAnalyzers` in each realm's
+   `src/Directory.Build.targets`), which drops any `@(Analyzer)` item matching
+   `^Norse\..+\.Generator$` that isn't the consumer's own wanted generator. It was semantically
+   wrong besides: `Norse.X.Generator` means "the generator serving `Norse.X`", and this is a
+   generator-*authoring toolkit* serving every realm's generator projects.
+2. **Task 2's "plain in-repo `ProjectReference`" does not get the dependency to consumers.**
+   `OutputItemType="Analyzer"` pulls only the referenced project's own `GetTargetPath` output into
+   `@(Analyzer)`, never its transitive `ProjectReference`s — so `Norse.Abstractions.Emit.dll` never
+   reached a consumer's analyzer load context and `GatewayGenerator` died at runtime with
+   `FileNotFoundException`, surfaced downstream as `CS8785`. The fix is an explicit forwarding
+   target in `Abstractions.Contracts.Generator.csproj` that hooks `GetTargetPathDependsOn` and
+   appends the dependency to `@(TargetPathWithTargetPlatformMoniker)` (filtered on both `Filename`
+   and `Extension` — `ReferenceCopyLocalPaths` carries the `.pdb`/`.xml` siblings, and feeding those
+   to Roslyn yields `CS8034`). Task 2's `dotnet pack` + `unzip` verification proves the *package's*
+   contents only; it cannot prove a ProjectReference-mode consumer loads them. The real acceptance
+   test is building a downstream consumer — `Heimdall/src/AuthN.Services`, which reaches this
+   generator through Bifröst's `NorseRef ... Generator="true"` forwarding.
+
 ## Global Constraints
 
 - Tabs for indentation everywhere; US English spelling in code, comments, and commit copy.
