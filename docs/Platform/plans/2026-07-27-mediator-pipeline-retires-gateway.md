@@ -502,6 +502,7 @@ git commit -m "feat!: delete GatewayGenerator, GenerateGatewayAttribute, and all
 - Consumes: `IRequestHandler<,>` (Task 2), `SenderDispatch<,>`/`ISenderDispatch` (Task 2), `FluentValidation.IValidator<T>`, `Microsoft.AspNetCore.Authorization.AuthorizeAttribute`.
 - Produces: one generated file per consuming assembly, `NorseHandlerRegistration.g.cs`, declaring `public static IServiceCollection AddNorse{AssemblyNameWithoutDots}Handlers(this IServiceCollection services)` — e.g. assembly `Norse.Identity.Web.Server` → `AddNorseIdentityWebServerHandlers()`. Per discovered handler: a scoped `IRequestHandler<TReq,TRes>` registration, a singleton `ISenderDispatch` → `SenderDispatch<TReq,TRes>` registration; per request type, a scoped `IValidator<TReq>` registration for every implementation found in the compiling assembly **or any referenced assembly** (Heimdall's validators serve Himinbjörg's handlers).
 - Diagnostics (`Norse.Mediator` category, all errors): **NORSE010** — two handlers for the same request type; **NORSE011** — a handled request type carries no `[Authorize(Policy = ...)]` with a non-empty policy (compile-time arm of spec §2.5; Midgard's `PolicyCache` is the runtime backstop).
+- **NORSE010 is per-assembly by design** (2026-07-27 review, priced not accidental): a *cross-realm* duplicate handler escapes the compiler — two realms each legally register a `SenderDispatch` for the same request type — and is caught at startup by `SenderDispatchMap`'s `ToFrozenDictionary` throwing on the duplicate key (Task 6). That is the chosen loud backstop; do not add cross-assembly discovery here to close it.
 - Discovery: handlers from the **compiling assembly only** (registration is a realm-local act; the generated code references `internal` handler types legally). Validators via compiled-symbol walk of `[compilation.Assembly, .. compilation.SourceModule.ReferencedAssemblySymbols]`.
 
 - [ ] **Step 1: Create the generator project**
@@ -1264,6 +1265,9 @@ namespace Norse.Infrastructure.Web.Server.Mediator;
 /// <summary>
 /// The sender's frozen request-type → dispatch-entry map, built once from every
 /// <see cref="ISenderDispatch"/> the realms' generated <c>AddNorse*Handlers()</c> calls registered.
+/// A cross-realm duplicate handler — invisible to NORSE010, which is per-assembly — lands here as
+/// <c>ToFrozenDictionary</c> throwing <see cref="ArgumentException"/> on the duplicate key at first
+/// resolution: the chosen loud startup backstop (2026-07-27 review), priced, not accidental.
 /// </summary>
 sealed class SenderDispatchMap(IEnumerable<ISenderDispatch> entries)
 {
@@ -1624,15 +1628,22 @@ public static class NorseGrpcServerRegistration
 {
 	static int _surrogatesRegistered;
 
-	/// <summary>Registers the Outcome&lt;T&gt; passthrough surrogates exactly once (idempotent).</summary>
+	/// <summary>Registers the Outcome&lt;T&gt; passthrough surrogates, idempotent per type.</summary>
 	public static void RegisterNorseOutcomeSurrogates()
 	{
 		if (global::System.Threading.Interlocked.Exchange(ref _surrogatesRegistered, 1) == 1)
 			return;
 		var model = global::ProtoBuf.Meta.RuntimeTypeModel.Default;
-		model.Add(typeof(global::Norse.Abstractions.Contracts.Outcome<global::Norse.Abstractions.Contracts.BoolResponse>), applyDefaultBehaviour: false).SetSurrogate(typeof(global::Norse.Abstractions.Contracts.BoolResponse));
-		model.Add(typeof(global::Norse.Abstractions.Contracts.Outcome<global::Norse.Abstractions.Contracts.Unit>), applyDefaultBehaviour: false).SetSurrogate(typeof(global::Norse.Abstractions.Contracts.Unit));
-		// ... one line per distinct payload across all discovered contracts (LoginResult, LogoutResult, ...)
+		if (!model.IsDefined(typeof(global::Norse.Abstractions.Contracts.Outcome<global::Norse.Abstractions.Contracts.BoolResponse>)))
+			model.Add(typeof(global::Norse.Abstractions.Contracts.Outcome<global::Norse.Abstractions.Contracts.BoolResponse>), applyDefaultBehaviour: false).SetSurrogate(typeof(global::Norse.Abstractions.Contracts.BoolResponse));
+		if (!model.IsDefined(typeof(global::Norse.Abstractions.Contracts.Outcome<global::Norse.Abstractions.Contracts.Unit>)))
+			model.Add(typeof(global::Norse.Abstractions.Contracts.Outcome<global::Norse.Abstractions.Contracts.Unit>), applyDefaultBehaviour: false).SetSurrogate(typeof(global::Norse.Abstractions.Contracts.Unit));
+		// ... one guarded pair per distinct payload across all discovered contracts (LoginResult, LogoutResult, ...)
+		// Per-type IsDefined guards, not just the per-class Interlocked fast path (2026-07-27 review cure):
+		// the server- and client-generated registrations write the SAME types to the SAME shared model
+		// when both run in one process — exactly what Task 16's parity test does. The second Add against
+		// an already-defined type would throw on protobuf-net's shared model; the guard makes both
+		// registrations idempotent per type regardless of which ran first.
 	}
 
 	/// <summary>Maps every discovered Norse gRPC service with gRPC-Web enabled, registering surrogates first.</summary>
@@ -1662,7 +1673,7 @@ public static class NorseGrpcClientRegistration
 {
 	static int _surrogatesRegistered;
 
-	public static void RegisterNorseOutcomeSurrogates() { /* identical idempotent body, client-side payload set */ }
+	public static void RegisterNorseOutcomeSurrogates() { /* identical per-type-IsDefined-guarded body, client-side payload set */ }
 
 	/// <summary>
 	/// Registers every discovered Norse contract's proxy over <paramref name="channel"/>, decoded
@@ -1685,10 +1696,11 @@ public static class NorseGrpcClientRegistration
 ```
 
 - Packaging: `Norse.Infrastructure.Web.Server` and `Norse.Infrastructure.Web.Client` packages each bundle their generator DLL + `Norse.Abstractions.Emit.dll` under `analyzers/dotnet/cs/`, exactly the Asgard Task 4 shape. Composition roots get the generators by referencing the packages they already reference — no extra install step, no emission-mode property, nothing to forget.
+- **`RuntimeTypeModel.Default` is the sanctioned home, on the record (2026-07-27 review):** this deviates from the desktop b2 directive's "dedicated `RuntimeTypeModel`, never `Default`" instruction, deliberately — the generated wiring now guarantees per-type idempotent registration (the `IsDefined` guards above), and `Default` means no `BinderConfiguration` threading on either end. This sentence supersedes the dedicated-model instruction; when the b2 brief lands in Glitnir, its ledger gets the same annotation (Task 17).
 
-- [ ] **Step 1: Write the failing server-generator tests** — same `CSharpGeneratorDriver` harness as Task 4 (assembly name `Norse.Hosting.Web.Server`); source under test declares Heimdall-shaped `IAuthenticationService` + a Himinbjörg-shaped implementing class. Assert: `MapGrpcService<global::...AuthenticationService>` emitted; `EnableGrpcWeb` emitted; one `SetSurrogate` line per distinct payload including `Unit`; `RegisterNorseOutcomeSurrogates()` called first inside `MapNorseGrpcServices`; NORSE020 fires when the implementation is absent.
+- [ ] **Step 1: Write the failing server-generator tests** — same `CSharpGeneratorDriver` harness as Task 4 (assembly name `Norse.Hosting.Web.Server`); source under test declares Heimdall-shaped `IAuthenticationService` + a Himinbjörg-shaped implementing class. Assert: `MapGrpcService<global::...AuthenticationService>` emitted; `EnableGrpcWeb` emitted; one `SetSurrogate` line per distinct payload including `Unit`; **every `SetSurrogate` line sits behind an `if (!model.IsDefined(...))` guard for its exact closed type** (the per-type idempotence cure — count of `IsDefined` occurrences equals count of `SetSurrogate` occurrences); `RegisterNorseOutcomeSurrogates()` called first inside `MapNorseGrpcServices`; NORSE020 fires when the implementation is absent.
 
-- [ ] **Step 2: Write the failing client-generator tests** — assert `CreateGrpcService<global::...IAuthenticationService>` over an `Intercept(...OutcomeClientInterceptor())` invoker; surrogate lines present; nothing emitted when no contract is visible.
+- [ ] **Step 2: Write the failing client-generator tests** — assert `CreateGrpcService<global::...IAuthenticationService>` over an `Intercept(...OutcomeClientInterceptor())` invoker; surrogate lines present **with the same per-type `IsDefined` guard assertion as Step 1**; nothing emitted when no contract is visible.
 
 - [ ] **Step 3: Run both test projects to verify failure**
 
@@ -2123,7 +2135,7 @@ PR merged, CI green, tag pushed. This gate includes the package-mode build (Task
 
 - [ ] **Step 1: Bifröst CLAUDE.md + README.md.** Remove Open Decision #2 (dissolved — the property no longer exists). Rewrite the 2026-07-25 state-of-the-union paragraph: the transport-neutral pipeline now runs through the hand-rolled mediator (`AddNorsePipeline` + `ISender`), the gateway generator and emission modes are deleted, and the martinothamar/Mediator claim is corrected (it was never a dependency — the pipeline is and was hand-rolled). Fix the stale "fixed and staged in Midgard, not yet shipped" IVT sentence (the grant is deleted entirely).
 - [ ] **Step 2: Glitnir CLAUDE.md §4 key rejections row:** `MediatR` → becomes `MediatR, martinothamar/Mediator` / use instead: `hand-rolled Norse pipeline (ISender + IBehavior fold)` / spec: `docs/Platform/specs/2026-07-27-mediator-pipeline-retires-gateway-design.md`. Same correction in `docs/decomposition.md`'s Midgard row.
-- [ ] **Step 3: Supersession notices.** Top of `2026-05-26-mediator-design.md` and `2026-07-24-transport-neutral-invocation-pipeline-design.md`: a dated one-paragraph banner naming what the 2026-07-27 design supersedes (mediator selection; gateway surface/generator packaging/chain composition/hydration decided law) and what survives (envelope, wire encoding, behavior semantics). One-line note in the 07-15 blazor-validation POC where it names martinothamar.
+- [ ] **Step 3: Supersession notices.** Top of `2026-05-26-mediator-design.md` and `2026-07-24-transport-neutral-invocation-pipeline-design.md`: a dated one-paragraph banner naming what the 2026-07-27 design supersedes (mediator selection; gateway surface/generator packaging/chain composition/hydration decided law) and what survives (envelope, wire encoding, behavior semantics). One-line note in the 07-15 blazor-validation POC where it names martinothamar. **When the desktop b2 brief lands in Glitnir, annotate its ledger:** `RuntimeTypeModel.Default` is the sanctioned surrogate home (generated wiring guarantees per-type idempotent registration), superseding the brief's dedicated-model instruction — see Task 9.
 - [ ] **Step 4: Stage everything, run nothing — docs only. The human commits Glitnir.**
 
 ---
