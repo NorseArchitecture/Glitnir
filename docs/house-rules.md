@@ -50,6 +50,38 @@ reading point.
   bucket.
 - **Tuple deconstruction when possible:** `var (code, name) = GetPair();` over
   pulling `.Item1`/`.Item2` or intermediate variables.
+- **Prefer primary constructors whenever applicable.** If a constructor exists
+  only to capture its parameters — stashing them for the members to use, or
+  forwarding them to a base — the primary-constructor form wins and the
+  hand-written constructor goes:
+
+  ```csharp
+  // Old (bad)
+  sealed class TestContributor : EfMigrationContributor<TestContext>
+  {
+      public TestContributor(TestContext ctx) : base(ctx) { }
+  }
+
+  // New (good)
+  sealed class TestContributor(TestContext ctx) : EfMigrationContributor<TestContext>(ctx);
+  ```
+
+  A constructor earns its body only when it genuinely does work (validation,
+  transformation, conditional wiring) that a primary constructor cannot express.
+- **Fold repeated same-type declarations into one multi-declarator statement.**
+  Two or more consecutive locals (or fields) of the same type declare the type
+  once — each declarator on its own line, indented:
+
+  ```csharp
+  // Old (bad)
+  SequentialGuid first = new();
+  SequentialGuid second = new();
+
+  // New (good)
+  SequentialGuid
+      first = new(),
+      second = new();
+  ```
 
 ## Strings
 
