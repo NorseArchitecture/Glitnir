@@ -7,6 +7,10 @@
 **Trigger:** live design conversation 2026-07-14/15, continued after a night's sleep. Follows `Heimdall/plans/2026-07-13-authn-bootstrap-slice.md` Task 1 (shipped) and picks up mid-Task-2.
 **Out of scope:** ErrorCategory vocabulary reconciliation (canonical 3-case vs. Asgard's shipped 6-case). `Outcome<T>` `Match`/sealed-hierarchy ergonomics upgrade. Both are independent decisions, not blocking, deliberately deferred.
 
+> **Superseded note (2026-07-27):** every mention of martinothamar/Mediator below (as the "canonical" dispatch core, per §1.2/§2.2/§4) was never true — no `.csproj` on the platform ever referenced it, and this POC's §2.2 spike never happened. `2026-07-27-mediator-pipeline-retires-gateway-design.md` records the actual, hand-rolled dispatch core (`ISender` + `IBehavior<,>` fold). Left in place below as the historical record of what this POC believed at the time.
+>
+> The §1.1 amendment below (2026-07-25, "`[GenerateGateway]` ... `GatewayGenerator` emits the gateway at compile time") is also superseded — the gateway generator was deleted 2026-07-27; components inject `I{Context}Service` directly. Same reference, `2026-07-27-mediator-pipeline-retires-gateway-design.md`.
+
 ---
 
 ## 0. How to Use This Document

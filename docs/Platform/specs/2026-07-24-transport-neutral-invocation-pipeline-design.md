@@ -7,6 +7,8 @@
 **Precedent this generalizes:** Heimdall's hand-written `IAuthenticationGateway` / `BlazorServerAuthenticationGateway` / `WasmAuthenticationGateway` trio, and Urdarbrunnr's just-shipped `gen/` Roslyn generator packaging layout.
 **Prior art referenced:** `GrpcControllerBase` pattern — https://github.com/protobuf-net/protobuf-net.Grpc/issues/264#issuecomment-1336253645
 
+> **Superseded in part (2026-07-27):** `2026-07-27-mediator-pipeline-retires-gateway-design.md` supersedes this document's §2.2 gateway surface, §2.4 generator packaging, §2.5 chain composition mechanism, and — decided law though it was — the §6 prerender-hydration story: `EnvelopeHydrationState` is deleted and prerender parity is deferred until real work on it starts. The envelope, wire encoding, and behavior *semantics* this document defines survive unchanged. Separately: `RuntimeTypeModel.Default` is now the sanctioned home for surrogate registration (generated wiring guarantees per-type idempotent registration), superseding the desktop b2 brief's dedicated-model instruction — when the b2 brief lands in Glitnir, annotate its ledger with this ruling; it has not landed as of this banner, so there is nothing to annotate yet.
+
 ---
 
 ## 1. Context

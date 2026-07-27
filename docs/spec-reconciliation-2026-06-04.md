@@ -167,7 +167,7 @@ Every ".NET 10" hard-pin updates to .NET 11 / EF Core 11 / C# 15:
 - **Analyzers spec §13** — "(currently .NET 10)" parenthetical; the migrate-at-RC1+go-live policy itself is unchanged and is what this ruling exercised.
 - **Norns spec §15** — acceptance ".NET 10 + EF Core 10" → ".NET 11 + EF Core 11".
 - **Persistence spec §18** — acceptance ".NET 10" pin.
-- **Mediator spec** — no version pin to fix, but note the lib floor (martinothamar/Mediator 3.0) needs a .NET 11 compatibility check when RC1 lands (open item §13 #2 there already covers re-evaluation).
+- **Mediator spec** — no version pin to fix, but note the lib floor (martinothamar/Mediator 3.0) needs a .NET 11 compatibility check when RC1 lands (open item §13 #2 there already covers re-evaluation). **Superseded 2026-07-27:** moot — martinothamar/Mediator was never actually wired into the platform; the mediator is hand-rolled. See `docs/Platform/specs/2026-07-27-mediator-pipeline-retires-gateway-design.md`.
 - **Svartálfheim spec** — stands as written; it was the spec that had it right. Its §4.1 preview-syntax caveat gains a "re-pin at RC1" note alongside the existing PG19-at-RC1 re-verification (norns §14 #2) — the two RC1-era re-checks should ride the same calendar trigger.
 - Sweep for any remaining "net10.0" / ".NET 10" strings across `docs/` when executing this item.
 

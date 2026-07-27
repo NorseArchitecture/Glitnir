@@ -2,6 +2,9 @@
 
 **Date:** 2026-05-26 (WIP checkpoint) · **Completed:** 2026-06-03
 **Status:** Approved design, pre-implementation
+
+> **Superseded in part (2026-07-27):** `2026-07-27-mediator-pipeline-retires-gateway-design.md` supersedes this document's dispatch-core selection. martinothamar/Mediator was never actually wired in — no `.csproj` on the platform ever referenced it — and the pipeline is and always was hand-rolled (`ISender` + `IBehavior<,>` fold). Every reference below to martinothamar/Mediator as the dispatch core is corrected there, not here. The envelope (`Outcome<T>`), wire encoding, and behavior *semantics* this document defines (validate → authorize pipeline, `ErrorCategory` door table) survive unchanged.
+
 **Owner:** Buvy
 
 > The 2026-05-26 WIP checkpoint locked §1–3 of an earlier shape. The 2026-06-03 completion supersedes parts of that shape deliberately — every superseded decision is listed in §11 with its replacement and rationale. Nothing was dropped silently.

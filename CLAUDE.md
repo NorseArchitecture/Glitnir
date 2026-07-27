@@ -156,7 +156,7 @@ Single server-side deployable: `Norse.Hosting.Web.Server` (one ASP.NET Core proc
 
 | Rejected | Use instead | Spec |
 |---|---|---|
-| MediatR | `martinothamar/Mediator` 3.0+ | `docs/Platform/specs/2026-05-26-mediator-design.md` |
+| MediatR, martinothamar/Mediator | hand-rolled Norse pipeline (`ISender` + `IBehavior` fold) | `docs/Platform/specs/2026-07-27-mediator-pipeline-retires-gateway-design.md` |
 | FluentAssertions | Shouldly | (commercial license) |
 | Moq | NSubstitute | — |
 | MassTransit / Wolverine | NServiceBus | `docs/Platform/specs/2026-06-03-messaging-foundation-design.md` |

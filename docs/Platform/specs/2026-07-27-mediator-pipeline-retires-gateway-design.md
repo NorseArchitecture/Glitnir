@@ -88,7 +88,10 @@ Because the chain wraps handlers, it runs identically regardless of which channe
 ### 2.3 Contracts (Asgard)
 
 ```csharp
-// Norse.Abstractions.Contracts — payload-typed; the pipeline owns the envelope
+// Norse.Abstractions.Web.Server.Mediator — payload-typed; the pipeline owns the envelope.
+// (2026-07-27 final placement: the markers are deliberately SERVER-ONLY — with the command-wrapper
+// seam, nothing WASM-shipped implements them, and living here means a wire assembly cannot even
+// reference them. Structural purity over convention: off-roading requires a csproj edit that screams.)
 public interface IRequest<TResponse> where TResponse : notnull;
 public interface ICommandRequest<TResponse> : IRequest<TResponse> where TResponse : notnull;
 public interface IQueryRequest<TResponse> : IRequest<TResponse> where TResponse : notnull;
@@ -111,7 +114,7 @@ public interface IRequestHandler<in TRequest, TResponse>
 - `IRequest<TResponse>` is the neutral marker `Send` accepts; `ICommandRequest<>`/`IQueryRequest<>` are its two derived markers. Both flow through the same chain in v1; the split exists so a future behavior can bind to one side only (a transaction behavior being the obvious eventual tenant). Void-success commands use `TResponse = Unit`.
 - The marker family revives `ICommandRequest<TResponse>` from dead code — the request→response type binding it was declared for now lives on its new base, `IRequest<TResponse>`, which is what `Send` infers from.
 - **Alignment ripple:** `IRequestHandler<TRequest, TResponse>` changes from fully-generic `ValueTask<TResponse>` to envelope-native `ValueTask<Outcome<TResponse>>` with `TResponse` as the *payload* — today's handlers close `TResponse = Outcome<LoginResult>` by hand. The whole chain (`IBehavior<,>`, `BehaviorDelegate<>`, handlers, `Send`) now speaks one type algebra. `IBehavior<,>` keeps its existing shape (it was already envelope-native).
-- Request records gain the marker interface, typed to the **handler's** payload — the service maps handler payloads onto wire results exactly as today (`BoolResponse` → `LoginResult` + deferred-completion URL): `LoginRequest : ICommandRequest<BoolResponse>`, `RegisterRequest : ICommandRequest<BoolResponse>`, `LogoutRequest : ICommandRequest<Unit>`. All three are commands (login mutates lockout counters and mints a cookie). Marker interfaces are `Norse.Abstractions.Contracts` — WASM-safe by construction.
+- **Wire and mediator requests are separate types (final form — 2026-07-27 execution ruling, third iteration, ratified):** the `[DataContract]` wire records carry **no mediator coupling at all** — no marker interface, no `[Authorize]` — keeping the WASM-shipped payload assemblies as lean as possible. The properly decorated mediator requests are **server-sovereign types in the implementing realm** (`LoginCommand`/`RegisterCommand`/`LogoutCommand` in Himinbjörg, each `[Authorize(Policy = ...)]` + `ICommandRequest<TWireResult>`). On ingress the gRPC service **hydrates** the command from the wire DTO and `Send`s it; on egress there is no mapping — **handlers respond `Outcome<TResponse>` where `TResponse` *is* the `[DataContract]` wire result** (`LoginResult`, `RegisterResult` — new wire record, since `BoolResponse` is server-only law — `LogoutResult`), deferred-completion URL populated in the handler. Validation splits by type: client-side Blazilla validates wire DTOs (Heimdall), the pipeline's `ValidationBehavior` validates commands (Himinbjörg's own validators — duplicated rules by design; server and client rules may legitimately diverge). `Logout` goes parameterless on the wire (CT-only operation) pending a protobuf-net.Grpc verification spike, with an empty wire marker parameter as the named fallback. `Unit` never crosses a wire — it survives only as an in-process payload.
 
 ### 2.4 Principal — seeded scoped accessor
 
@@ -135,7 +138,7 @@ This retires `AuthorizationBehavior`'s `Func<ValueTask<ClaimsPrincipal>>` constr
 
 ### 2.5 Authorization — policy on the request type
 
-Open-generic `AuthorizationBehavior<TRequest, TResponse>` sees only the request and `next`; nothing bakes a policy string into a constructor anymore. Therefore **`[Authorize(Policy = ...)]` decorates the request record** — the request names its policy:
+Open-generic `AuthorizationBehavior<TRequest, TResponse>` sees only the request and `next`; nothing bakes a policy string into a constructor anymore. Therefore **`[Authorize(Policy = ...)]` decorates the mediator request record** (the server-sovereign command type, per §2.3's final form — never the wire DTO) — the request names its policy:
 
 ```csharp
 [Authorize(Policy = AuthNPolicies.Public)]
@@ -144,7 +147,7 @@ public sealed record LoginRequest : IQueryRequest<LoginResult> { ... }
 
 - Read once into a `static readonly` per closed generic type (a `PolicyCache<TRequest>`) — zero per-call reflection.
 - **Enforcement is compile-time first** (2026-07-27 review finding): the registration generator already walks every handled request type for the dispatch map, so a request lacking `[Authorize(Policy = ...)]` is a build error (NORSE011) — restoring the enforcement latency the deleted NORSE001 had. `PolicyCache<TRequest>`'s hard failure at first dispatch is the runtime backstop, not the primary arm. Fail loudly, never fall back to allow.
-- `Microsoft.AspNetCore.Authorization`'s attribute is WASM-safe; the request records already ship to the browser alongside components that use `AuthorizeView`.
+- `[Authorize]` decorates only the server-side command wrappers (§2.3 final form) — wire records ship to the browser policy-free and marker-free.
 - The `[Authorize]` mirror on the concrete gRPC service class **stays unchanged** — ASP.NET Core endpoint metadata enforcement is the wire path's outer wall; the behavior is the single source of `Unauthorized`/`Forbidden` *as data*. Defense in depth, not duplication: same policy, same decision.
 - Unauthenticated → `Unauthorized`; authenticated-but-lacks-policy → `Forbidden`, unchanged from the shipped behavior.
 
@@ -220,6 +223,7 @@ Heimdall's authentication flow, re-proven on the new shape:
 - Prerender→WASM hydration parity — `EnvelopeHydrationState`'s successor, designed when the work is real.
 - Notifications/eventing through the sender — Ratatoskr's territory, not this pipeline's.
 - Client decoder AOT hardening — the one-time-reflection `Err`-factory (§2.1) is sanctioned and fine, but the client wiring generator already walks the same `[ServiceContract]` interfaces and could emit the closed factory map, making the client fully AOT-pure. Recorded here so it stays a decision, not a discovery (2026-07-27 review finding).
+- **§2.9's shared Fault UI and correlation-id thread** (2026-07-27 final-review ruling, Buvy): the circuit net ships **structurally only** — `ErrorBoundary` + `LoggingCircuitHandler` keep the circuit alive and observable at lifecycle level, with a generic recovery message. The shared Problem/Fault component and the correlation-id minting/vocabulary §2.9 describes ride the **Outcome + Blazilla design session** (the platform's next design court date, which owns the error-rendering surface end to end) — designed once, properly, not twice.
 
 **Acceptance policy, binding on the implementation plan (2026-07-27 ratification):** "designed" and "wired" are different claims. Every registration this design mandates — interceptors, surrogates, pipeline, dispatch map — must have a test that fails when the registration is removed. `OutcomeServerInterceptor` sat implemented, unit-tested, documented, and dead for three days because nothing asserted its presence in composition. Never again is a test away.
 
