@@ -1,8 +1,8 @@
 # Mediator Pipeline Retires the Gateway Machinery
 
 **Date:** 2026-07-27
-**Status:** Design accepted, pending implementation plan
-**Supersedes in part:** `2026-07-24-transport-neutral-invocation-pipeline-design.md` (§2.2 gateway surface, §2.4 generator packaging, §2.5 chain composition mechanism — the envelope, wire encoding, and behavior *semantics* survive), `2026-05-26-mediator-design.md` (the martinothamar/Mediator selection)
+**Status:** Ratified 2026-07-27 (desktop review) with the §2.4 cadence cure applied; lesser findings ride into the implementation plan as named obligations
+**Supersedes in part:** `2026-07-24-transport-neutral-invocation-pipeline-design.md` (§2.2 gateway surface, §2.4 generator packaging, §2.5 chain composition mechanism, **and the prerender-hydration decided law** — `EnvelopeHydrationState` is deleted and prerender parity deferred, §6; the envelope, wire encoding, and behavior *semantics* survive), `2026-05-26-mediator-design.md` (the martinothamar/Mediator selection)
 **Prior art acknowledged:** Jimmy Bogard, "Sharing Context in MediatR Pipelines" — the scoped-context pattern §2.4 adopts; the MediatR composition idiom §2.2 preserves for reader familiarity
 
 ---
@@ -111,23 +111,25 @@ public interface IRequestHandler<in TRequest, TResponse>
 - `IRequest<TResponse>` is the neutral marker `Send` accepts; `ICommandRequest<>`/`IQueryRequest<>` are its two derived markers. Both flow through the same chain in v1; the split exists so a future behavior can bind to one side only (a transaction behavior being the obvious eventual tenant). Void-success commands use `TResponse = Unit`.
 - The marker family revives `ICommandRequest<TResponse>` from dead code — the request→response type binding it was declared for now lives on its new base, `IRequest<TResponse>`, which is what `Send` infers from.
 - **Alignment ripple:** `IRequestHandler<TRequest, TResponse>` changes from fully-generic `ValueTask<TResponse>` to envelope-native `ValueTask<Outcome<TResponse>>` with `TResponse` as the *payload* — today's handlers close `TResponse = Outcome<LoginResult>` by hand. The whole chain (`IBehavior<,>`, `BehaviorDelegate<>`, handlers, `Send`) now speaks one type algebra. `IBehavior<,>` keeps its existing shape (it was already envelope-native).
-- Request records gain the marker interface (`LoginRequest : IQueryRequest<LoginResult>`, `RegisterRequest : ICommandRequest<Unit>`, `LogoutRequest : ICommandRequest<LogoutResult>`). Marker interfaces are `Norse.Abstractions.Contracts` — WASM-safe by construction.
+- Request records gain the marker interface, typed to the **handler's** payload — the service maps handler payloads onto wire results exactly as today (`BoolResponse` → `LoginResult` + deferred-completion URL): `LoginRequest : ICommandRequest<BoolResponse>`, `RegisterRequest : ICommandRequest<BoolResponse>`, `LogoutRequest : ICommandRequest<Unit>`. All three are commands (login mutates lockout counters and mints a cookie). Marker interfaces are `Norse.Abstractions.Contracts` — WASM-safe by construction.
 
 ### 2.4 Principal — seeded scoped accessor
 
 Asgard declares the context contract; each channel adapter seeds it at entry; behaviors resolve it blind. This is the Bogard scoped-context pattern, typed:
 
 ```csharp
-// Norse.Abstractions.Web.Server — scoped; seeded exactly once per scope by the channel adapter
+// Norse.Abstractions.Web.Server — scoped; supplied by each channel's adapter at that channel's own cadence
 public interface IPrincipalAccessor
 {
-	ClaimsPrincipal Principal { get; }
+	ValueTask<ClaimsPrincipal> GetPrincipalAsync(CancellationToken cancellationToken = default);
 }
 ```
 
-- **gRPC path:** a lightweight server interceptor (registered by the generated wiring) stamps `context.GetHttpContext().User` into the scoped accessor at request entry.
-- **Circuit path:** the circuit host seeds it from `AuthenticationStateProvider` — the one legal principal source inside a live circuit, per the 2026-07-24 ruling that `IHttpContextAccessor` is unsupported there.
-- **Unseeded resolution fails loudly** (throws, naming the missing channel adapter) — no ambient sniffing, no probe order, no silent anonymous principal.
+**Cadence is a per-channel property of the adapter** (2026-07-27 remand, security-relevant): "seed once per scope" is correct only where scope equals request. On a circuit, scope equals circuit lifetime — a principal captured at circuit start keeps authorizing a stale identity after a `RevalidatingAuthenticationStateProvider` invalidates the session mid-circuit. So:
+
+- **gRPC path (scope = request):** a lightweight server interceptor stamps `context.GetHttpContext().User` into the scoped accessor at request entry — seeded once, deterministic for the request's lifetime.
+- **Circuit path (scope = circuit):** the accessor is never seeded; it defers to `AuthenticationStateProvider` **live on every access** — the async contract exists precisely so the circuit's principal is always current (`GetAuthenticationStateAsync` is cached-cheap inside a circuit). The one legal principal source there, per the 2026-07-24 ruling that `IHttpContextAccessor` is unsupported in a live circuit.
+- **A scope neither seeded nor circuit-shaped fails loudly** (throws, naming the missing channel adapter) — no ambient sniffing, no probe order, no silent anonymous principal.
 
 This retires `AuthorizationBehavior`'s `Func<ValueTask<ClaimsPrincipal>>` constructor closure; all four behaviors become plain DI citizens with ordinary constructor injection.
 
@@ -141,7 +143,7 @@ public sealed record LoginRequest : IQueryRequest<LoginResult> { ... }
 ```
 
 - Read once into a `static readonly` per closed generic type (a `PolicyCache<TRequest>`) — zero per-call reflection.
-- A request type with no `[Authorize]` is a **hard failure at first dispatch**, not an open door — every request names a policy, `AuthNPolicies.Public` included. Fail loudly, never fall back to allow.
+- **Enforcement is compile-time first** (2026-07-27 review finding): the registration generator already walks every handled request type for the dispatch map, so a request lacking `[Authorize(Policy = ...)]` is a build error (NORSE011) — restoring the enforcement latency the deleted NORSE001 had. `PolicyCache<TRequest>`'s hard failure at first dispatch is the runtime backstop, not the primary arm. Fail loudly, never fall back to allow.
 - `Microsoft.AspNetCore.Authorization`'s attribute is WASM-safe; the request records already ship to the browser alongside components that use `AuthorizeView`.
 - The `[Authorize]` mirror on the concrete gRPC service class **stays unchanged** — ASP.NET Core endpoint metadata enforcement is the wire path's outer wall; the behavior is the single source of `Unauthorized`/`Forbidden` *as data*. Defense in depth, not duplication: same policy, same decision.
 - Unauthenticated → `Unauthorized`; authenticated-but-lacks-policy → `Forbidden`, unchanged from the shipped behavior.
@@ -217,6 +219,9 @@ Heimdall's authentication flow, re-proven on the new shape:
 - Transaction behavior on `ICommandRequest<>` — the marker split exists for it; designing it waits on Midgard's repository/unit-of-session convergence.
 - Prerender→WASM hydration parity — `EnvelopeHydrationState`'s successor, designed when the work is real.
 - Notifications/eventing through the sender — Ratatoskr's territory, not this pipeline's.
+- Client decoder AOT hardening — the one-time-reflection `Err`-factory (§2.1) is sanctioned and fine, but the client wiring generator already walks the same `[ServiceContract]` interfaces and could emit the closed factory map, making the client fully AOT-pure. Recorded here so it stays a decision, not a discovery (2026-07-27 review finding).
+
+**Acceptance policy, binding on the implementation plan (2026-07-27 ratification):** "designed" and "wired" are different claims. Every registration this design mandates — interceptors, surrogates, pipeline, dispatch map — must have a test that fails when the registration is removed. `OutcomeServerInterceptor` sat implemented, unit-tested, documented, and dead for three days because nothing asserted its presence in composition. Never again is a test away.
 
 ## 7. Documentation reconciliation (same change, boy-scout law)
 
