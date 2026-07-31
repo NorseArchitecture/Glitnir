@@ -113,12 +113,12 @@ Key decisions only — full rationale in linked specs.
 
 ### Persistence
 
-PostgreSQL (Neon) — primary OLTP. TimescaleDB — time series. pgvector — embeddings. MongoDB — operational read store (`.Server` tier); also system of record for identity and UI layout (deliberate inversions). Full design: `docs/Midgard/specs/2026-05-21-midgard-persistence-design.md`.
+PostgreSQL (Neon) — primary OLTP. TimescaleDB — time series. pgvector — embeddings. Operational read models ride the entity's own jsonb `View` column (total-mirror document; promoted columns/child tables are the indexes) — MongoDB is **superseded** as the operational read store and as identity storage (2026-07-30); a document-store repository sibling remains a sanctioned per-well future, adopted on evidence. Read-model doctrine: `docs/Platform/specs/2026-07-30-well-and-wire-reference-data-slice-design.md` (supersedes the Mongo portions of `docs/Midgard/specs/2026-05-21-midgard-persistence-design.md`).
 
 Key decisions:
 - Abstract base context (audit stamping, conventions) → `Norse.Persistence.EntityFramework` (Urðarbrunnr).
 - Concrete per-service DbContexts are **source-generated, `file`-scoped** — unreferenceable by construction.
-- Four repository contracts in `Norse.Abstractions.Infrastructure`: `IDocumentRepository<T>`, `ICommandRepository<T>`, `ICachedRepository<T>`, `ITemporalRepository<T>`. **No `IUnitOfWork`** — the messaging library's per-handler session owns the transaction.
+- Read contract: `IReadRepository<TView>` in `Norse.Abstractions.Backend` (Asgard), implemented exactly once by Midgard's generic repository over the well's `IViewBearer<TView>` entities; the write-side contract follows at the same address when designed. (Supersedes the former four-contract family in `Norse.Abstractions.Infrastructure` — 2026-07-30, `docs/Platform/specs/2026-07-30-well-and-wire-reference-data-slice-design.md`.) **No `IUnitOfWork`** — the messaging library's per-handler session owns the transaction.
 - Services never inject a DbContext or call `SaveChangesAsync`.
 - Migrations in `{Company}.{Context}.Migrations` — deployment job only; never silent at app startup above local dev.
 
@@ -140,7 +140,7 @@ Single server-side deployable: `Norse.Hosting.Web.Server` (one ASP.NET Core proc
 
 ### Auth
 
-**OpenIddict implementing OAuth 2.1 — DECIDED.** Staff: OIDC to Google Workspace (`hd`-restricted). Producers/customers: local OpenIddict accounts. Identity storage: Mongo (system of record). Full design: `docs/Platform/specs/2026-06-07-auth-design.md`.
+**OpenIddict implementing OAuth 2.1 — DECIDED.** Staff: OIDC to Google Workspace (`hd`-restricted). Producers/customers: local OpenIddict accounts. Identity storage: Postgres via Himinbjörg (`Norse.Identity.*` EF persistence — `norse_identity`; the auth spec's Mongo choice is superseded, see §Persistence). Full design: `docs/Platform/specs/2026-06-07-auth-design.md`.
 
 ### PII and Encryption
 
@@ -274,7 +274,7 @@ Build errors, PR rejections, or refusal-to-write-the-code. **Not style preferenc
 - **No EF-Fluent-only invariants** (§2.2) — everything that matters at the data layer exists as a database constraint.
 - **No silent migrations at app startup** — deployment job only above local dev.
 - **No hardcoded credentials or connection strings** — Azure App Configuration or env vars; local dev uses user secrets.
-- **No `DbContext` injection in services** — repository contract family from `Norse.Abstractions.Infrastructure` only (`YGG004`).
+- **No `DbContext` injection in services** — repository contracts from `Norse.Abstractions.Backend` only (`YGG004`).
 - **No cross-context entity references** (`YGG004`) — cross-context flows: (1) published events, (2) gRPC via `I{Context}Api`, (3) Warehouse.
 - **No tenancy in the schema** — isolation is the database boundary.
 
