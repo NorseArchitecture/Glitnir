@@ -14,6 +14,8 @@ you should not need to re-derive it.
 
 **Amendment (2026-07-25):** `Norse.EntityFramework.Migrations.PostgreSQL` (the worked example above and in "The Problem" below) named Urðarbrunnr's namespace as it stood on 2026-07-01. It has since widened to `Norse.Persistence.EntityFramework.*` (PR #31, tag v0.0.4). The forwarding mechanism this doc describes is namespace-agnostic and unaffected.
 
+**Amendment (2026-07-31):** Gap 2's strip target as quoted below is superseded in one respect: the `Remove` condition gained a leading provenance conjunct (`'%(Analyzer.NuGetPackageId)' != ''`), scoping the strip to NuGet-delivered analyzers only — a `ProjectReference`-wired analyzer (a project's own sibling `gen/` generator, or the dev-mode `Choose`-block forwarding) is never stripped. This resolved the self-consuming generator gap (Gap 3) that surfaced when a wrapper project's own compilation first depended on its own generator's output. Design and verification: `2026-07-31-norseref-strip-provenance-scoping-design.md`.
+
 ## The Problem
 
 A source generator packaged inside a Norse library (e.g.
