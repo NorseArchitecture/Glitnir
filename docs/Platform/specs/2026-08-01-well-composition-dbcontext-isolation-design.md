@@ -1,6 +1,8 @@
 # Well Composition — DbContext Isolation and Construction Unification
 
-**Status:** Design approved (Buvy, 2026-08-01) — not yet planned or implemented.
+**Status:** Design approved (Buvy, 2026-08-01) — partially implemented, then superseded in part the same day (see amendment).
+
+> **Amendment (2026-08-01, same day):** §3.2's design — Mimir's `Reference.Web.Server` calling `AddNorseWell<TContext>()` — was implemented as Task 4 and halted in real time when package-mode CI exposed what it means: Mimir depending on Midgard. The ruling: **only Yggdrasil may depend on Midgard.** §3.2 is superseded by `2026-08-01-well-seam-midgard-excision-design.md` (the `[NorseWell]` declaration + seam-generator design); Mimir PR #17 is superseded, not patched. §3.1's `AddNorseContextFactory<TContext>()` survives intact — the seam generator emits calls to it. Tasks 1–3 and 5 stand. Full doctrine and the crooked-path entry: that spec and `../../the-crooked-path.md` #12.
 
 **REQUIRED SUB-SKILL:** `superpowers:subagent-driven-development` (the platform default — `superpowers:executing-plans` is the narrow fallback for a separate-session review checkpoint, never an interchangeable alternative), paired with `superpowers:test-driven-development` on every task.
 
