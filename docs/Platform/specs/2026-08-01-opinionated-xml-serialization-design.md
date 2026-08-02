@@ -111,7 +111,7 @@ What an exposed contract may look like, all enforced at build time in the host c
 2. **Scalars are attributes.** Null scalars omit the attribute — no `xsi:nil`, the problem evaporates by construction. On request shapes (test-side writing, §1.3), `Result<T>` success writes the unwrapped formatted value; **a failed `Result<T>` is illegal to write** and throws.
 3. **Collections are N child elements**, one per item, named by item type. Empty collection ⇒ zero elements.
 4. **Determinism.** Attributes in member-declaration order; child elements in member-declaration order; collection items in list order. Output is byte-stable for a given contract, casing, and value.
-5. **Enums: names, never numerics.** The generator emits the name↔value table at build time — no `Enum.Parse`, no reflection. Undefined values (non-flags value with no member; flags with leftover bits) are illegal to write. `[Flags]`: space-separated name list (the `xsd:list` idiom); canonical form is exact-defined-match first (`ReadWrite`, never `Read Write`), else greedy decomposition descending by value. Zero writes the defined zero member's name. **Stated sharp edge, documented so a consultant does not discover it in month one:** a default-initialized `[Flags]` field with no defined zero member is an undefined value and **throws at write** — consistent with the law, and the fix is defining `None = 0` or setting the field.
+5. **Enums: names, never numerics.** The generator emits the name↔value table at build time — no `Enum.Parse`, no reflection. Undefined values (a value with no member) are illegal to write. **Superseded in part (2026-08-02):** everything this clause said about `[Flags]` — the space-separated `xsd:list` form, greedy canonical decomposition, and the default-initialized-flags sharp edge — is struck: flags enums are **banned from the facade closure outright** (build diagnostic; the boundary models option sets as collections of role-named records). Ruling and mechanism: `2026-08-02-futhark-enum-wire-law-design.md`.
 6. **Plumbing.** XML declaration always emitted; UTF-8, no BOM; no indentation; no XML namespaces, ever; no comments, PIs, or CDATA. All writing goes through `XmlWriter` so embedded tabs/newlines survive attribute-value normalization as character references. Strings — and `char` values — carrying XML 1.0-illegal control characters are illegal to write, same hammer.
 7. **Symmetric limits.** The writer honors the same max depth as the reader (§8.4) — round-trip symmetry includes the limits.
 
@@ -137,7 +137,7 @@ What an exposed contract may look like, all enforced at build time in the host c
 | `DateOnly` | `yyyy-MM-dd` | `2026-08-01` |
 | `TimeOnly` | `HH:mm:ss.fffffff` (`O`) | `14:30:00.0000000` |
 | `TimeSpan` | **ISO 8601 duration** — ratified; culture-proof and XML-native | `P1DT2H3M4S` |
-| enums | case-styled member name(s); `[Flags]` space-separated (§6.5) | `read_write` |
+| enums | case-styled member name — non-flags only; `[Flags]` is banned from the facade closure (superseded 2026-08-02, see `2026-08-02-futhark-enum-wire-law-design.md`) | `read_write` |
 
 On JSON, `bool` and numeric types ride as native JSON tokens with the identical lexical form; everything else rides as JSON strings with identical content — including enums, which emit the same case-styled names on both channels.
 
@@ -220,7 +220,7 @@ The generated reader/writer emit exactly the parser calls and unwrap semantics d
 
 Wire form is presence-tracked `T` (proto3 `optional`) for both `Result<T>` and `Result<T>?`:
 
-- **Serialize:** success unwraps to the value; failed `Result<T>` throws client-side, loudly.
+- **Serialize:** success unwraps to the value; failed `Result<T>` throws client-side, loudly. **Divergence flagged (2026-08-02):** the implementation as shipped hardened past this clause — `Write` throws unconditionally, every state, every channel — which leaves the typed client proxy unable to author a request against any Result-wrapped contract. Surfaced, not yet ruled; see `2026-08-02-futhark-enum-wire-law-design.md` §5 — its own Forseti pass is required before a tri-channel operation ships to a real first-party client.
 - **Deserialize:** present → success (no parsing — the binary wire is typed; a malformed date is unrepresentable on this channel); absent + `Result<T>` → the failed required-missing `Result`, mirroring `ParseRequired` semantics without a parse; absent + `Result<T>?` → `null`.
 - **Registration** rides the existing code-first serializer configuration in `Infrastructure.Web.Grpc`. The scalar taxonomy is doctrinally finite, so the worst case is a closed set of ~13 surrogate registrations; whether protobuf-net honors an open-generic registration is a plan-time verification, not a design risk.
 
