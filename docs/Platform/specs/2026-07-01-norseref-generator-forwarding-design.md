@@ -16,6 +16,14 @@ you should not need to re-derive it.
 
 **Amendment (2026-07-31):** Gap 2's strip target as quoted below is superseded in one respect: the `Remove` condition gained a leading provenance conjunct (`'%(Analyzer.NuGetPackageId)' != ''`), scoping the strip to NuGet-delivered analyzers only — a `ProjectReference`-wired analyzer (a project's own sibling `gen/` generator, or the dev-mode `Choose`-block forwarding) is never stripped. This resolved the self-consuming generator gap (Gap 3) that surfaced when a wrapper project's own compilation first depended on its own generator's output. Design and verification: `2026-07-31-norseref-strip-provenance-scoping-design.md`.
 
+**Amendment (2026-08-02, Gap 4 — a NorseRef library bundling a second generator that doesn't fit the `{Identity}.Generator` naming convention):** discovered wiring Futhark's `Infrastructure.Web.Server.Xml.Generator` into Yggdrasil — `Infrastructure.Web.Server` ships both its original gRPC wiring generator (`{Identity}.Generator`, the convention this doc assumes) and a second, differently-named one. `Generator="true"` is a boolean; it has no way to name a second generator project. **Fix:** a new, separate, empty-by-default item list, `NorseGeneratorRef` — analyzer-only, deliberately *not* NorseRef metadata, so every existing single-generator consumer (every other realm today) is completely untouched:
+```xml
+<NorseGeneratorRef Include="Infrastructure.Web.Server.Xml.Generator">
+    <Repo>Midgard</Repo>
+</NorseGeneratorRef>
+```
+Resolves to `%(Repo)/gen/%(Identity)/%(Identity).csproj` (no `src/` counterpart — unlike `NorseRef`, there is no wrapper library to also reference). Lives in `Bifrost/Directory.Build.targets` (Gap 1's file — dev-mode only, same reasoning as Gap 1 itself). Gap 2's strip target gained a second `_NorseWantedGeneratorAnalyzer` `Include` line sourced from `NorseGeneratorRef` so packaged/CI mode doesn't strip it as an unwanted duplicate in every project that merely references the leaf. Full verification and the Midgard-side package-bundling counterpart: Task 13 of `2026-08-02-futhark-xml-serialization.md`'s report.
+
 ## The Problem
 
 A source generator packaged inside a Norse library (e.g.

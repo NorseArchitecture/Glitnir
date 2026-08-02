@@ -19,7 +19,7 @@
 - **`src/Directory.Build.props`, `tests/Directory.Build.props`, and `.editorconfig` in every realm are scatter-managed and immutable. Editing any of them is halt-and-ask.** Restate this in every subagent dispatch.
 - Realms branch for features (`feature/futhark-xml`); subagents may commit on the local unpushed feature branch, never master, never push. **Bifröst itself is never branched and never touched** except the submodule pointers Buvy manages.
 - Local dev runs `UseProjectReferences=true` (the two-crossings doctrine); cross-realm package ship gates (PR → CI → tag → publish) come at the end, in dependency order: Svartálfheim → Asgard → Midgard → Yggdrasil.
-- Diagnostic IDs: the platform already uses `NORSE0xx` (NORSE011 observed). This plan assigns **NORSE020–NORSE026**; the Task 5 implementer must first grep all realms for the highest existing `NORSE0\d\d` and shift the block up if any of 020–026 are taken, updating the later tasks' references in the plan file as they go.
+- Diagnostic IDs: the platform already uses `NORSE0xx`. This plan originally assigned NORSE020–NORSE026, but Task 5's implementer found NORSE020/021 already live in Midgard's sibling `Infrastructure.Web.Server.Generator` (the plan's own "NORSE011 observed" note was stale) — the block shifted to **NORSE022–NORSE028**, reflected below and in Task 5's commit.
 - Doctrine numbers, verbatim from spec §8.4: max depth **32** both directions; request body cap **1 MiB** (`1_048_576`); `DtdProcessing.Prohibit`; `XmlResolver = null`; `MaxCharactersFromEntities = 0`; UTF-8 only.
 
 ## File Structure (locked decisions)
@@ -293,13 +293,13 @@ void Write_timespan_emits_iso_duration_byte_exact()
 **Interfaces:**
 - Consumes: `GrpcControllerBase` does not exist until Task 10 — the walker keys on the metadata name `Norse.Abstractions.Web.Server.Facade.GrpcControllerBase` (Asgard residence, ruled 2026-08-02); generator tests stub it.
 - Produces: `ShapeModel` (internal to generator): per-contract member list (kind: scalar/complex/collection; wire names ×5 styles via `NameCasing.Apply(XmlCaseStyle, string)`; `Result` wrapping flags; enum tables). Diagnostics, all errors:
-  - `NORSE020` raw scalar in request closure ("request scalars wrap in Result<T> or Result<T>?")
-  - `NORSE021` `Result<T>` reachable in response closure
-  - `NORSE022` type reachable from both request and response closures ("you shared a type across the boundary")
-  - `NORSE023` non-sealed / non-object-based / generic contract type
-  - `NORSE024` two members of one complex type on a contract, or post-case-transform name collision in any style
-  - `NORSE025` taxonomy violation: unsupported scalar, dictionary, scalar collection, nested collection
-  - `NORSE026` facade action body-bound type is not `[DataContract]`
+  - `NORSE022` raw scalar in request closure ("request scalars wrap in Result<T> or Result<T>?")
+  - `NORSE023` `Result<T>` reachable in response closure
+  - `NORSE024` type reachable from both request and response closures ("you shared a type across the boundary")
+  - `NORSE025` non-sealed / non-object-based / generic contract type
+  - `NORSE026` two members of one complex type on a contract, or post-case-transform name collision in any style
+  - `NORSE027` taxonomy violation: unsupported scalar, dictionary, scalar collection, nested collection
+  - `NORSE028` facade action body-bound type is not `[DataContract]`
 
 Closure derivation (spec §4.1): controllers = classes derived from `GrpcControllerBase`; request closure = body-bound action parameter types (`[FromBody]` explicit, or the lone complex-type parameter under `[ApiController]` inference); response closure = `T` in `Task<ActionResult<T>>`/`ActionResult<T>` returns; closures include all reachable complex types; route/query-bound primitives excluded.
 
@@ -312,7 +312,7 @@ Closure derivation (spec §4.1): controllers = classes derived from `GrpcControl
 - [ ] **Step 2: Run to verify fail.**
 - [ ] **Step 3: Implement discovery + walk + diagnostics** (no emission yet — generator emits nothing when diagnostics fire, and emission itself lands in Task 6). `NameCasing.Apply`: split on Pascal word boundaries; camel/pascal join, snake lower-joins with `_`, upper/lower flatten. Unit-test `NameCasing` directly in the same test project (`"ReadWrite"` → `read_write`/`READWRITE`/`readwrite`/`readWrite`/`ReadWrite`).
 - [ ] **Step 4: Run to verify pass.**
-- [ ] **Step 5: Commit**: `feat(xml-gen): facade closure discovery + shape-law diagnostics NORSE020-026`
+- [ ] **Step 5: Commit**: `feat(xml-gen): facade closure discovery + shape-law diagnostics NORSE022-028`
 
 ---
 
@@ -326,7 +326,7 @@ Closure derivation (spec §4.1): controllers = classes derived from `GrpcControl
 - Consumes: `IXmlShape<T>`, `XmlLexical`, `XmlCaseStyle` (Task 2). Emitted classes: `internal sealed {Contract}XmlShape : IXmlShape<{Contract}>` in namespace `{HostRootNamespace}.NorseXmlShapes`, one file per contract, plus the five-style name tables as `static readonly string[]` fields indexed by `(int)style`.
 - Produces: canonical writer per spec §6 — declaration-order attributes then child elements; null scalars omitted; `Result` members unwrap success / throw on failure-or-default (`"a failed Result<T> is illegal to write"`); enums via generated name tables, flags exact-match-then-greedy-descending, undefined → throw; collections as N type-named elements; recursion into complex members via their shape classes.
 
-- [ ] **Step 1: Write failing emission tests** — compile a fixture contract set through the harness, instantiate the generated shape via the compilation, and assert output XML strings byte-exact, e.g. a request contract `QuoteRequest` (`Result<decimal> Limit`, `Result<DateOnly>? Effective`, `List<CoverageLine> …`) at `SnakeCase` produces exactly `<quote_request limit="1234.56"><coverage_line code="GL"/></quote_request>` (omitted optional; no declaration in fragment mode — root-level tests assert the declaration too). Add flags-canonical and failed-Result-throws tests.
+- [ ] **Step 1: Write failing emission tests** — compile a fixture contract set through the harness, instantiate the generated shape via the compilation, and assert output XML strings byte-exact, e.g. a request contract `QuoteRequest` (`Result<decimal> Limit`, `Result<DateOnly>? Effective`, `List<CoverageLine> …`) at `SnakeCase` produces exactly `<quote_request limit="1234.56"><coverage_line code="GL" /></quote_request>` (omitted optional; no declaration in fragment mode — root-level tests assert the declaration too). **Correction (Task 6, verified live against .NET's `XmlWriter`):** self-closing elements always render with a space before `/>` — this is unconfigurable `XmlWriter` behavior, not an emitter choice; every byte-exact assertion in this plan and its downstream tasks (9, 13) uses the space-included form. Add flags-canonical and failed-Result-throws tests.
 - [ ] **Step 2: Run to verify fail.**
 - [ ] **Step 3: Implement `WriterEmitter`** — `AppendCSharp` raw-string blocks per member kind; `XmlWriterSettings` handled by the formatter (Task 9), the shape writes into a supplied `XmlWriter`.
 - [ ] **Step 4: Run to verify pass.**
@@ -432,7 +432,7 @@ public abstract class GrpcControllerBase : ControllerBase
 
 **Interfaces:**
 - Consumes: `Microsoft.AspNetCore.OpenApi` `IOpenApiSchemaTransformer`/document transformer seams (native pipeline — never Swashbuckle).
-- Produces: `ResultSchemaTransformer` — `Result<T>`/`Result<T>?` schemas become the underlying scalar schema via a **static closed-taxonomy mapping table** (BCL types cannot carry static abstract interface members; the table is the honest equivalent, one row per §7 type: schema type + format); nullable `Result<T>?` leaves `required`; request schemas `writeOnly`, response schemas `readOnly`. `XmlMetadataTransformer` — stamps `xml: {attribute: true}` on scalar properties, item element names from item types, `wrapped: false`. `UnionLeakGuardTransformer` — document transformer that **fails loudly** (throws) if any schema references `Outcome` or `Result` by name post-transform; the symmetry law's tripwire.
+- Produces: `ResultSchemaTransformer` — `Result<T>`/`Result<T>?` schemas become the underlying scalar schema via a **static closed-taxonomy mapping table** (BCL types cannot carry static abstract interface members; the table is the honest equivalent, one row per §7 type: schema type + format); nullable `Result<T>?` leaves `required`; request schemas `writeOnly`, response schemas `readOnly`. `XmlMetadataTransformer` — stamps scalar properties `NodeType = Attribute` (the resolved `Microsoft.OpenApi` 3.6.0 package's actual vocabulary — the classic `attribute`/`wrapped` boolean pair is internal+obsolete in this version; see the spec's §12 correction), item element names from item types; no `wrapped` signal needed — arrays default to unwrapped in this vocabulary. `UnionLeakGuardTransformer` — document transformer that **fails loudly** (throws) if any schema references `Outcome` or `Result` by name post-transform; the symmetry law's tripwire.
 
 - [ ] **Step 1: Write failing tests** — build an OpenAPI document from a minimal fixture app (controller + contracts) via the native pipeline; assert `Result<DateOnly>` renders `string`/`date`; assert optional leaves `required`; assert scalar property carries `xml.attribute: true`; assert guard throws when a raw `Outcome<T>` is smuggled into a signature-less schema fixture.
 - [ ] **Step 2: Run to verify fail.**

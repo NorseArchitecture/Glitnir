@@ -273,7 +273,7 @@ The document surface is **`Microsoft.AspNetCore.OpenApi`** — the native genera
 
 - **`Result<T>` unwrapping (requests):** request schemas present the underlying scalar's schema (`Result<DateOnly>` → `string`/`date`); `Result<T>?` members leave the `required` list; request schemas mark `writeOnly`, response schemas `readOnly`. Schema metadata (type, format, pattern, example) is read from static abstract interface members on the scalar types — no reflection, per doctrine.
 - **`Outcome<T>` unwrapping (responses):** response schemas present the payload type, never the envelope (§10.1).
-- **XML metadata:** because Futhark's rules are fixed, the transformer stamps OpenAPI's `xml` object mechanically — `attribute: true` on every scalar, item element names from item types, `wrapped: false` always. The negotiation story is visible to the buyer in the contract document itself.
+- **XML metadata:** because Futhark's rules are fixed, the transformer stamps OpenAPI's `xml` object mechanically. **Correction (Task 11, verified live against the resolved package):** the classic `attribute`/`wrapped` boolean pair this section originally specified is `internal`+`[Obsolete]` in `Microsoft.OpenApi` 3.6.0 (OpenAPI 3.2) — replaced by a single `NodeType` enum. The transformer stamps `NodeType = Attribute` on every scalar and item element names from item types; no `wrapped` signal is emitted at all, because OpenAPI 3.2 defaults array `nodeType` to `none` specifically to preserve pre-3.2 "unwrapped by default" behavior — the law holds with zero code for the collection case. The negotiation story is visible to the buyer in the contract document itself.
 
 ## 13. Versioning posture
 
