@@ -57,6 +57,8 @@ Platform-wide; not bounded contexts. Namespace (code); codename (lore) maps in `
 
 **Amendment (2026-07-25):** three rows above are stale. Urðarbrunnr widened from `Norse.EntityFramework.*` to `Norse.Persistence.*` (live vendor family `Norse.Persistence.EntityFramework.*`) — merged PR #31, shipped tag v0.0.4. Ratatoskr renamed in documentation from `Norse.NServiceBus.*` to `Norse.Messaging.*` (live vendor family `Norse.Messaging.NServiceBus.*`) — documentation-only, made this session (2026-07-25); Ratatoskr remains an unimplemented bare shell, no code has migrated. Mímisbrunnr/Mímir renamed from `Norse.ReferenceData.*` to `Norse.Reference.*`. See `docs/codenames.md`.
 
+**Amendment (2026-08-01):** Mímisbrunnr's family is now Norse.Reference.Data.EntityFramework[.Migrations.*] plus the new Norse.Reference.Data.Primitives (browser-supported generated IsoCountryCode/Iso3166) and Norse.Reference.Data.Namespaces (generated ReferenceNamespaces); Mímir's Norse.Reference.Seeds is deleted and its generator relocated to Mímisbrunnr. Full design: `Platform/specs/2026-08-01-reference-data-dependency-inversion-design.md`.
+
 **Amendment (2026-07-27):** the Asgard row's mediator law entry is also stale — "dispatch core is martinothamar/Mediator" was never true; no `.csproj` on the platform ever referenced it. The mediator pipeline (`ISender`, `IRequestHandler<,>`, the registration generator, `AddNorsePipeline()`'s `IBehavior<,>` fold) is hand-rolled, entirely inside Asgard and Midgard, no library underneath. Same correction applies everywhere else in this repo that names martinothamar/Mediator as the dispatch core. Full account: `docs/Platform/specs/2026-07-27-mediator-pipeline-retires-gateway-design.md`.
 
 Consequences and rulings of the amendment:

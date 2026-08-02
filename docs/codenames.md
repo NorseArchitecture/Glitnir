@@ -39,6 +39,8 @@ The shared, product-agnostic cosmos. Codename = the lore; namespace = the operat
 > **Amendment (2026-07-25):** Ratatoskr renamed in documentation from `Norse.NServiceBus` to `Norse.Messaging` (live vendor family `Norse.Messaging.NServiceBus.*`) — a documentation-only decision made this session (2026-07-25); Ratatoskr itself is still an unimplemented bare shell, so no code has actually migrated yet.
 
 > **Amendment (2026-07-25):** Mímisbrunnr/Mímir renamed from `Norse.ReferenceData.*` to `Norse.Reference.*` — now `Norse.Reference.Data` (Mímisbrunnr) and `Norse.Reference.Components`/`.Web.Server`/`.Worker` (Mímir). Both table rows above are historical.
+>
+> **Amendment (2026-08-01):** Mímisbrunnr's family is now Norse.Reference.Data.EntityFramework[.Migrations.*] plus the new Norse.Reference.Data.Primitives (browser-supported generated IsoCountryCode/Iso3166) and Norse.Reference.Data.Namespaces (generated ReferenceNamespaces); Mímir's Norse.Reference.Seeds is deleted and its generator relocated to Mímisbrunnr. Codenames themselves are unchanged — only the function columns moved. Full design: `Platform/specs/2026-08-01-reference-data-dependency-inversion-design.md`.
 
 > **Naglfar's nomenclature is settled, its design rules are not (2026-06-19).** This hall is Forseti's — fitting, since what's recorded here is the verdict on the *name*, not a verdict on taste. The codename and namespace land in this dictionary now so the repository exists and is wired correctly; the actual design-system content (palette, type scale, component states, the rules a real design system needs) is explicitly deferred to domain experts not yet in the room. Don't read this entry as design authority — it's registry, not taste.
 

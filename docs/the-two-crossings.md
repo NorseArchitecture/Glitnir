@@ -12,7 +12,7 @@ both crossings, not just the one they're standing on.*
 
 Bifröst's root `Directory.Build.targets` carries one `Choose` block. Every realm's `src/`/`tests/`
 `Directory.Build.props` declares its cross-realm dependencies as `NorseRef` items — `<NorseRef
-Include="Reference.Seeds"><Repo>Mimir</Repo></NorseRef>` and the like — and the Choose block
+Include="Reference.Data.Primitives"><Repo>Mimisbrunnr</Repo></NorseRef>` and the like — and the Choose block
 decides, from a single property, what that item actually becomes at build time:
 
 ```xml
