@@ -12,7 +12,7 @@
 
 ### 1.1 One consumer, three channels
 
-Futhark's sole consumer is Yggdrasil's `Hosting.Web.Server`: it exists to let the REST facade content-negotiate to XML instead of JSON. There is no second consumer and none is planned; that fact drives the residence verdict (§3) — no new realm, no standalone package family, and after amendment, no footprint outside Midgard and the host.
+Futhark's sole consumer is Yggdrasil's `Hosting.Web.Server`: it exists to let the REST facade content-negotiate to XML instead of JSON. There is no second consumer and none is planned; that fact drives the residence verdict (§3) — no new realm, no standalone package family, and after amendment, no footprint outside Midgard and the host save the facade base class Asgard declares for downstream inheritance (§3, ruled 2026-08-02).
 
 The validation case is deliberately wider than the serializer: **the tri-protocol swoop**. The same request record served over gRPC, REST-JSON, and REST-XML, asserted for parity — same success shape, same failure semantics where the channel can express them — before any PII struct enters the picture. The swoop proves the negotiation seam, the `Result<T>` funnel on every channel, and the formatter registration, in one test surface (§15).
 
@@ -52,10 +52,11 @@ The largest architectural fork was reflection-plus-cache versus a Roslyn source 
 
 ## 3. Residence and consumer-visible names
 
-**Midgard owns everything; Yggdrasil runs it.** Svartálfheim owns primitives and nothing else — wire-format concerns never enter the forge. The Æsir do not care about wire formats — Asgard is untouched. Contract assemblies are untouched: no forwarding, no generated files in realm repos, no `partial` ceremony, no new attributes.
+**Midgard owns the wire machinery; Yggdrasil runs it; Asgard declares the facade base.** Svartálfheim owns primitives and nothing else — wire-format concerns never enter the forge. The Æsir do not care about wire formats — no XML seam, generator, or converter enters Asgard. **One Asgard exception, ruled 2026-08-02: `GrpcControllerBase` (§4) lives in `Abstractions.Web.Server`** — the facade base is contract law, not wire format, and downstream services must inherit it; under only-Yggdrasil-depends-on-Midgard, a Midgard residence would wall the facade off from every consumer it exists for, adding no value to the realm. The fold needs nothing from Midgard — `Problem()`/`NotFound()` are `ControllerBase` natives; problem+xml rendering is the formatter's job at the host. Contract assemblies are untouched: no forwarding, no generated files in realm repos, no `partial` ceremony, no new attributes.
 
 | Realm | Location | Contents |
 |---|---|---|
+| Asgard | `src/Abstractions.Web.Server`, `Facade/` subfolder | `GrpcControllerBase` — the facade base + `Outcome<T>` fold (§4.3), inheritable by every downstream service; server-only by the assembly's existing law |
 | Midgard | `src/Infrastructure.Web.Server`, `Xml/` subfolder | `IXmlShape<T>`, `XmlCaseStyle`, `XmlReadContext` (the typed seam generated code compiles against); `XmlContractInputFormatter` / `XmlContractOutputFormatter` (MVC `TextInputFormatter`/`TextOutputFormatter`); the RFC 9457 problem writer (§11.1); `AddNorseXml(XmlCaseStyle)` composition extension |
 | Midgard | `src/Infrastructure.Web.Server`, `Json/` subfolder | `Result<T>`/`Result<T>?` STJ converter family over the scalar taxonomy (§9.1); the `UnmappedMemberHandling.Disallow` ratchet |
 | Midgard | `gen/` beside `Infrastructure.Web.Server` (per repo convention; exact project name is a plan detail, §17) | The Futhark shape generator + shape-law analyzers |
@@ -65,6 +66,7 @@ The largest architectural fork was reflection-plus-cache versus a Roslyn source 
 Notes:
 
 - **The generator is a Midgard project that executes in the Yggdrasil compilation.** It reads referenced contract metadata and emits shapes into the host compilation, where the Midgard seam is legally referenceable. Only-Yggdrasil-depends-on-Midgard holds by construction — there is nothing anywhere else to depend on.
+- **Facade controllers are host-compilation source, always — ratified 2026-08-02.** The generator's discovery is a syntax predicate: it sees class declarations in the compilation it runs in and is structurally blind to controllers compiled into referenced assemblies. The Asgard base makes cross-realm *inheritance* legal; shipping reusable *controllers* in a library is not — they would silently generate no shapes, fail no diagnostics, and 500 at runtime on an unregistered type. Each deployment's host authors its own facade, which is philosophically forced regardless: exposure is declared at the composition root, so the controllers declaring it are authored there. **Tripwire:** `AddNorseXml` fails startup loudly when a `GrpcControllerBase` descendant sits in the app's controller feature set with a body or response type carrying no shape in the registry — the silent gap becomes a named error for whoever tries it in year two.
 - **Contract vocabulary: the `[ServiceContract]` taxonomy, nothing else.** The platform's single contract vocabulary is the WCF attribution model already forced by protobuf-net.Grpc code-first: `[ServiceContract]`, `[OperationContract]`, `[DataContract]`, `[DataMember]`. Futhark honors it and adds **zero attributes**. (Historical note, ratified as platform position: WCF died of SOAP and WS-*, not of its attribution model — the vocabulary was always sound, which is why protobuf-net.Grpc resurrected it verbatim.)
 - The generator emits `internal sealed` shape classes plus a registration method into the host compilation; contract records stay clean.
 - The REST facade rides MVC's formatter/negotiation pipeline. Minimal APIs are rejected for this surface: content negotiation **is** the requirement, and minimal APIs do not have it. Automatic gRPC transcoding is likewise rejected (§4).
@@ -74,7 +76,7 @@ Notes:
 
 ## 4. The binding — hand-authored facade controllers
 
-**Prior art (operator's own, 2022):** protobuf-net.Grpc issue #264 (<https://github.com/protobuf-net/protobuf-net.Grpc/issues/264>) — the transcoding discussion with Marc Gravell, where the operator's response established the pattern this platform inherits: the REST facade is **hand-authored `[ApiController]` classes**, never automatic transcoding. Each controller injects the gRPC service *interface* — the same implementation invoked in-process with no protobuf on the path and no double serialization, running the full mediator pipeline (validation, authorization) underneath. A shared `GrpcControllerBase` supplies the cross-cutting attribution and the fold from service response to `ActionResult<T>`.
+**Prior art (operator's own, 2022):** protobuf-net.Grpc issue #264 (<https://github.com/protobuf-net/protobuf-net.Grpc/issues/264>) — the transcoding discussion with Marc Gravell, where the operator's response established the pattern this platform inherits: the REST facade is **hand-authored `[ApiController]` classes**, never automatic transcoding. Each controller injects the gRPC service *interface* — the same implementation invoked in-process with no protobuf on the path and no double serialization, running the full mediator pipeline (validation, authorization) underneath. A shared `GrpcControllerBase` — declared in Asgard's `Abstractions.Web.Server` so every downstream service can inherit it (§3) — supplies the cross-cutting attribution and the fold from service response to `ActionResult<T>`.
 
 Two 2022 constraints are dissolved by 2026 platform machinery, stated so the citation reads correctly:
 
@@ -304,6 +306,7 @@ One diagnostic per shape law, emitted by the generator/analyzer pair; IDs assign
 - **Error-path grammar tests:** §11.2's grammar and every catalog message format asserted literally.
 - **The tri-protocol swoop (wired, not just designed):** one request record driven through gRPC, REST-JSON, and REST-XML against the live Yggdrasil host — success parity, failure parity on the text channels (same accumulated paths, details, **and payload shape**), and required-absent parity on gRPC. Removing the formatter registration fails the suite.
 - **Symmetry-law wiring tests:** the REST `Outcome` fold and both OpenAPI union-unwrap transformers each fail the suite when their registration is removed (§10.4).
+- **Library-controller tripwire test:** a `GrpcControllerBase` descendant introduced via a referenced assembly (no host-compilation source, no generated shape) fails startup with the named error, never a runtime 500 (§3).
 - **Strictness parity test:** the same unknown-member payload rejected identically on JSON and XML.
 - House rules apply throughout: warnings-as-errors, BOM-free UTF-8 LF generator output, suppression law, `ConfigureAwait(false)` in src, one test project per package.
 
@@ -311,7 +314,7 @@ One diagnostic per shape law, emitted by the generator/analyzer pair; IDs assign
 
 - **Reflection engine or fallback** — rejected (§2).
 - **New attributes** (`[XmlRequest]`/`[XmlResponse]` were drafted and abolished) — the `[ServiceContract]` taxonomy is the platform's single contract vocabulary; direction is positional (§4).
-- **Residence in Svartálfheim or Asgard** — struck; primitives never learn wire formats, the Æsir do not care about them.
+- **Residence in Svartálfheim or Asgard for the wire machinery** — struck; primitives never learn wire formats, the Æsir do not care about them. (The facade base is the ruled exception — §3; it is contract law, not wire machinery.)
 - **Automatic gRPC transcoding** — rejected; the facade is hand-authored curation (§4).
 - **Forward tolerance / unknown-member leniency** — rejected (§8.1); the consulting posture wants explicit contracts that reject loudly with a path.
 - **Wrapper elements, `xsi:nil`, XML namespaces in contract documents, vendor media types, per-endpoint or negotiated casing** — all rejected as negotiation axes; the thesis is that there is nothing to negotiate.

@@ -4,7 +4,7 @@
 
 **Goal:** Ship the ratified Futhark spec (`../specs/2026-08-01-opinionated-xml-serialization-design.md`) end to end: the Midgard XML seam + formatters + problem writer, the shape generator executing in the host compilation, the `Result<T>` funnel on all three channels, and the tri-protocol swoop proving parity against the live Yggdrasil host.
 
-**Architecture:** Midgard owns everything (`Infrastructure.Web.Server` `Xml/`+`Json/`+`Facade/` subfolders, `Web.Grpc` surrogates, a new bundled generator); the generator walks facade-controller closures in the Yggdrasil compilation and emits shapes there; Yggdrasil wires negotiation and hosts the swoop. Svartálfheim gets one surgical prerequisite (lexical-table conformance in the parser stack). Asgard untouched.
+**Architecture:** Midgard owns the wire machinery (`Infrastructure.Web.Server` `Xml/`+`Json/` subfolders, `Web.Grpc` surrogates, a new bundled generator); **Asgard declares `GrpcControllerBase`** (`Abstractions.Web.Server/Facade/` — downstream services inherit it, and only-Yggdrasil-depends-on-Midgard would wall off a Midgard residence, ruled 2026-08-02); the generator walks facade-controller closures in the Yggdrasil compilation and emits shapes there; Yggdrasil wires negotiation and hosts the swoop. Svartálfheim gets one surgical prerequisite (lexical-table conformance in the parser stack).
 
 **Tech Stack:** .NET 10, Roslyn incremental generators + `Norse.Abstractions.Emit` (`AppendCSharp`), ASP.NET Core MVC formatters (`TextInputFormatter`/`TextOutputFormatter`), `Microsoft.AspNetCore.OpenApi` transformers, System.Text.Json, protobuf-net.Grpc, xUnit v3 + Shouldly on Microsoft.Testing.Platform.
 
@@ -18,7 +18,7 @@
 - Tests: xUnit v3 + Shouldly, no accessibility modifiers on test methods, `RandomNumberGenerator` never `System.Random`, one test project per NuGet package (generator test projects mirror the existing `Infrastructure.Web.Server.Generator.Tests` precedent).
 - **`src/Directory.Build.props`, `tests/Directory.Build.props`, and `.editorconfig` in every realm are scatter-managed and immutable. Editing any of them is halt-and-ask.** Restate this in every subagent dispatch.
 - Realms branch for features (`feature/futhark-xml`); subagents may commit on the local unpushed feature branch, never master, never push. **Bifröst itself is never branched and never touched** except the submodule pointers Buvy manages.
-- Local dev runs `UseProjectReferences=true` (the two-crossings doctrine); cross-realm package ship gates (PR → CI → tag → publish) come at the end, in dependency order: Svartálfheim → Midgard → Yggdrasil.
+- Local dev runs `UseProjectReferences=true` (the two-crossings doctrine); cross-realm package ship gates (PR → CI → tag → publish) come at the end, in dependency order: Svartálfheim → Asgard → Midgard → Yggdrasil.
 - Diagnostic IDs: the platform already uses `NORSE0xx` (NORSE011 observed). This plan assigns **NORSE020–NORSE026**; the Task 5 implementer must first grep all realms for the highest existing `NORSE0\d\d` and shift the block up if any of 020–026 are taken, updating the later tasks' references in the plan file as they go.
 - Doctrine numbers, verbatim from spec §8.4: max depth **32** both directions; request body cap **1 MiB** (`1_048_576`); `DtdProcessing.Prohibit`; `XmlResolver = null`; `MaxCharactersFromEntities = 0`; UTF-8 only.
 
@@ -35,8 +35,8 @@ Midgard/src/Infrastructure.Web.Server/Xml/
 Midgard/src/Infrastructure.Web.Server/Json/
     ResultJsonConverter.cs, ResultJsonConverterFactory.cs, LexicalJsonConverters.cs,
     MvcBuilderExtensions.cs
-Midgard/src/Infrastructure.Web.Server/Facade/
-    GrpcControllerBase.cs
+Asgard/src/Abstractions.Web.Server/Facade/
+    GrpcControllerBase.cs                                (Asgard — downstream services inherit it)
 Midgard/src/Infrastructure.Web.Server/OpenApi/
     ResultSchemaTransformer.cs, XmlMetadataTransformer.cs, UnionLeakGuardTransformer.cs
 Midgard/src/Infrastructure.Web.Grpc/ResultSerializers.cs
@@ -127,6 +127,7 @@ public sealed class XmlReadContext
 ```
 
 - `AddScalarFailure` detail format, asserted literally: `cannot parse '{failure.Input}' as {failure.ExpectedType}` when `Reason == ParseFailure.Malformed`; `required value missing` when `Reason == ParseFailure.Empty`. (`Failure` is `Norse.Primitives.Failure` — `Input`/`ExpectedType`/`Reason` members exist today.)
+- **The rendering is the one message source, hoisted:** `public static class FailureDetail { public static string Render(in Failure failure); }` in the same `Xml/` folder — `XmlReadContext.AddScalarFailure` calls it, and Task 4's validation rules call the **same method** so gRPC required-missing wording is byte-identical to the text channels' by construction, never by copied string.
 
 - [ ] **Step 1: Write failing tests** — the §11.2 grammar asserted literally:
 
@@ -267,13 +268,14 @@ void Write_timespan_emits_iso_duration_byte_exact()
 
 **Files:**
 - Create: `Midgard/src/Infrastructure.Web.Grpc/ResultSerializers.cs` (beside `IdentifierSerializers.cs`, same idiom)
-- Test: `Midgard/tests/Infrastructure.Web.Grpc.Tests/ResultSerializerTests.cs`
+- Create: `Midgard/src/Infrastructure.Web.Server/Validation/ResultRules.cs` — the shared FluentValidation rules this task's absent-member semantics depend on (they exist in no other task; this task owns them)
+- Test: `Midgard/tests/Infrastructure.Web.Grpc.Tests/ResultSerializerTests.cs`, `Midgard/tests/Infrastructure.Web.Server.Tests/Validation/ResultRulesTests.cs`
 
 **Interfaces:**
 - Consumes: the existing custom-serializer registration pattern in `IdentifierSerializers.cs` — **read that file first and mirror its mechanism exactly** (it is the platform's proven protobuf-net 3.x custom-serializer home).
-- Produces: registration of `Result<T>` value serializers for the closed taxonomy into the same `RuntimeTypeModel` pass the existing wiring uses. Wire form: the naked `T` (presence-tracked). Serialize failed/default `Result<T>` → throw. **Absent-member semantics land in the validation layer, not the serializer** (protobuf-net gives `default(Result<T>)` for absent members; the shared FluentValidation rules in the pipeline treat default-state `Result<T>` as required-missing — same observable §9.3 semantics, implemented where gRPC can express them). Verify open-generic registration first; fall back to the closed-set loop if protobuf-net refuses.
+- Produces: registration of `Result<T>` value serializers for the closed taxonomy into the same `RuntimeTypeModel` pass the existing wiring uses. Wire form: the naked `T` (presence-tracked). Serialize failed/default `Result<T>` → throw. **Absent-member semantics land in the validation layer, not the serializer** (protobuf-net gives `default(Result<T>)` for absent members). `ResultRules` provides the FluentValidation extensions the pipeline's `ValidationBehavior` consumes: a required rule that fails on default-state or `Failure`-state `Result<T>`, and an optional rule that fails on `Failure`-state `Result<T>?`. **One-message-source condition (ratified at plan review):** for default-state members the rule obtains its `Failure` by literally calling `Parser.ParseRequired<T>(string.Empty, CultureInfo.InvariantCulture)` and renders it via `FailureDetail.Render` (Task 1) — byte-identical wording to the text channels' required-missing detail, same constant by construction, not a paraphrase. Same observable §9.3 semantics, implemented where gRPC can express them. Verify open-generic surrogate registration first; fall back to the closed-set loop if protobuf-net refuses.
 
-- [ ] **Step 1: Write failing round-trip test** — serialize a `[DataContract]` record with `Result<DateOnly>` (success) and `Result<string>?` (null) members through `RuntimeTypeModel` to a `MemoryStream` and back; assert value equality of unwrapped members and that null stays null. Add a test asserting serialize of a failed `Result<int>` throws `InvalidOperationException`.
+- [ ] **Step 1: Write failing round-trip test** — serialize a `[DataContract]` record with `Result<DateOnly>` (success) and `Result<string>?` (null) members through `RuntimeTypeModel` to a `MemoryStream` and back; assert value equality of unwrapped members and that null stays null. Add a test asserting serialize of a failed `Result<int>` throws `InvalidOperationException`. Add `ResultRules` tests: default-state `Result<int>` fails the required rule with a message asserted **equal to** `FailureDetail.Render(...)` of `Parser.ParseRequired<int>(string.Empty, CultureInfo.InvariantCulture)`'s failure — literal equality, the parity condition itself.
 - [ ] **Step 2: Run to verify fail.**
 - [ ] **Step 3: Implement** mirroring `IdentifierSerializers.cs`.
 - [ ] **Step 4: Run to verify pass** — full `Infrastructure.Web.Grpc.Tests`.
@@ -289,7 +291,7 @@ void Write_timespan_emits_iso_duration_byte_exact()
 - Create test project: `Midgard/tests/Infrastructure.Web.Server.Xml.Generator.Tests/` — copy the csproj + harness idiom from `Infrastructure.Web.Server.Generator.Tests` (read it first; reuse its compilation-harness helper style).
 
 **Interfaces:**
-- Consumes: `GrpcControllerBase` does not exist until Task 10 — the walker keys on **any base class named `GrpcControllerBase`** by metadata name `Norse.Infrastructure.Web.Server.Facade.GrpcControllerBase`; generator tests stub it.
+- Consumes: `GrpcControllerBase` does not exist until Task 10 — the walker keys on the metadata name `Norse.Abstractions.Web.Server.Facade.GrpcControllerBase` (Asgard residence, ruled 2026-08-02); generator tests stub it.
 - Produces: `ShapeModel` (internal to generator): per-contract member list (kind: scalar/complex/collection; wire names ×5 styles via `NameCasing.Apply(XmlCaseStyle, string)`; `Result` wrapping flags; enum tables). Diagnostics, all errors:
   - `NORSE020` raw scalar in request closure ("request scalars wrap in Result<T> or Result<T>?")
   - `NORSE021` `Result<T>` reachable in response closure
@@ -301,7 +303,12 @@ void Write_timespan_emits_iso_duration_byte_exact()
 
 Closure derivation (spec §4.1): controllers = classes derived from `GrpcControllerBase`; request closure = body-bound action parameter types (`[FromBody]` explicit, or the lone complex-type parameter under `[ApiController]` inference); response closure = `T` in `Task<ActionResult<T>>`/`ActionResult<T>` returns; closures include all reachable complex types; route/query-bound primitives excluded.
 
-- [ ] **Step 1: Write failing diagnostics tests** — one per diagnostic, using the harness: a stub `GrpcControllerBase` + a controller exposing a contract violating exactly one law; assert the diagnostic ID and that the squiggle lands on the offending symbol. Include the negative: the same violating contract with **no** controller touching it produces zero diagnostics (exposure scoping — spec §15).
+**Incremental pipeline shape (load-bearing — there is no attribute to hang `ForAttributeWithMetadataName` on; the base class is the key, and a naive syntax-provider-plus-semantic-walk re-runs the full closure walk on every keystroke in the host):**
+- Syntax predicate: class declarations **with a non-empty base list** — cheap, no semantics.
+- Transform: semantic confirmation against the `Norse.Abstractions.Web.Server.Facade.GrpcControllerBase` metadata name; non-matches return null and are filtered before anything expensive runs.
+- **`ShapeModel` is a fully equatable, symbol-free value model** — records and value-equatable arrays (`EquatableArray<T>`-style) only; no `ISymbol`, no `Compilation`, no `SyntaxNode` captured anywhere in it. The closure walk produces `ShapeModel` in the transform; the emission stage keys purely on model equality, so an edit that doesn't change the exposed surface hits cache and emits nothing.
+
+- [ ] **Step 1: Write failing diagnostics tests** — one per diagnostic, using the harness: a stub `GrpcControllerBase` + a controller exposing a contract violating exactly one law; assert the diagnostic ID and that the squiggle lands on the offending symbol. Include the negative: the same violating contract with **no** controller touching it produces zero diagnostics (exposure scoping — spec §15). Include the **cached-vs-recomputed test**: run the driver, edit an unrelated syntax tree, run again, and assert via `GeneratorDriverRunResult` tracked-step reasons that the shape pipeline steps report `Cached`/`Unchanged` — incrementality proven, not presumed.
 - [ ] **Step 2: Run to verify fail.**
 - [ ] **Step 3: Implement discovery + walk + diagnostics** (no emission yet — generator emits nothing when diagnostics fire, and emission itself lands in Task 6). `NameCasing.Apply`: split on Pascal word boundaries; camel/pascal join, snake lower-joins with `_`, upper/lower flatten. Unit-test `NameCasing` directly in the same test project (`"ReadWrite"` → `read_write`/`READWRITE`/`readwrite`/`readWrite`/`ReadWrite`).
 - [ ] **Step 4: Run to verify pass.**
@@ -354,8 +361,9 @@ Closure derivation (spec §4.1): controllers = classes derived from `GrpcControl
 
 **Interfaces:**
 - Produces: `public static IMvcBuilder AddNorseXml(this IMvcBuilder builder, XmlCaseStyle caseStyle, XmlShapeRegistry registry)` — registers `NorseXmlOptions`, the registry singleton, and inserts `XmlContractInputFormatter`/`XmlContractOutputFormatter` (Task 9 — this task registers by type; Task 9 makes them real; order the two tasks as written and let this task's formatter classes start as minimal shells that Task 9 fills, each shell throwing `NotSupportedException` from `ReadRequestBodyAsync`/`WriteResponseBodyAsync` so nothing silently half-works). The host calls `AddNorseXml(style, NorseXmlShapeRegistration.Build())`.
+- **The library-controller tripwire (spec §3, ratified 2026-08-02):** `AddNorseXml` also registers a startup validation (`IValidateOnStart`-backed options validator or `IStartupFilter` — pick whichever the platform's ServiceDefaults already idiomatically use; read them first) that enumerates the app's `ControllerFeature` via `ApplicationPartManager`, and for every `GrpcControllerBase` descendant asserts each body-bound parameter type and `ActionResult<T>` payload type has a shape in the registry. Any miss → `InvalidOperationException` naming the controller, the type, and the law: `"facade controllers are host-compilation source — '{Controller}' exposes '{Type}' with no generated shape; controllers shipped in referenced assemblies generate nothing"`. Startup failure, never a runtime 500.
 
-- [ ] **Step 1: Write failing tests** — registration emission (generated `Build()` contains every fixture shape; duplicate contract types impossible by construction) and `AddNorseXml` wiring (`MvcOptions` contains both formatter instances; `NorseXmlOptions.CaseStyle` set).
+- [ ] **Step 1: Write failing tests** — registration emission (generated `Build()` contains every fixture shape; duplicate contract types impossible by construction), `AddNorseXml` wiring (`MvcOptions` contains both formatter instances; `NorseXmlOptions.CaseStyle` set), and the tripwire: a fixture `GrpcControllerBase` descendant whose action exposes a type absent from the registry fails startup validation with the named error (assert the message contains the controller and type names); the same controller with all shapes registered passes.
 - [ ] **Step 2: Run to verify fail.**
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run to verify pass.**
@@ -381,20 +389,24 @@ Closure derivation (spec §4.1): controllers = classes derived from `GrpcControl
 
 ---
 
-### Task 10: Midgard — `GrpcControllerBase` + `Outcome<T>` fold + RFC 9457 problem writer
+### Task 10: Asgard + Midgard — `GrpcControllerBase` (Asgard) + `Outcome<T>` fold + RFC 9457 problem writer (Midgard)
+
+Two repos, one task, sequential: the Asgard half first (own `feature/futhark-xml` branch there), then the Midgard problem writer.
 
 **Files:**
-- Create: `.../Facade/GrpcControllerBase.cs`, `.../Xml/ProblemXmlWriter.cs`
-- Test: `.../Web.Server.Tests/Facade/GrpcControllerBaseTests.cs`, `.../Web.Server.Tests/Xml/ProblemXmlWriterTests.cs`
+- Create: `Asgard/src/Abstractions.Web.Server/Facade/GrpcControllerBase.cs` (namespace `Norse.Abstractions.Web.Server.Facade`; the assembly already carries the server framework reference — read its csproj first and confirm, do not add blindly)
+- Create: `Midgard/src/Infrastructure.Web.Server/Xml/ProblemXmlWriter.cs`
+- Test: `Asgard/tests/Abstractions.Web.Server.Tests/Facade/GrpcControllerBaseTests.cs` (extend the existing test project; if absent, mirror a sibling Asgard test csproj — one test project per package), `Midgard/tests/Infrastructure.Web.Server.Tests/Xml/ProblemXmlWriterTests.cs`
 
 **Interfaces:**
-- Consumes: `Outcome<T>` (`Norse.Abstractions.Contracts`) — **read `Outcome{T}.cs` and the existing `OutcomeServerInterceptor` first** to fold the exact same states the gRPC edge folds; the two folds must agree state-for-state.
+- Consumes: `Outcome<T>` (`Norse.Abstractions.Contracts`) — **read `Outcome{T}.cs` and the existing `OutcomeServerInterceptor` first** to fold the exact same states the gRPC edge folds; the two folds must agree state-for-state. The fold uses only `ControllerBase` natives (`Ok`/`NotFound`/`Problem`) — **no Midgard reference from Asgard, ever**; problem+xml rendering is the host-registered formatter's job.
 - Produces:
 
 ```csharp
 [ApiController]
 [Consumes("application/json", "application/xml")]
 [Produces("application/json", "application/xml")]
+[RequestSizeLimit(1_048_576)]   // spec §8.4 — the cap travels with the facade, not host config; a formatter cannot enforce body size
 public abstract class GrpcControllerBase : ControllerBase
 {
 	protected async Task<ActionResult<TResponse>> FoldAsync<TResponse>(ValueTask<Outcome<TResponse>> operation);
@@ -441,7 +453,7 @@ public abstract class GrpcControllerBase : ControllerBase
 ### Task 13: Yggdrasil — wiring, parity fixture, the tri-protocol swoop
 
 **Files:**
-- Modify: `Yggdrasil/src/Hosting.Web.Server/Program.cs` — `builder.Services.AddControllers().AddNorseJson().AddNorseXml(XmlCaseStyle.CamelCase, NorseXmlShapeRegistration.Build());` plus `app.MapControllers();` placed with the existing endpoint mappings.
+- Modify: `Yggdrasil/src/Hosting.Web.Server/Program.cs` — `builder.Services.AddControllers().AddNorseJson().AddNorseXml(XmlCaseStyle.CamelCase, NorseXmlShapeRegistration.Build());` plus **the OpenAPI wiring** — `builder.Services.AddOpenApi(options => { options.AddSchemaTransformer<ResultSchemaTransformer>(); options.AddSchemaTransformer<XmlMetadataTransformer>(); options.AddDocumentTransformer<UnionLeakGuardTransformer>(); });` — plus `app.MapControllers();` and `app.MapOpenApi();` placed with the existing endpoint mappings. Designed-and-tested-but-unwired is the `OutcomeServerInterceptor` sin; this line is where the plan refuses to repeat it while implementing the law that names it.
 - Create: `Yggdrasil/tests/Hosting.Web.Server.Tests/` if absent (csproj mirrors an existing Yggdrasil test project — check `Yggdrasil/tests/` first; if the folder has no test projects, copy a Midgard test csproj shape and adjust the `NorseRef`/project references).
 - Create in the test (host-compilation) tree: `Parity/ParityContracts.cs` (`[DataContract] ParityRequest` — `Result<T>`-wrapped members covering every §7 scalar row + `List<ParityTag>` where `ParityTag` wraps a `Result<string> Value`; `[DataContract] ParityReport` — plain scalars echoing every value), `Parity/IParityService.cs` + `ParityService.cs` (`[ServiceContract]`, one `ValueTask<Outcome<ParityReport>> EchoAsync(ParityRequest)` through the real mediator pipeline), `Parity/ParityController.cs` (`: GrpcControllerBase`, one POST action).
 - Create: `Swoop/TriProtocolSwoopTests.cs`, `Swoop/LexicalCorpus.cs`, `Swoop/WiringTests.cs`.
@@ -450,10 +462,11 @@ public abstract class GrpcControllerBase : ControllerBase
 
 - [ ] **Step 1: Write the failing swoop tests first** (they fail on wiring, then on behavior, in that order — that's the point):
   - Success parity: one `ParityRequest` via in-proc gRPC client (protobuf-net.Grpc client over `WebApplicationFactory` handler), REST-JSON POST, REST-XML POST → three `ParityReport`s, structurally equal.
-  - Failure parity: three malformed scalars → JSON and XML responses carry identical `errors` arrays (paths, details, shape) as problem payloads; gRPC required-absent → the pipeline's validation failure surfaces per the existing `Outcome` error path.
+  - Failure parity: three malformed scalars → JSON and XML responses carry identical `errors` arrays (paths, details, shape) as problem payloads; gRPC required-absent → the pipeline's validation failure surfaces with detail wording asserted **equal to** the text channels' required-missing detail (`FailureDetail.Render` parity — the Task 4 condition proven end-to-end, not merely "a validation failure surfaced").
   - Lexical corpus: shared accepted/rejected lexeme sets per §7 row asserted identical across both text channels (non-finite spellings in the rejected set).
   - Round-trip spine including required `Result<string>` = `""`.
-  - Wiring tests: remove-the-registration probes — a test asserting `MvcOptions` contains the XML formatters, one asserting the problem writer negotiates for `Accept: application/problem+xml`... asserted by hitting the live test host, not by inspecting DI.
+  - Body cap: an oversized (> 1 MiB) XML body → **413**, asserted against the live host.
+  - Wiring tests — spec §10.4 mandates all three remove-the-registration probes, all asserted by hitting the live test host, never by inspecting DI: the XML formatters answer negotiation (and the problem writer negotiates for `Accept: application/problem+xml`); the OpenAPI document fetched from the running host renders the parity contracts **unwrapped** — a `Result<DateOnly>` member appears as `string`/`date`, and the strings `Outcome` and `Result` appear **nowhere** in the document (the fold + both union-unwrap transformers, proven wired).
 - [ ] **Step 2: Run to verify fail** (formatters not yet wired in host).
 - [ ] **Step 3: Wire `Program.cs`; implement fixture service/controller.**
 - [ ] **Step 4: Run to verify pass** — full Yggdrasil suite; also `dotnet build` the host and confirm the generator emitted shapes for exactly the parity contracts (the exposure law working in the real host).
@@ -464,4 +477,5 @@ public abstract class GrpcControllerBase : ControllerBase
 ## Self-review notes (run before handoff)
 
 - Spec coverage: §2→T5–8; §3→T1–8; §4→T5,T10,T13; §5→T5; §6→T2,T6; §7→T0,T2,T3,T13; §8→T1,T7,T9; §9→T3,T4,T6–7; §10→T10,T11,T13; §11→T1,T10; §12→T11; §13 (versioning) is documentation-only — no task, deliberate; §14→T5; §15→every task's tests + T13; §16–17 resolved in-plan (generator name, NORSE block, closed-table schema metadata, absent-member semantics at validation layer).
-- Known deviations from spec text, both flagged inline: OpenAPI schema metadata uses a closed static table instead of static abstract interface members (BCL types cannot implement interfaces — spec intent preserved, mechanism honest); gRPC required-absent semantics live in the shared validation rules rather than the deserializer (protobuf-net absent-member reality — observable behavior identical). If Forseti objects to either, they surface at first review, not after 13 tasks.
+- Known deviations from spec text, both flagged inline and **both ratified at plan review (2026-08-02)**: OpenAPI schema metadata uses a closed static table instead of static abstract interface members (BCL types cannot implement interfaces — spec intent preserved, mechanism honest); gRPC required-absent semantics live in the shared `ResultRules` validation extensions rather than the deserializer (protobuf-net absent-member reality — observable behavior identical, **message wording byte-identical by construction**: the rule calls `Parser.ParseRequired<T>(string.Empty, …)` and renders via `FailureDetail.Render`, and the swoop asserts the parity end-to-end).
+- Plan-review findings folded (2026-08-02): OpenAPI transformers wired into the live host with document-fetch wiring tests (all three §10.4 probes now present); Task 5 pins the incremental pipeline shape (base-list syntax predicate, metadata-name confirmation, symbol-free equatable `ShapeModel`) with a cached-vs-recomputed test; the 1 MiB cap enforces via `[RequestSizeLimit]` on `GrpcControllerBase` with a live-host 413 test.
