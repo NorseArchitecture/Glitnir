@@ -506,11 +506,16 @@ CREATE TABLE country_or_area (
 
 ## Projects and dependencies
 
-- **Leverage transitive dependencies whenever possible.** Do not add a
-  `<PackageReference>` for something already flowing transitively. The one
-  exception is **Yggdrasil**: NuGet Central Package Management is on there, and as
-  the composition root it pins everything explicitly — one place to pick up a
-  hotfix/patch instead of walking the tree and cutting a cascade of releases.
+- **Leverage transitive dependencies whenever possible — *especially* in tests.**
+  Do not add a `<PackageReference>` for something already flowing transitively.
+  The point is anti-brittleness: versions are managed in one place, and a floor
+  bump in a src project can never strand a stale pin somewhere downstream — a
+  test project that hand-pins what its subject already carries is a future
+  NU1605 with a timer on it (proven live, 2026-08-03, `Grpc.Net.Client` in
+  `Hosting.Web.Client.Tests`). The one exception is **Yggdrasil**: NuGet Central
+  Package Management is on there, and as the composition root it pins everything
+  explicitly — one place to pick up a hotfix/patch instead of walking the tree
+  and cutting a cascade of releases.
 - **Tag package versions to the major:** `Version="3.*"`. While .NET 11 is in
   preview, framework-tracking packages are `Version="11.*-*"` — drop the
   prerelease wildcard at RTM.
@@ -518,12 +523,18 @@ CREATE TABLE country_or_area (
   alphabetically inside each — so any property is findable by scan, not by
   archaeology. (`Directory.*.props` files live in Ginnungagap and answer to their
   own structure; this law governs csproj files.)
-- **A direct `<PackageReference>` overriding a known-vulnerable transitive
-  version is a sanctioned exception** to transitive-first — and carries a comment
-  saying exactly that, so the reference isn't "cleaned up" later:
+- **The only sanctioned break of transitive-first: a stale package hosts a
+  compromised transitive version.** When a dependency pins a known-vulnerable
+  version of something it drags in (the canonical case:
+  `System.ServiceModel.Primitives` hosting a compromised
+  `System.Security.Cryptography.Xml`), add a direct `<PackageReference>` floated
+  on the current train — `11.*-*` while .NET 11 is in preview, deliberately one
+  greppable pattern platform-wide so the RTM sweep replaces every site with
+  `11.*` or `*` in a single pass — with a comment naming the stale source that
+  hosts it, so the reference isn't "cleaned up" later:
 
   ```xml
-  <!-- Overrides a known-vulnerable transitive version pulled in by System.ServiceModel.Primitives. -->
+  <!-- Floats over the known-vulnerable transitive version hosted by System.ServiceModel.Primitives. -->
   <PackageReference Include="System.Security.Cryptography.Xml" Version="11.*-*" />
   ```
 
