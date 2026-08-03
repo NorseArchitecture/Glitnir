@@ -211,6 +211,7 @@ One parsing stack, three channels, one message source. **`Result<T>` is a parsin
 - `Write`: success writes the clean unwrapped value; a failed `Result<T>` throws — you do not ship failures. Per §1.3 the request-write path has **no production consumer** (internal clients are gRPC end-to-end); it is retained as test infrastructure for the round-trip suite, and the code comments say so honestly.
 - Coverage spans the full taxonomy under `Result<T>`'s `where T : notnull` — including `string`, which narrower `struct`-constrained designs miss.
 - The same options pass ratchets `UnmappedMemberHandling.Disallow` (§8.1) and pins the lexical table (§7) where STJ defaults disagree.
+- **Extended (2026-08-02):** the pass also enforces the platform's opt-in contract law — on a `[DataContract]` type, non-`[DataMember]` members do not exist to STJ in either direction (a `TypeInfoResolver` modifier; STJ does not honor the WCF vocabulary natively). Ruling and rationale: `2026-08-02-result-success-unwrap-on-serialize-design.md` §4b.
 
 ### 9.2 XML — Futhark
 
@@ -220,7 +221,7 @@ The generated reader/writer emit exactly the parser calls and unwrap semantics d
 
 Wire form is presence-tracked `T` (proto3 `optional`) for both `Result<T>` and `Result<T>?`:
 
-- **Serialize:** success unwraps to the value; failed `Result<T>` throws client-side, loudly. **Divergence flagged (2026-08-02):** the implementation as shipped hardened past this clause — `Write` throws unconditionally, every state, every channel — which leaves the typed client proxy unable to author a request against any Result-wrapped contract. Surfaced, not yet ruled; see `2026-08-02-futhark-enum-wire-law-design.md` §5 — its own Forseti pass is required before a tri-channel operation ships to a real first-party client.
+- **Serialize:** success unwraps to the value; failed `Result<T>` throws client-side, loudly. **Divergence flagged and resolved same day (2026-08-02):** the implementation as shipped hardened past this clause — `Write` throwing unconditionally, every state, every channel — leaving the typed client proxy unable to author a request against any Result-wrapped contract. Ruled: this clause stands as written; the unconditional throw is the artifact to revert. Full ruling, rationale, and the client binding-shadow pattern: `2026-08-02-result-success-unwrap-on-serialize-design.md`.
 - **Deserialize:** present → success (no parsing — the binary wire is typed; a malformed date is unrepresentable on this channel); absent + `Result<T>` → the failed required-missing `Result`, mirroring `ParseRequired` semantics without a parse; absent + `Result<T>?` → `null`.
 - **Registration** rides the existing code-first serializer configuration in `Infrastructure.Web.Grpc`. The scalar taxonomy is doctrinally finite, so the worst case is a closed set of ~13 surrogate registrations; whether protobuf-net honors an open-generic registration is a plan-time verification, not a design risk.
 

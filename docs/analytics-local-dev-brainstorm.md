@@ -48,7 +48,25 @@ replication role. This is an **Urdarbrunnr/Ginnungagap concern, not an analytics
   database; Oracle needs supplemental logging. Same doctrine shape: the source realm owns
   its log-readiness.
 
-**Gate G1:** ratify "born replication-ready" as Urdarbrunnr law, or keep it per-deployment?
+**Gate G1 — RULED:** "born replication-ready" is Urdarbrunnr law, not a per-deployment
+choice. `pg-primary` runs `wal_level=logical` under Bifrost's AppHost as of 2026-08-02
+(`src/Orchestration.AppHost/AppHost.cs`) — `max_wal_senders`/`max_replication_slots` were
+already sensible from the primary+replica design. This closes only the Postgres cell's
+local-dev prerequisite; the publication itself is still unbuilt (owned by Urdarbrunnr's
+Migrations Service, per the note above, whenever a source table actually needs to publish).
+
+**Verification scope, this pass — Postgres only.** SQL Server and Oracle stay unverified
+today, blocked on real constraints, not deferred out of laziness:
+- **SQL Server:** locked to SQL Server 2025 (native JSON compat-level floor, platform-wide —
+  see house rules), which has no arm64 image. The dev machine is Snapdragon/WSL2 arm64, the
+  same wall the Midgard SQL Server Testcontainers fixture already hit. Verifying CDC/Change
+  Tracking readiness here waits on amd64 CI or a Testcontainers path with an arm64-aware skip.
+- **Oracle:** blocked on EF provider maturity on .NET 10 first: no realm has proven an Oracle
+  DbContext yet, so supplemental-logging readiness has nothing to attach to. Sequenced after
+  an Oracle EF provider lands, not before.
+
+Doctrine shape carries forward unchanged for both rows (source realm owns its log-readiness);
+only the "we ran it and it works" proof is Postgres-only for now.
 
 ## 2. Decision D1 — which river? (the EL container)
 
@@ -245,6 +263,18 @@ screen-share.
   stream the warehouse trusts; raw data is immutable; nothing re-enters Midgard except
   through the law."* Proposed home: Glitnir front matter for the analytics realm, with the
   matrix doc citing it rather than owning it.
+- Q6 **OPEN — needs its own session:** should Himinbjörg's `norse_identity` ever publish?
+  Gate G1 only proves the WAL is readable; it says nothing about whether Identity is a wise
+  CDC source. Known hard parts to bring to that session: reconciling `EncryptedString`
+  crypto-shredding (key deletion makes ciphertext permanently unrecoverable, by design) with
+  bronze's immutability covenant (F5 — nothing lands is ever revised) — a shredded row's
+  bronze copy either shreds too (breaking "raw data is immutable") or doesn't (breaking
+  right-to-erasure); whether the publication can exclude ciphertext columns outright and
+  still be useful; and Himinbjörg's temporal history tables as a second, competing candidate
+  for "the" identity history record — does bronze duplicate what temporal already answers,
+  or does temporal stay the audit-grade source and bronze stay analytical-grade, per §4's
+  "when an auditor asks, Urdarbrunnr answers; when an analyst asks, Sökkvabekkr answers"
+  split. No urgency — no publication exists yet for any realm, Identity included.
 
 ---
 
