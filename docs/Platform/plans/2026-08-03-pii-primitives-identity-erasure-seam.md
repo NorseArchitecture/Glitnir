@@ -12,6 +12,12 @@
 
 - Read `../../house-rules.md` in full before implementing any task; it governs every line of code below (tabs, `sealed`, target-typed `new()`, collection expressions, expression bodies, `ConfigureAwait(false)` in src, XML docs in src, Shouldly/NSubstitute, no FluentAssertions/Moq).
 - **Namespace ruling (2026-08-03, Buvy — supersedes the flat-namespace code blocks below):** namespace and folder never collide (IDE0130 is an error, never suppressed). The PII types live in `namespace Norse.Primitives.Pii;` matching `src/Primitives/Pii/` (the Identifiers precedent — and a `using Norse.Primitives.Pii;` at the top of a file declares PII mode at a glance). Everything referencing them adjusts: Task 6's analyzer metadata names become `Norse.Primitives.Pii.IMaskedValue` / `Norse.Primitives.Pii.RetentionPolicyAttribute`, and downstream tasks add `using Norse.Primitives.Pii;` beside (not instead of) `using Norse.Primitives;` where `Result<T>` is also in play.
+- **CURATION PASS (2026-08-03, post-Law-of-the-Realms — this plan was halted mid-Phase-A when its own converter tripped what became NORSE070; the law now exists and is attached platform-wide):**
+  - **Wire format never leaves Infrastructure/Hosting (NORSE070, compiler-enforced).** `MaskedValueJsonConverter<T>` and every `[JsonConverter]` attribute are DELETED from this plan (Tasks 1–5 amended below); the masked-serialization defense-in-depth relocates to Midgard as new Task 12b. Tests/benchmarks are law-exempt.
+  - **Resume protocol:** `feature/pii-primitives` carries Tasks 1–2 with the convicted files and has master (law included) merged in — the branch build prints the exact strip-list. The resume's FIRST commit strips: delete `src/Primitives/Pii/MaskedValueJsonConverter.cs` + `tests/Primitives.Tests/Pii/MaskedValueJsonConverterTests.cs`, remove the `[JsonConverter(...)]` attribute and `using System.Text.Json.Serialization;` from `EmailAddress.cs`. Then Task 3 dispatches per the amended text.
+  - **Keys placement (ruled 2026-08-03: no per-functional-group packages — the `Infrastructure.Backend` precedent):** Task 8's contracts land in **`Asgard/src/Abstractions.Backend/Keys/`** (`namespace Norse.Abstractions.Backend.Keys;`), NOT a new `Abstractions.Keys` assembly; Task 12's dev store lands in **`Midgard/src/Infrastructure.Backend/Keys/`** (`namespace Norse.Infrastructure.Backend.Keys;`), NOT a new `Infrastructure.Keys` project. No new csproj/slnx work in either task; tests join the existing 1:1 `Abstractions.Backend.Tests`/`Infrastructure.Backend.Tests` under `Keys/` folders. Every `using Norse.Abstractions.Keys;` the original text mandated in later tasks reads `using Norse.Abstractions.Backend.Keys;`.
+  - **The serialization seam exists** (`ISerializerProvider`/`ISerializer`/`NamingStrategy` in `Abstractions.Backend`, STJ machinery in `Infrastructure.Backend`, composed at the tree): anything disclosure-adjacent that needs bytes uses the seam, never STJ directly. Himinbjörg master now carries the seam-restored `DownloadPersonalData` scaffold endpoint — the Task 19 disclosure surface supersedes it when it lands.
+  - **Midgard is consumed only by the tree (NORSE071):** already true in this plan — the ONLY Midgard reference is Task 20's composition root, plus law-exempt test fixtures. Task 18/19's `PostgresIdentityFixture` composes the Midgard dev key store: the TEST csproj needs its own direct `<NorseRef Include="Infrastructure.Backend"><Repo>Midgard</Repo></NorseRef>` (nothing flows it transitively; the Mímir integration-test precedent).
 - **Branching:** every realm phase starts on a fresh local feature branch in that realm's repo; commits stay local and unpushed; Buvy pushes/PRs at the ship gate. Never branch or commit Bifröst itself.
 - **Commit policy:** subagents commit only files they authored, named explicitly — never `git add -A`/`git add .`.
 - **Hands-off files:** `src/Directory.Build.props`, `tests/Directory.Build.props`, `gen/Directory.Build.props`, `config/*` are Ginnungagap scatter — never edit; halt and ask if a change seems needed there.
@@ -33,7 +39,6 @@ Svartalfheim/
   src/Primitives/Pii/IPiiScalar.cs                      (new)
   src/Primitives/Pii/RetentionBasis.cs                  (new)
   src/Primitives/Pii/RetentionPolicyAttribute.cs        (new)
-  src/Primitives/Pii/MaskedValueJsonConverter.cs        (new)
   src/Primitives/Pii/EmailAddress.cs                    (new)
   src/Primitives/Pii/PhoneNumber.cs                     (new)
   src/Primitives/Pii/PersonalName.cs                    (new)
@@ -42,22 +47,26 @@ Svartalfheim/
   gen/Primitives.Analyzers/WellKnownTypes.cs            (modify — PII symbols + INorseEntity)
   gen/Primitives.Analyzers/RetentionPolicyAnalyzer.cs   (new)
   gen/Primitives.Analyzers/PiiCompositionWalker.cs      (new)
-  tests/Primitives.Tests/Pii/*Tests.cs                  (new, one per struct + converter)
+  tests/Primitives.Tests/Pii/*Tests.cs                  (new, one per struct)
   tests/Primitives.Analyzers.Tests/RetentionPolicyAnalyzerTests.cs (new)
 Asgard/
   src/Abstractions.Contracts/ErasureReceipt.cs          (new)
   src/Abstractions.Contracts/ErrorCategory.cs           (modify — Erased = 11)
   src/Abstractions.Contracts/Problem.cs                 (modify — Receipt member)
-  src/Abstractions.Keys/*.cs                            (new project — seam contracts)
+  src/Abstractions.Backend/Keys/*.cs                    (new folder — seam contracts; curation ruling)
   src/Abstractions.Web.Server/Facade/GrpcControllerBase.cs (modify — 410 fold)
-  tests/Abstractions.Keys.Tests/*.cs                    (new project)
+  tests/Abstractions.Backend.Tests/Keys/*.cs            (new folder in existing project)
 Midgard/
   src/Infrastructure.Web.Server/Mediator/Grpc/ProblemExtensions.cs   (modify)
   src/Infrastructure.Web.Client/Grpc/RpcExceptionExtensions.cs       (modify)
   src/Infrastructure.Web.Server/Xml/ProblemXmlWriter.cs              (modify — remarks only)
-  src/Infrastructure.Keys/DevelopmentSubjectKeyStore.cs              (new project)
-  src/Infrastructure.Keys/ServiceCollectionExtensions.cs             (new)
-  tests/Infrastructure.Keys.Tests/*.cs                               (new project)
+  src/Infrastructure.Web.Server/Json/MaskedValueJsonConverterFactory.cs (new — Task 12b, relocated defense)
+  src/Infrastructure.Web.Server/Json/MvcBuilderExtensions.cs         (modify — register the factory)
+  src/Infrastructure.Backend/Serialization/SystemTextJsonSerializer.cs (modify — mask IMaskedValue on the seam)
+  src/Infrastructure.Backend/Keys/DevelopmentSubjectKeyStore.cs      (new folder — curation ruling)
+  src/Infrastructure.Backend/Keys/ServiceCollectionExtensions.cs     (new)
+  tests/Infrastructure.Backend.Tests/Keys/*.cs                       (new folder in existing project)
+  tests/Infrastructure.Web.Server.Tests/.../MaskedValueJsonConverterFactoryTests.cs (new — Task 12b)
 Urdarbrunnr/
   src/Persistence.EntityFramework/ProtectedPiiValueConverter.cs      (new)
   src/Persistence.EntityFramework/PiiProtectionModelExtensions.cs    (new)
@@ -84,18 +93,18 @@ Yggdrasil/
 
 ## Phase A — Svartálfheim (`feature/pii-primitives`)
 
-### Task 1: PII marker interfaces, retention attribute, masked JSON converter
+### Task 1: PII marker interfaces, retention attribute (CURATED: converter deleted — NORSE070; already landed on the branch, the strip commit finishes it)
 
 **Files:**
-- Create: `src/Primitives/Pii/IMaskedValue.cs`, `src/Primitives/Pii/IPiiScalar.cs`, `src/Primitives/Pii/RetentionBasis.cs`, `src/Primitives/Pii/RetentionPolicyAttribute.cs`, `src/Primitives/Pii/MaskedValueJsonConverter.cs`
-- Test: `tests/Primitives.Tests/Pii/RetentionPolicyAttributeTests.cs`, `tests/Primitives.Tests/Pii/MaskedValueJsonConverterTests.cs`
+- Create: `src/Primitives/Pii/IMaskedValue.cs`, `src/Primitives/Pii/IPiiScalar.cs`, `src/Primitives/Pii/RetentionBasis.cs`, `src/Primitives/Pii/RetentionPolicyAttribute.cs`
+- Test: `tests/Primitives.Tests/Pii/RetentionPolicyAttributeTests.cs`
 
 **Interfaces (Produces):**
 - `interface IMaskedValue { string Masked { get; } string ToMasked(DateOnly asOf); }`
 - `interface IPiiScalar<TSelf> : IMaskedValue where TSelf : struct, IPiiScalar<TSelf> { string WireValue { get; } static abstract Result<TSelf> Parse(ReadOnlySpan<char> value); }` — the generic hook Urðarbrunnr's converter and the disclosure surface both bind to. `WireValue` is the named, deliberate plaintext egress the spec (§1.5) requires; `IMaskedValue` alone stays the analyzer marker so non-struct downstream PII types can join governance.
 - `enum RetentionBasis : byte { Unspecified = 0, SubjectKey = 1, StatutoryEpoch = 2 }`
 - `sealed class RetentionPolicyAttribute(RetentionBasis basis, string? citation = null)` — property/field targets only; ctor throws `ArgumentOutOfRangeException` on `Unspecified` (the `Result(Failure)` smuggled-sentinel precedent).
-- `sealed class MaskedValueJsonConverter<T> : JsonConverter<T> where T : struct, IMaskedValue` — `Write` emits `value.Masked` as a JSON string; `Read` throws `NotSupportedException` (masked forms can be syntactically valid inputs; a lossy round-trip that succeeds fabricates data — spec §1.5).
+- ~~`MaskedValueJsonConverter<T>`~~ — CURATED OUT: wire format never enters the forge (NORSE070). The spec §1.5 layer-2 defense relocates to Midgard (Task 12b).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -128,38 +137,7 @@ public sealed class RetentionPolicyAttributeTests
 }
 ```
 
-```csharp
-using System.Text.Json;
-
-namespace Norse.Primitives.Tests.Pii;
-
-public sealed class MaskedValueJsonConverterTests
-{
-	// Local fixture type: the converter is generic over any IMaskedValue struct.
-	readonly record struct FakePii(string Secret) : IMaskedValue
-	{
-		public string Masked => "***";
-		public string ToMasked(DateOnly asOf) => Masked;
-	}
-
-	static readonly JsonSerializerOptions Options = BuildOptions();
-
-	static JsonSerializerOptions BuildOptions()
-	{
-		JsonSerializerOptions options = new();
-		options.Converters.Add(new MaskedValueJsonConverter<FakePii>());
-		return options;
-	}
-
-	[Fact]
-	void Should_write_the_masked_value_when_serialized() =>
-		JsonSerializer.Serialize(new FakePii("buvy@example.com"), Options).ShouldBe("\"***\"");
-
-	[Fact]
-	void Should_throw_when_deserialization_is_attempted() =>
-		Should.Throw<NotSupportedException>(() => JsonSerializer.Deserialize<FakePii>("\"***\"", Options));
-}
-```
+*(CURATED: the `MaskedValueJsonConverterTests` block that stood here is deleted with its subject — NORSE070.)*
 
 - [ ] **Step 2: Run tests to verify they fail**
 
@@ -265,43 +243,18 @@ public sealed class RetentionPolicyAttribute : Attribute
 }
 ```
 
-`src/Primitives/Pii/MaskedValueJsonConverter.cs`:
-
-```csharp
-using System.Text.Json;
-using System.Text.Json.Serialization;
-
-namespace Norse.Primitives;
-
-/// <summary>
-/// Defense-in-depth for serialization paths the analyzer cannot see: writes the masked rendering,
-/// throws on read. Reading is refused because masked forms can be syntactically valid inputs
-/// (<c>j***@d***.com</c> parses as an email address) — a lossy round-trip that succeeds would
-/// fabricate a well-formed value that silently is not the person's data. Wire DTOs are unaffected:
-/// transport contracts carry plain strings filled explicitly at the disclosure edge.
-/// </summary>
-public sealed class MaskedValueJsonConverter<T> : JsonConverter<T> where T : struct, IMaskedValue
-{
-	/// <inheritdoc />
-	public override T Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
-		throw new NotSupportedException($"{typeToConvert.Name} is masked-write-only JSON; PII never rehydrates from JSON — parse the wire string at the boundary instead.");
-
-	/// <inheritdoc />
-	public override void Write(Utf8JsonWriter writer, T value, JsonSerializerOptions options) =>
-		writer.WriteStringValue(value.Masked);
-}
-```
+*(CURATED: the `MaskedValueJsonConverter<T>` implementation that stood here is deleted — NORSE070; its defense-in-depth intent lives on as Task 12b in Midgard, where encodings are legal.)*
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `dotnet test tests/Primitives.Tests -- --filter-class "*.RetentionPolicyAttributeTests"` and `-- --filter-class "*.MaskedValueJsonConverterTests"`
+Run: `dotnet test tests/Primitives.Tests -- --filter-class "*.RetentionPolicyAttributeTests"`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git checkout -b feature/pii-primitives
-git add src/Primitives/Pii/IMaskedValue.cs src/Primitives/Pii/IPiiScalar.cs src/Primitives/Pii/RetentionBasis.cs src/Primitives/Pii/RetentionPolicyAttribute.cs src/Primitives/Pii/MaskedValueJsonConverter.cs tests/Primitives.Tests/Pii/RetentionPolicyAttributeTests.cs tests/Primitives.Tests/Pii/MaskedValueJsonConverterTests.cs
+git add src/Primitives/Pii/IMaskedValue.cs src/Primitives/Pii/IPiiScalar.cs src/Primitives/Pii/RetentionBasis.cs src/Primitives/Pii/RetentionPolicyAttribute.cs tests/Primitives.Tests/Pii/RetentionPolicyAttributeTests.cs
 git commit -m "feat: PII marker interfaces, retention attribute, masked JSON converter"
 ```
 
@@ -312,7 +265,7 @@ git commit -m "feat: PII marker interfaces, retention attribute, masked JSON con
 - Test: `tests/Primitives.Tests/Pii/EmailAddressTests.cs`
 
 **Interfaces:**
-- Consumes: Task 1's `IPiiScalar<TSelf>`, `MaskedValueJsonConverter<T>`.
+- Consumes: Task 1's `IPiiScalar<TSelf>`.
 - Produces: `readonly record struct EmailAddress : IPiiScalar<EmailAddress>` — `WireValue` (trimmed as-entered), `Normalized` (lowercase invariant — the exact blind-index input), `Masked` (`j***@d***.com` shape), `Parse(ReadOnlySpan<char>)`/`Parse(string?)`/`TryParse`, `ToString()` → `Masked`. `MaxLength = 254`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -408,8 +361,6 @@ Expected: FAIL — `EmailAddress` does not exist.
 `src/Primitives/Pii/EmailAddress.cs`:
 
 ```csharp
-using System.Text.Json.Serialization;
-
 namespace Norse.Primitives;
 
 /// <summary>
@@ -423,7 +374,6 @@ namespace Norse.Primitives;
 /// footgun class) — every member throws <see cref="InvalidOperationException"/> on it. Equality is
 /// wire-value equality; identity-level sameness is a <see cref="Normalized"/> comparison.
 /// </remarks>
-[JsonConverter(typeof(MaskedValueJsonConverter<EmailAddress>))]
 public readonly record struct EmailAddress : IPiiScalar<EmailAddress>
 {
 	/// <summary>RFC 5321 total-length bound.</summary>
@@ -526,7 +476,7 @@ git commit -m "feat: EmailAddress PII primitive with normalization and masking l
 - Test: `tests/Primitives.Tests/Pii/PhoneNumberTests.cs`
 
 **Interfaces:**
-- Consumes: Task 1's `IPiiScalar<TSelf>`, `MaskedValueJsonConverter<T>`.
+- Consumes: Task 1's `IPiiScalar<TSelf>`.
 - Produces: `readonly record struct PhoneNumber : IPiiScalar<PhoneNumber>` — E.164 shape only (`+`, first digit 1–9, 8–15 digits total); separators (space, hyphen, dot, parentheses) stripped during parse; `WireValue == Normalized` (E.164 is already canonical); `Masked` = `***` + last four digits.
 
 - [ ] **Step 1: Write the failing tests**
@@ -596,8 +546,6 @@ Expected: FAIL — `PhoneNumber` does not exist.
 `src/Primitives/Pii/PhoneNumber.cs`:
 
 ```csharp
-using System.Text.Json.Serialization;
-
 namespace Norse.Primitives;
 
 /// <summary>
@@ -607,7 +555,6 @@ namespace Norse.Primitives;
 /// digits (<c>***4567</c> — country-code-agnostic, no region leak).
 /// </summary>
 /// <remarks><c>default(PhoneNumber)</c> is malformed by construction; members throw on it.</remarks>
-[JsonConverter(typeof(MaskedValueJsonConverter<PhoneNumber>))]
 public readonly record struct PhoneNumber : IPiiScalar<PhoneNumber>
 {
 	const int MinDigits = 8, MaxDigits = 15;
@@ -700,7 +647,7 @@ git commit -m "feat: PhoneNumber PII primitive with E.164 canonicalization"
 - Test: `tests/Primitives.Tests/Pii/PersonalNameTests.cs`
 
 **Interfaces:**
-- Consumes: Task 1's `IPiiScalar<TSelf>`, `MaskedValueJsonConverter<T>`.
+- Consumes: Task 1's `IPiiScalar<TSelf>`.
 - Produces: `readonly record struct PersonalName : IPiiScalar<PersonalName>` — **a single name component** (a composing entity declares `GivenName`/`MiddleName`/`FamilyName` each as its own `PersonalName` field; component count and cultural ordering are the consumer's concern, spec §1.1). `WireValue` = trimmed, Unicode NFC. `Normalized` = NFC + uppercase invariant. `Masked` = first character uppercased + `.` (`"B."`). Max length 128; rejects control characters; requires at least one letter.
 
 - [ ] **Step 1: Write the failing tests**
@@ -784,8 +731,6 @@ Expected: FAIL — `PersonalName` does not exist.
 
 ```csharp
 using System.Text;
-using System.Text.Json.Serialization;
-
 namespace Norse.Primitives;
 
 /// <summary>
@@ -796,7 +741,6 @@ namespace Norse.Primitives;
 /// (<c>B.B.</c>) is display-layer composition over N masked components.
 /// </summary>
 /// <remarks><c>default(PersonalName)</c> is malformed by construction; members throw on it.</remarks>
-[JsonConverter(typeof(MaskedValueJsonConverter<PersonalName>))]
 public readonly record struct PersonalName : IPiiScalar<PersonalName>
 {
 	/// <summary>Component length bound.</summary>
@@ -889,7 +833,7 @@ git commit -m "feat: PersonalName PII primitive as single name component"
 - Test: `tests/Primitives.Tests/Pii/BirthDateTests.cs`
 
 **Interfaces:**
-- Consumes: Task 1's `IPiiScalar<TSelf>`, `MaskedValueJsonConverter<T>`.
+- Consumes: Task 1's `IPiiScalar<TSelf>`.
 - Produces: `readonly record struct BirthDate : IPiiScalar<BirthDate>` — wraps `DateOnly Value`; wire form strict ISO 8601 `yyyy-MM-dd`; `Masked` = `"****-**-**"` (zero-information redaction — a log line has no business knowing an age); `ToMasked(asOf)` = exact current age as an invariant string (`"38"`, clamped at 0), computed at disclosure time, never stored. No `Over18`-style predicates (spec §1.4).
 
 - [ ] **Step 1: Write the failing tests**
@@ -976,8 +920,6 @@ Expected: FAIL — `BirthDate` does not exist.
 
 ```csharp
 using System.Globalization;
-using System.Text.Json.Serialization;
-
 namespace Norse.Primitives;
 
 /// <summary>
@@ -988,7 +930,6 @@ namespace Norse.Primitives;
 /// the disclosed age; a no-disclosure threshold check is a purpose-built endpoint if ever needed.
 /// </summary>
 /// <remarks><c>default(BirthDate)</c> is malformed by construction; members throw on it.</remarks>
-[JsonConverter(typeof(MaskedValueJsonConverter<BirthDate>))]
 public readonly record struct BirthDate : IPiiScalar<BirthDate>
 {
 	const string WireFormat = "yyyy-MM-dd";
@@ -1119,7 +1060,7 @@ public sealed class RetentionPolicyAnalyzerTests
 
 	const string PiiFixture =
 		"""
-		using Norse.Primitives;
+		using Norse.Primitives.Pii;
 		namespace Fixtures
 		{
 			public readonly record struct TestEmail : IMaskedValue
@@ -1156,7 +1097,7 @@ public sealed class RetentionPolicyAnalyzerTests
 			"""
 			using Fixtures;
 			using Norse.Persistence.EntityFramework;
-			using Norse.Primitives;
+			using Norse.Primitives.Pii;
 			namespace App
 			{
 				public sealed class Person : INorseEntity<Person>
@@ -1196,7 +1137,7 @@ public sealed class RetentionPolicyAnalyzerTests
 			"""
 			using Fixtures;
 			using Norse.Persistence.EntityFramework;
-			using Norse.Primitives;
+			using Norse.Primitives.Pii;
 			namespace App
 			{
 				public sealed class ContactCard
@@ -1243,7 +1184,7 @@ public sealed class RetentionPolicyAnalyzerTests
 			"""
 			using Fixtures;
 			using Norse.Persistence.EntityFramework;
-			using Norse.Primitives;
+			using Norse.Primitives.Pii;
 			namespace App
 			{
 				public sealed class Person : INorseEntity<Person>
@@ -1340,7 +1281,7 @@ static class Diagnostics
 }
 ```
 
-`gen/Primitives.Analyzers/WellKnownTypes.cs` — add three resolved symbols following the existing shape: `IMaskedValue` (`Norse.Primitives.IMaskedValue`), `RetentionPolicyAttribute` (`Norse.Primitives.RetentionPolicyAttribute`), `NorseEntity` (`` Norse.Persistence.EntityFramework.INorseEntity`1 ``). Keep the existing members untouched; if `Resolve` currently returns null when any symbol is missing, split it: the NORSE060 symbol set and the NORSE061/062 symbol set resolve independently so a compilation without `ServiceContractAttribute` still runs the retention analyzer and vice versa (two nested nullable structs or two `Resolve` methods — implementer's choice, existing tests must stay green).
+`gen/Primitives.Analyzers/WellKnownTypes.cs` — add three resolved symbols following the existing shape: `IMaskedValue` (`Norse.Primitives.Pii.IMaskedValue`), `RetentionPolicyAttribute` (`Norse.Primitives.Pii.RetentionPolicyAttribute`), `NorseEntity` (`` Norse.Persistence.EntityFramework.INorseEntity`1 ``). Keep the existing members untouched; if `Resolve` currently returns null when any symbol is missing, split it: the NORSE060 symbol set and the NORSE061/062 symbol set resolve independently so a compilation without `ServiceContractAttribute` still runs the retention analyzer and vice versa (two nested nullable structs or two `Resolve` methods — implementer's choice, existing tests must stay green).
 
 `gen/Primitives.Analyzers/PiiCompositionWalker.cs`:
 
@@ -1428,8 +1369,8 @@ public sealed class RetentionPolicyAnalyzer : DiagnosticAnalyzer
 		context.EnableConcurrentExecution();
 		context.RegisterCompilationStartAction(static start =>
 		{
-			var maskedValue = start.Compilation.GetTypeByMetadataName("Norse.Primitives.IMaskedValue");
-			var retentionPolicy = start.Compilation.GetTypeByMetadataName("Norse.Primitives.RetentionPolicyAttribute");
+			var maskedValue = start.Compilation.GetTypeByMetadataName("Norse.Primitives.Pii.IMaskedValue");
+			var retentionPolicy = start.Compilation.GetTypeByMetadataName("Norse.Primitives.Pii.RetentionPolicyAttribute");
 			var norseEntity = start.Compilation.GetTypeByMetadataName("Norse.Persistence.EntityFramework.INorseEntity`1");
 			if (maskedValue is null || retentionPolicy is null || norseEntity is null)
 				return;
@@ -1614,12 +1555,12 @@ git add src/Abstractions.Contracts/ErasureReceipt.cs src/Abstractions.Contracts/
 git commit -m "feat: ErrorCategory.Erased with optional ErasureReceipt on Problem"
 ```
 
-### Task 8: `Abstractions.Keys` — the key seam contracts
+### Task 8: The key seam contracts — `Abstractions.Backend/Keys/` (CURATED: no new assembly — the no-functional-group-packages ruling)
 
 **Files:**
-- Create: `src/Abstractions.Keys/Abstractions.Keys.csproj`, `src/Abstractions.Keys/SubjectKeyResult.cs`, `src/Abstractions.Keys/ISubjectKeyStore.cs`, `src/Abstractions.Keys/ILookupKeyRing.cs`, `src/Abstractions.Keys/KeyDestroyedException.cs`, `src/Abstractions.Keys/KeyMissingException.cs`, `src/Abstractions.Keys/SubjectCryptoScope.cs`
-- Create: `tests/Abstractions.Keys.Tests/` (project + tests), wire both into `Asgard.slnx`
-- Modify: `Asgard/CLAUDE.md`, `Asgard/README.md` (seventh assembly; `Abstractions.Keys` joins `Abstractions.Backend` as a dependency-bearing exception — it references `Abstractions.Contracts` for `ErasureReceipt`)
+- Create: `src/Abstractions.Backend/Keys/SubjectKeyResult.cs`, `.../Keys/ISubjectKeyStore.cs`, `.../Keys/ILookupKeyRing.cs`, `.../Keys/KeyDestroyedException.cs`, `.../Keys/KeyMissingException.cs`, `.../Keys/SubjectCryptoScope.cs` — `namespace Norse.Abstractions.Backend.Keys;` (path law)
+- Test: `tests/Abstractions.Backend.Tests/Keys/SubjectKeyResultTests.cs` + `SubjectCryptoScopeTests.cs` (existing project, new folder — `namespace Norse.Abstractions.Backend.Tests.Keys;`)
+- Modify: `Asgard/CLAUDE.md`, `Asgard/README.md` (Backend gains the key seam; one line each). Verify `Abstractions.Backend` already references `Abstractions.Contracts` (for `ErasureReceipt`) — add the ProjectReference only if the build proves it missing (transitive-first; note the check).
 
 **Interfaces (Produces):**
 
@@ -1652,12 +1593,12 @@ public static class SubjectCryptoScope
 }
 ```
 
-`SubjectCryptoScope` exists because `IPersonalDataProtector.Protect(string)` carries no subject parameter: writers (the user store, the shred ceremony) establish the ambient subject; readers never need it (ciphertext is self-describing — Himinbjörg's envelope carries the subject id). csproj: mirror `Abstractions.Contracts.csproj` shape, add `<ProjectReference Include="../Abstractions.Contracts/Abstractions.Contracts.csproj" />`.
+`SubjectCryptoScope` exists because `IPersonalDataProtector.Protect(string)` carries no subject parameter: writers (the user store, the shred ceremony) establish the ambient subject; readers never need it (ciphertext is self-describing — Himinbjörg's envelope carries the subject id). No csproj scaffolding — the folder lands in `Abstractions.Backend`; verify its reference to `Abstractions.Contracts` (for `ErasureReceipt`) and add the ProjectReference only if the build proves it missing.
 
 - [ ] **Step 1: Write the failing tests**
 
 ```csharp
-namespace Norse.Abstractions.Keys.Tests;
+namespace Norse.Abstractions.Backend.Tests.Keys;
 
 public sealed class SubjectKeyResultTests
 {
@@ -1732,15 +1673,15 @@ public sealed class SubjectCryptoScopeTests
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `dotnet test tests/Abstractions.Keys.Tests`
-Expected: FAIL — project/types do not exist (create both csproj files first so the failure is the missing types, not the missing project; wire into `Asgard.slnx` with `dotnet sln Asgard.slnx add src/Abstractions.Keys tests/Abstractions.Keys.Tests`).
+Run: `dotnet test tests/Abstractions.Backend.Tests -- --filter-class "*.Keys.*"`
+Expected: FAIL — the types do not exist (both projects already exist; the new `Keys/` folders are all that lands).
 
 - [ ] **Step 3: Write the implementation**
 
-`src/Abstractions.Keys/SubjectKeyResult.cs`:
+`src/Abstractions.Backend/Keys/SubjectKeyResult.cs`:
 
 ```csharp
-namespace Norse.Abstractions.Keys;
+namespace Norse.Abstractions.Backend.Keys;
 
 /// <summary>
 /// The key seam's honesty contract, a seam-local closed three-state union: the repository's honesty
@@ -1802,10 +1743,10 @@ public readonly record struct SubjectKeyResult
 
 (Add `using System.Runtime.CompilerServices;` for `SwitchExpressionException`.)
 
-`src/Abstractions.Keys/ISubjectKeyStore.cs`:
+`src/Abstractions.Backend/Keys/ISubjectKeyStore.cs`:
 
 ```csharp
-namespace Norse.Abstractions.Keys;
+namespace Norse.Abstractions.Backend.Keys;
 
 /// <summary>
 /// The payload-plane key seam: custody, wrap/unwrap, and scheduled destruction of per-subject DEKs.
@@ -1831,10 +1772,10 @@ public interface ISubjectKeyStore
 }
 ```
 
-`src/Abstractions.Keys/ILookupKeyRing.cs`:
+`src/Abstractions.Backend/Keys/ILookupKeyRing.cs`:
 
 ```csharp
-namespace Norse.Abstractions.Keys;
+namespace Norse.Abstractions.Backend.Keys;
 
 /// <summary>
 /// The lookup-plane keyring: service-level, rotatable, producing the keys blind indexes are HMAC'd
@@ -1855,10 +1796,10 @@ public interface ILookupKeyRing
 }
 ```
 
-`src/Abstractions.Keys/KeyDestroyedException.cs`:
+`src/Abstractions.Backend/Keys/KeyDestroyedException.cs`:
 
 ```csharp
-namespace Norse.Abstractions.Keys;
+namespace Norse.Abstractions.Backend.Keys;
 
 /// <summary>
 /// Thrown when decryption meets a deliberately destroyed key — the materialization channel for the
@@ -1874,10 +1815,10 @@ public sealed class KeyDestroyedException(ErasureReceipt receipt) :
 }
 ```
 
-`src/Abstractions.Keys/KeyMissingException.cs`:
+`src/Abstractions.Backend/Keys/KeyMissingException.cs`:
 
 ```csharp
-namespace Norse.Abstractions.Keys;
+namespace Norse.Abstractions.Backend.Keys;
 
 /// <summary>
 /// Thrown when decryption meets a key that should exist and does not — no key, no receipt. An
@@ -1892,10 +1833,10 @@ public sealed class KeyMissingException(Guid subjectId) :
 }
 ```
 
-`src/Abstractions.Keys/SubjectCryptoScope.cs`:
+`src/Abstractions.Backend/Keys/SubjectCryptoScope.cs`:
 
 ```csharp
-namespace Norse.Abstractions.Keys;
+namespace Norse.Abstractions.Backend.Keys;
 
 /// <summary>
 /// The ambient write-subject for payload encryption. Exists because
@@ -1929,16 +1870,16 @@ public static class SubjectCryptoScope
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `dotnet test tests/Abstractions.Keys.Tests`
+Run: `dotnet test tests/Abstractions.Backend.Tests -- --filter-class "*.Keys.*"`
 Expected: PASS.
 
 - [ ] **Step 5: Update realm docs and commit**
 
-Update `Asgard/CLAUDE.md` §1 and `README.md`: seventh assembly `Norse.Abstractions.Keys`, second dependency-bearing exception (references `Abstractions.Contracts`).
+Update `Asgard/CLAUDE.md` §1 and `README.md`: `Abstractions.Backend` gains the key seam under `Keys/` (one line each, matching doc voice).
 
 ```bash
-git add src/Abstractions.Keys tests/Abstractions.Keys.Tests Asgard.slnx CLAUDE.md README.md
-git commit -m "feat: Abstractions.Keys — subject-key seam contracts with three-state honesty union"
+git add src/Abstractions.Backend/Keys tests/Abstractions.Backend.Tests/Keys CLAUDE.md README.md
+git commit -m "feat: the key seam contracts land in Abstractions.Backend/Keys — three-state honesty union"
 ```
 
 ### Task 9: REST fold — Erased → 410 Gone with receipt extensions
@@ -2018,7 +1959,7 @@ git add src/Abstractions.Web.Server/Facade/GrpcControllerBase.cs tests/Abstracti
 git commit -m "feat: fold ErrorCategory.Erased to 410 Gone with receipt extensions"
 ```
 
-**SHIP GATE (human): Asgard** — PR, CI, tag, publish (`Abstractions.Contracts`, `Abstractions.Keys`, `Abstractions.Web.Server`).
+**SHIP GATE (human): Asgard** — PR, CI, tag, publish (`Abstractions.Contracts`, `Abstractions.Backend`, `Abstractions.Web.Server`).
 
 ---
 
@@ -2188,21 +2129,21 @@ git add src/Infrastructure.Web.Server/Xml/ProblemXmlWriter.cs tests/Infrastructu
 git commit -m "test: prove Erased receipt extensions render as RFC 9457 XML scalars"
 ```
 
-### Task 12: `Infrastructure.Keys` — the dev-grade key provider
+### Task 12: The dev-grade key provider — `Infrastructure.Backend/Keys/` (CURATED: no new project — the no-functional-group-packages ruling)
 
 **Files:**
-- Create: `src/Infrastructure.Keys/Infrastructure.Keys.csproj`, `src/Infrastructure.Keys/DevelopmentSubjectKeyStore.cs`, `src/Infrastructure.Keys/ServiceCollectionExtensions.cs`
-- Create: `tests/Infrastructure.Keys.Tests/` (project + tests); wire both into `Midgard.slnx`
+- Create: `src/Infrastructure.Backend/Keys/DevelopmentSubjectKeyStore.cs`, `src/Infrastructure.Backend/Keys/ServiceCollectionExtensions.cs` — `namespace Norse.Infrastructure.Backend.Keys;` (path law)
+- Test: `tests/Infrastructure.Backend.Tests/Keys/DevelopmentSubjectKeyStoreTests.cs` (existing project, new folder)
 - Modify: `Midgard/CLAUDE.md`, `Midgard/README.md`
 
 **Interfaces:**
-- Consumes: Asgard's `ISubjectKeyStore`, `ILookupKeyRing`, `SubjectKeyResult`, `KeyDestroyedException`, `ErasureReceipt` (via `NorseRef Include="Abstractions.Keys"` + transitive `Abstractions.Contracts`).
+- Consumes: Asgard's `ISubjectKeyStore`, `ILookupKeyRing`, `SubjectKeyResult`, `KeyDestroyedException`, `ErasureReceipt` — `Infrastructure.Backend` already NorseRefs `Abstractions.Backend`; no csproj change (verify `Abstractions.Contracts` flows transitively for `ErasureReceipt`; note the check).
 - Produces: `sealed class DevelopmentSubjectKeyStore : ISubjectKeyStore, ILookupKeyRing` — file-backed under a root directory so local identities survive restarts; **dev-grade, never a production path** (keys at rest unwrapped — the class doc says so loudly). Layout: `{root}/{subjectId:N}.key` (32 random bytes via `RandomNumberGenerator`), `{root}/{subjectId:N}.receipt` (JSON `{"receiptId":"...","severedAt":"..."}`), `{root}/lookup.json` (`{"current":"k1","keys":{"k1":"<base64 32 bytes>"}}`, auto-minted on first touch). Destroy = **delete the key file** (unrecoverable from current state) + write the receipt file; `GetAsync` on receipt-only → `Destroyed`; `GetOrCreateAsync` on receipt-only → `throw KeyDestroyedException`; destroy twice → original receipt (idempotent). `AddNorseDevelopmentKeys(this IServiceCollection services, string rootPath)` registers the singleton under both interfaces.
 
 - [ ] **Step 1: Write the failing tests** (each test gets its own temp directory under the test's scratch; delete in `Dispose`)
 
 ```csharp
-namespace Norse.Infrastructure.Keys.Tests;
+namespace Norse.Infrastructure.Backend.Tests.Keys;
 
 public sealed class DevelopmentSubjectKeyStoreTests : IDisposable
 {
@@ -2293,20 +2234,136 @@ public sealed class DevelopmentSubjectKeyStoreTests : IDisposable
 }
 ```
 
-- [ ] **Step 2: Run to verify failure** — `dotnet test tests/Infrastructure.Keys.Tests` (create the two csproj files + slnx wiring first; the store class is the missing piece). Project references: `<NorseRef Include="Abstractions.Keys" />`; the DI extension file needs `Microsoft.Extensions.DependencyInjection.Abstractions` (transitive — do not add a direct reference).
+- [ ] **Step 2: Run to verify failure** — `dotnet test tests/Infrastructure.Backend.Tests -- --filter-class "*.Keys.*"` (no project scaffolding — the folders land in the existing Backend pair; the store class is the missing piece). `Microsoft.Extensions.DependencyInjection.Abstractions` flows transitively — do not add a direct reference (NU1510 precedent).
 
 - [ ] **Step 3: Implement** — `DevelopmentSubjectKeyStore`: primary constructor `(string rootPath)`, `Directory.CreateDirectory` up front; lookup ring lazy-initialized on first access (mint `"k1"` + 32 random bytes, write `lookup.json`); all file I/O async where the interface is async; JSON via `System.Text.Json` with a small `sealed record ReceiptDocument(Guid ReceiptId, DateTimeOffset SeveredAt)` and `sealed record LookupDocument(string Current, Dictionary<string, string> Keys)`. Class XML doc opens with: "Dev-grade only: key material rests unwrapped on local disk. Never a production path — the production seam is a vault-backed provider." `ServiceCollectionExtensions.AddNorseDevelopmentKeys(this IServiceCollection services, string rootPath)` registers one singleton instance under both `ISubjectKeyStore` and `ILookupKeyRing`.
 
-- [ ] **Step 4: Run tests to verify they pass** — `dotnet test tests/Infrastructure.Keys.Tests`
+- [ ] **Step 4: Run tests to verify they pass** — `dotnet test tests/Infrastructure.Backend.Tests -- --filter-class "*.Keys.*"`
 
 - [ ] **Step 5: Update realm docs and commit**
 
 ```bash
-git add src/Infrastructure.Keys tests/Infrastructure.Keys.Tests Midgard.slnx CLAUDE.md README.md
-git commit -m "feat: Infrastructure.Keys — file-backed dev-grade subject key store"
+git add src/Infrastructure.Backend/Keys tests/Infrastructure.Backend.Tests/Keys CLAUDE.md README.md
+git commit -m "feat: file-backed dev-grade subject key store lands in Infrastructure.Backend/Keys"
 ```
 
-**SHIP GATE (human): Midgard** — PR, CI, tag, publish (`Infrastructure.Web.Server`, `Infrastructure.Web.Client`, `Infrastructure.Keys`).
+### Task 12b: The masked-serialization defense, relocated (CURATED: spec §1.5 layer 2 — evicted from the forge by NORSE070, lands where encodings are legal)
+
+**Files:**
+- Create: `src/Infrastructure.Web.Server/Json/MaskedValueJsonConverterFactory.cs`
+- Modify: `src/Infrastructure.Web.Server/Json/MvcBuilderExtensions.cs` (register the factory beside the existing converter registrations — read the file, follow its shape exactly)
+- Modify: `src/Infrastructure.Backend/Serialization/SystemTextJsonSerializer.cs` (the seam masks too: add the factory to every options variant minted in `Build`)
+- Test: `tests/Infrastructure.Web.Server.Tests/.../MaskedValueJsonConverterFactoryTests.cs` (locate the existing Json test folder and follow its fixture patterns); extend `tests/Infrastructure.Backend.Tests/Serialization/SystemTextJsonSerializerTests.cs` with the seam-masking case
+
+**Interfaces:**
+- Consumes: Svartálfheim's `IMaskedValue` (`Norse.Primitives.Pii`) — foundation reference, legal everywhere. Transitive-first: verify `Norse.Primitives` flows to `Infrastructure.Web.Server` (it should, via the wire-law project) and to `Infrastructure.Backend` (likely NOT — add `<NorseRef Include="Primitives"><Repo>Svartalfheim</Repo></NorseRef>` mirroring an existing entry if the build proves it missing; note the check).
+- Produces: any `IMaskedValue` value struct entering Midgard-owned JSON — the MVC pipeline or the serialization seam — renders as its `Masked` string and refuses to deserialize. Accidental egress is masked by construction; deliberate egress stays what it always was (wire contracts carry plain strings filled at the disclosure edge).
+
+- [ ] **Step 1: Write the failing tests**
+
+```csharp
+namespace Norse.Infrastructure.Web.Server.Tests.Json;
+
+public sealed class MaskedValueJsonConverterFactoryTests
+{
+	readonly record struct FakePii(string Secret) : IMaskedValue
+	{
+		public string Masked => "***";
+		public string ToMasked(DateOnly asOf) => Masked;
+	}
+
+	static readonly JsonSerializerOptions _options = BuildOptions();
+
+	static JsonSerializerOptions BuildOptions()
+	{
+		JsonSerializerOptions options = new();
+		options.Converters.Add(new MaskedValueJsonConverterFactory());
+		return options;
+	}
+
+	[Fact]
+	void Writes_the_masked_rendering_for_any_masked_value_struct() =>
+		JsonSerializer.Serialize(new FakePii("buvy@example.com"), _options).ShouldBe("\"***\"");
+
+	[Fact]
+	void Refuses_to_deserialize_because_masked_forms_can_be_valid_inputs() =>
+		Should.Throw<NotSupportedException>(() => JsonSerializer.Deserialize<FakePii>("\"***\"", _options));
+
+	[Fact]
+	void Leaves_non_masked_types_untouched() =>
+		JsonSerializer.Serialize(new { Name = "plain" }, _options).ShouldBe("{\"Name\":\"plain\"}");
+}
+```
+
+(Hoist `using System.Text.Json;` + `using Norse.Primitives.Pii;` — this is Midgard test code; STJ is legal here and tests are law-exempt besides.) Seam case, appended to `SystemTextJsonSerializerTests`:
+
+```csharp
+	[Fact]
+	void Masks_masked_value_structs_on_the_seam()
+	{
+		// Spec §1.5 layer 2, relocated: accidental egress through the seam renders the mask, never
+		// the wire value. Deliberate egress never routes PII structs through a serializer at all.
+		var json = _provider[NamingStrategy.CamelCase].Serialize(new MaskedPayload { Email = new() });
+		json.ShouldContain("\"***\"");
+	}
+```
+
+(with a small file-local `MaskedPayload` record carrying a `FakePii`-style `IMaskedValue` struct member — mirror the factory test's fixture.)
+
+- [ ] **Step 2: Run to verify failure** — `dotnet test tests/Infrastructure.Web.Server.Tests -- --filter-class "*.MaskedValueJsonConverterFactoryTests"`; expected: compile error, factory missing.
+
+- [ ] **Step 3: Implement**
+
+`src/Infrastructure.Web.Server/Json/MaskedValueJsonConverterFactory.cs`:
+
+```csharp
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using Norse.Primitives.Pii;
+
+namespace Norse.Infrastructure.Web.Server.Json;
+
+/// <summary>
+/// Defense-in-depth for serialization paths no analyzer can see (spec §1.5 layer 2, relocated here
+/// from the forge by NORSE070 — encodings live inside the wire border): any <see cref="IMaskedValue"/>
+/// value struct writes its masked rendering and refuses to read. Reading is refused because masked
+/// forms can be syntactically valid inputs (<c>j***@d***.com</c> parses as an email address) — a
+/// lossy round-trip that succeeds would fabricate a well-formed value that silently is not the
+/// person's data. Wire contracts are unaffected: transports carry plain strings filled explicitly
+/// at the disclosure edge.
+/// </summary>
+sealed class MaskedValueJsonConverterFactory : JsonConverterFactory
+{
+	public override bool CanConvert(Type typeToConvert) =>
+		typeToConvert.IsValueType && typeof(IMaskedValue).IsAssignableFrom(typeToConvert);
+
+	public override JsonConverter CreateConverter(Type typeToConvert, JsonSerializerOptions options) =>
+		(JsonConverter)Activator.CreateInstance(typeof(MaskedValueJsonConverter<>).MakeGenericType(typeToConvert))!;
+
+	sealed class MaskedValueJsonConverter<T> : JsonConverter<T> where T : struct, IMaskedValue
+	{
+		public override T Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+			throw new NotSupportedException($"{typeToConvert.Name} is masked-write-only JSON; PII never rehydrates from JSON — parse the wire string at the boundary instead.");
+
+		public override void Write(Utf8JsonWriter writer, T value, JsonSerializerOptions options) =>
+			writer.WriteStringValue(value.Masked);
+	}
+}
+```
+
+`MvcBuilderExtensions.cs`: add the factory to the JSON options exactly where the existing converters register (one line, matching the file's chain/shape). `SystemTextJsonSerializer.Build(...)`: each minted `JsonSerializerOptions` gains `Converters = { new MaskedValueJsonConverterFactory() }`-equivalent in the file's idiom — note the factory must be reachable from `Infrastructure.Backend`; if the factory's home makes that awkward (Web.Server → Backend is the wrong direction), the factory itself moves to `Infrastructure.Backend/Serialization/` and Web.Server consumes it from there — the implementer resolves placement by the dependency direction and records the choice (Backend is the safer home: both consumers reach it).
+
+- [ ] **Step 4: Run tests** — both touched test projects, then `dotnet build Midgard.slnx && dotnet test Midgard.slnx` zero warnings.
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/Infrastructure.Backend tests/Infrastructure.Backend.Tests src/Infrastructure.Web.Server/Json tests/Infrastructure.Web.Server.Tests CLAUDE.md README.md
+git commit -m "feat: masked-serialization defense lands inside the wire border — IMaskedValue masks on every Midgard JSON path"
+```
+
+(Adjust the `git add` to the exact files touched once placement is resolved; realm docs gain one line if the doc voice warrants it.)
+
+**SHIP GATE (human): Midgard** — PR, CI, tag, publish (`Infrastructure.Web.Server`, `Infrastructure.Web.Client`, `Infrastructure.Backend`).
 
 ---
 
@@ -2782,7 +2839,7 @@ git commit -m "feat: subject_keys table, nullable filtered lookup index, tempora
 - Test: `tests/Identity.Web.Server.Tests/NorsePersonalDataProtectorTests.cs`, `tests/Identity.Web.Server.Tests/NorseLookupProtectorTests.cs`
 
 **Interfaces:**
-- Consumes: `ISubjectKeyStore`, `ILookupKeyRing`, `SubjectCryptoScope`, `KeyDestroyedException`/`KeyMissingException` (Asgard `Abstractions.Keys`), `AesGcm` (BCL).
+- Consumes: `ISubjectKeyStore`, `ILookupKeyRing`, `SubjectCryptoScope`, `KeyDestroyedException`/`KeyMissingException` (Asgard `Abstractions.Backend.Keys`), `AesGcm` (BCL).
 - Produces:
   - `sealed class NorsePersonalDataProtector(ISubjectKeyStore keyStore) : IPersonalDataProtector` — **envelope format `v1:{subjectId:D}:{base64(nonce ∥ ciphertext ∥ tag)}`**, AES-256-GCM, 12-byte nonce via `RandomNumberGenerator`, 16-byte tag. `Protect`: ambient subject from `SubjectCryptoScope.CurrentSubject` (null → `InvalidOperationException` — fail loud, never encrypt to nobody); DEK via `GetOrCreateAsync`. `Unprotect`: subject id read from the envelope (self-describing — no ambient needed); key via `GetAsync` → `Match`: `Available` → decrypt; `Destroyed` → `throw KeyDestroyedException(receipt)`; `Missing` → `throw KeyMissingException(subjectId)`. The interface is sync; bridge with `.AsTask().GetAwaiter().GetResult()` and a doc comment naming the constraint (Identity's seam is sync; the dev store is file-backed; the production provider caches unwrapped DEKs in memory under the TTL law, so sync-over-async is bounded).
   - `sealed class NorseLookupProtector(ILookupKeyRing keyRing) : ILookupProtector` — `Protect(keyId, data)` = Base64(HMAC-SHA256(ring[keyId], UTF8(data))); null/empty data passes through unchanged (Identity contract). `Unprotect` throws `NotSupportedException` — a blind index is one-way by definition.
@@ -3284,7 +3341,7 @@ public sealed class ErasureServiceTests(PostgresIdentityFixture fixture) : IClas
 ```csharp
 using Microsoft.EntityFrameworkCore;
 using Norse.Abstractions.Contracts;
-using Norse.Abstractions.Keys;
+using Norse.Abstractions.Backend.Keys;
 using Norse.Identity.EntityFramework;
 
 namespace Norse.Identity.Web.Server;
@@ -3480,7 +3537,7 @@ git commit -m "feat: PII disclosure surface — self full, second-party masked, 
 ### Task 20: Composition-root wiring
 
 **Files:**
-- Modify: `Directory.Packages.props` (pin `Norse.Abstractions.Keys`, `Norse.Infrastructure.Keys`, bumped versions of every realm package this effort shipped)
+- Modify: `Directory.Packages.props` (no new pins — `Norse.Abstractions.Backend` and `Norse.Infrastructure.Backend` are already pinned; bump the version variables for every realm package this effort shipped)
 - Modify: the web-server and migrations-host bootstrap (`src/Hosting.Web.Server/…`, `src/Hosting.Migrations/…` — locate the existing `AddNorseIdentity()`/`AddNorseMigrations()` call sites and add `AddNorseDevelopmentKeys(...)` beside them, rooted at a content-root-relative `norse-dev-keys/` path so identities survive restarts; never a machine-absolute path)
 
 - [ ] **Step 1: Wire, build, run the existing suites**
@@ -3506,7 +3563,8 @@ git commit -m "feat: wire dev-grade key seam at the composition root"
 
 ## Self-Review Notes (performed at authoring)
 
-1. **Spec coverage:** §1 → Tasks 1–5; §1.5 layer 2 → Task 1; §1.6 → Task 1; §2 → Tasks 7, 9, 10, 11; §3.1 → Tasks 8, 16, 19; §3.2 → Tasks 8, 15; §3.3 → Tasks 12, 20; §3.4 TTL/backup laws → dev-scope in Task 12 (production-provider obligations documented, not testable until a vault provider exists — deliberate); §4.1 → Tasks 13, 16; §4.2 → Tasks 15, 18; §4.3 → Tasks 14, 15; §4.4 → Task 17; §4.5 → Tasks 6 (fixture), 15, 16; §5 → Task 6; §6 → Task 19; §8 items 1–3 → Task 14, item 4 → Tasks 13/16 (singleton law), items 5–6 → Tasks 10/15, item 7 → Task 17, items 8–9 → Tasks 12/16, items 10–11 → Tasks 18/19.
+0. **Curation pass (2026-08-03, post-Law-of-the-Realms — see the Global Constraints CURATION block):** `MaskedValueJsonConverter<T>` deleted from Tasks 1–5 (NORSE070) and reborn as Task 12b inside the wire border; the Keys contracts/dev store fold into the `Abstractions.Backend`/`Infrastructure.Backend` pair under `Keys/` folders (no-functional-group-packages ruling) — Tasks 8, 12, 16, 18–20 amended accordingly; Task 6's analyzer metadata names ride `Norse.Primitives.Pii.*`; the resume opens with the strip commit on `feature/pii-primitives`. Where a coverage line below says "§1.5 layer 2 → Task 1", read Task 12b.
+1. **Spec coverage:** §1 → Tasks 1–5; §1.5 layer 2 → Task 12b (curated; originally Task 1); §1.6 → Task 1; §2 → Tasks 7, 9, 10, 11; §3.1 → Tasks 8, 16, 19; §3.2 → Tasks 8, 15; §3.3 → Tasks 12, 20; §3.4 TTL/backup laws → dev-scope in Task 12 (production-provider obligations documented, not testable until a vault provider exists — deliberate); §4.1 → Tasks 13, 16; §4.2 → Tasks 15, 18; §4.3 → Tasks 14, 15; §4.4 → Task 17; §4.5 → Tasks 6 (fixture), 15, 16; §5 → Task 6; §6 → Task 19; §8 items 1–3 → Task 14, item 4 → Tasks 13/16 (singleton law), items 5–6 → Tasks 10/15, item 7 → Task 17, items 8–9 → Tasks 12/16, items 10–11 → Tasks 18/19.
 2. **Known deliberate deferrals** (spec §7 already blesses them): production vault-backed `ISubjectKeyStore` over the `subject_keys` table; Syn DSAR trigger for `ErasureService`; `ProtectPiiScalars` call site in `NorseIdentityDbContext` (lands with the first struct-typed profile property); lookup-keyring re-hash ceremony tooling.
 3. **Type-consistency pass:** `IPiiScalar<TSelf>` (Tasks 1/13/19), `SubjectKeyResult.Match(available, destroyed, missing)` (Tasks 8/12/16/18), `ErasureReceipt(ReceiptId, SeveredAt)` (Tasks 7–19), envelope `v1:{subjectId:D}:{base64}` (Tasks 16/20) — verified consistent.
 4. **Coordination:** Phase E opens with the rebaseline gate for the parallel `SplitToTable` session; Tasks 14–15 collapse to consumption if that work lands first.
