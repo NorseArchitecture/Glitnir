@@ -1,6 +1,6 @@
 services:
   primary:
-    image: postgres:19beta1-trixie
+    image: postgres:19beta2
     container_name: pg19doc-primary
     environment:
       # trust on purpose — throwaway local recon. It makes the official entrypoint write a
@@ -35,7 +35,7 @@ services:
       retries: 15
 
   replica:
-    image: postgres:19beta1-trixie
+    image: postgres:19beta2
     container_name: pg19doc-replica
     depends_on:
       primary:

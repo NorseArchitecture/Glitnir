@@ -638,6 +638,20 @@ public sealed class TemporalEvolutionLiveTests(PostgresContainerFixture fixture)
 
 ---
 
+### Task 7b: `DropTableOperation` apparatus teardown (added by ruling 2026-08-05)
+
+**Ruling:** Task 7's review confirmed spec §3.4's "dropping the entity" row is assigned to no task and the emission-seam spike excluded `DropTableOperation`. Ruled in as a scoped task before Task 8 so the live suite covers entity drop end to end. Today the gap fails loudly (base emits a bare `DROP TABLE`; PostgreSQL refuses under the dependent timeline view — `2BP01`), and the sanctioned two-step workaround (remove the marker, then drop the plain table in a second migration) works; this task closes the one-step path. Expected rare in the OLTP schema — long-horizon history retention is the warehouse's concern, not the chassis's.
+
+**Files:**
+- Modify: `Urdarbrunnr/src/Persistence.EntityFramework.PostgreSQL/NorseNpgsqlMigrationsSqlGenerator.cs` (`Generate(DropTableOperation, …)` override) — plus, only if Step 0 demands it, a minimal migrations-annotation-provider companion so the drop-side operation carries the marker.
+- Test: the existing evolution suites (`TemporalEvolutionSqlTests`, `TemporalEvolutionLiveTests`, shared models file).
+
+**Step 0 — identification check, RED-first (this is the task's open question, not an assumption):** the entity is absent from the target model and `DropTableOperation` has no `OldTable`; the ratified spike verdict does not cover this shape. Determine empirically — via the existing differ-driven arrange — whether the marker reaches the operation (likely via EF's drop-side annotation flow, `IMigrationsAnnotationProvider.ForRemove`, which is a *different* interface from the `IRelationalAnnotationProvider` already derived). If it does not, add the minimal override that carries it. Record the mechanism in the task report and in the generator's doc comment; the finding amends the spike verdict's coverage note in spec §3.0 if the seam differs from the ratified pair.
+
+**Behavior:** teardown before the drop, per the §3.3 disable order — view, triggers, function, history table — composed from the existing `DropTimelineView`/`DropTriggersAndFunction` emitters plus the history drop, then the base `DROP TABLE`. History dies with the entity: spec-ruled visible destruction, same posture as disable. Non-temporal `DropTableOperation` passes through to base untouched.
+
+**Tests:** snapshot order fact (teardown statements before `DROP TABLE`, relative-position assertions per the established style); live fact (create temporal entity → apply → drop entity → apply; assert table, history, view, function, and triggers all gone); non-temporal pass-through fact.
+
 ### Task 8: Real-Postgres integration suite (Testcontainers)
 
 **Files:**

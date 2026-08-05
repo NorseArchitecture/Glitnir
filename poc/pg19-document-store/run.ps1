@@ -22,7 +22,7 @@ if ($Down) {
 	return
 }
 
-# Official postgres:19beta1-trixie (pinned in docker-compose.yml). Tag gone → compose fails
+# Official postgres:19beta2 (pinned in docker-compose.yml). Tag gone → compose fails
 # loudly here; no silent fallback to PG18. The replica clones from the primary on first start
 # (pg_basebackup) — if that fails it is the expected first place to need a machine-local tweak.
 docker compose up -d --wait

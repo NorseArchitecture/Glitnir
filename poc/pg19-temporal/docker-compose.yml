@@ -2,7 +2,7 @@ services:
   pg19:
     # trixie (glibc) deliberately, not alpine (musl) — and the bare 19beta2 tag is
     # the same digest anyway. Explicit so a future default-base change can't move us.
-    image: postgres:19beta2-trixie
+    image: postgres:19beta2
     container_name: pg19-poc
     environment:
       POSTGRES_PASSWORD: poc

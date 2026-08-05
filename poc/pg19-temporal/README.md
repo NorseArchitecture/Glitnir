@@ -30,6 +30,6 @@ Script 2 confirms the kill: Model B stands for FK-target entities. The POC's rea
 ./run.ps1 -Down      # tear down
 ```
 
-Requires Docker Desktop. Runs the official `postgres:19beta1-trixie` image (the PGDG-apt shim that bridged release day was retired 2026-06-07 once docker-library published; same beta bits). Output lands in `results/{nn}.out` — record conclusions in `FINDINGS.md`.
+Requires Docker Desktop. Runs the official `postgres:19beta2` image (the PGDG-apt shim that bridged release day was retired 2026-06-07 once docker-library published; same beta bits). Output lands in `results/{nn}.out` — record conclusions in `FINDINGS.md`.
 
 This is exploration tooling, not platform code: raw SQL via psql, no .NET, no spec-first implications.
