@@ -515,6 +515,8 @@ public sealed class TemporalTransitionSqlTests
 
 **The DDL order is law (spec ruling 16), identical for every shape:** (1) `DROP VIEW {table}_timeline`; (2) main-table operation; (3) history-table mirror; (4) `CREATE OR REPLACE FUNCTION` from the target column list; (5) `CREATE VIEW` afresh from the target column list. PostgreSQL blocks `DROP COLUMN`/`ALTER … TYPE` under a dependent view, and `CREATE OR REPLACE VIEW` cannot change the output column set — the view is dropped first and recreated last, never replaced in place.
 
+**`RenameTable` has its own six-step choreography** — PostgreSQL keeps a renamed table's triggers, with their old names, bound to the old function; creating a newly named function rebinds nothing: (1) drop the old timeline view; (2) rename the main table; (3) rename the history table; (4) drop the old update/delete triggers, then drop the old function; (5) create the newly named function and newly named triggers bound to it; (6) create the newly named timeline view. Only the tables rename in place (history data mapping preserved); every other apparatus object is retired and recreated — a rename must never leave the table versioning against stale apparatus.
+
 - [ ] **Step 1: Write the failing snapshot tests.** Same differ-driven arrange as Task 6, model variants per shape (column added / renamed / dropped / type-altered; PK-changed; schema-moved). The ordering assertion is a first-class test, not an afterthought:
 
 ```csharp
@@ -554,7 +556,24 @@ public sealed class TemporalEvolutionSqlTests
 	void Alter_column_type_mirrors_onto_history() { /* ALTER COLUMN TYPE on both, view-first order */ }
 
 	[Fact]
-	void Rename_table_re_derives_every_apparatus_name() { /* history/view/function/trigger renames, view-first order */ }
+	void Rename_table_retires_the_old_apparatus_and_creates_the_new_in_order()
+	{
+		var sql = TransitionSql(from: Marked, to: MarkedRenamed);
+		var dropView = sql.IndexOf("""DROP VIEW "public"."temporal_widgets_timeline""");
+		var renameMain = sql.IndexOf("""RENAME TO "renamed_widgets""");
+		var dropTrigger = sql.IndexOf("""DROP TRIGGER "temporal_widgets_versioning_update""");
+		var dropFunction = sql.IndexOf("""DROP FUNCTION "public"."temporal_widgets_versioning""");
+		var newFunction = sql.IndexOf("""CREATE FUNCTION "public"."renamed_widgets_versioning""");
+		var newTrigger = sql.IndexOf("""CREATE TRIGGER "renamed_widgets_versioning_update""");
+		var newView = sql.IndexOf("""CREATE VIEW "public"."renamed_widgets_timeline""");
+		dropView.ShouldBeGreaterThanOrEqualTo(0);
+		dropView.ShouldBeLessThan(renameMain);
+		renameMain.ShouldBeLessThan(dropTrigger);
+		dropTrigger.ShouldBeLessThan(dropFunction);
+		dropFunction.ShouldBeLessThan(newFunction);
+		newFunction.ShouldBeLessThan(newTrigger);
+		newTrigger.ShouldBeLessThan(newView);
+	}
 
 	[Fact]
 	void A_primary_key_change_on_a_temporal_table_is_rejected_with_a_named_diagnostic()
@@ -569,7 +588,7 @@ public sealed class TemporalEvolutionSqlTests
 ```
 
 - [ ] **Step 2:** Run — FAIL.
-- [ ] **Step 3: Implement.** Override `Generate` for `AddColumnOperation` / `DropColumnOperation` / `RenameColumnOperation` / `AlterColumnOperation` / `RenameTableOperation` targeting temporal tables (identification per spike verdict). Each override emits the five statements in the fixed order above — `TemporalSqlEmitter` gains `DropTimelineView(schema, table)` and the existing `TimelineView(...)` is reused for step 5; the main-table statement is base's output, sequenced between drop-view and the history mirror (restructure the override to compose the batch rather than call base first). History mirror per the projection rule (spec §3.4 — nullable regardless of main nullability; store type only). For `AddPrimaryKeyOperation`/`DropPrimaryKeyOperation` and schema-differing table operations on temporal tables: throw `InvalidOperationException` whose message names the operation, the table, and the sanctioned path ("drop temporality first (remove ITemporalEntity — visible destruction), perform the change, re-mark; or author the migration by hand").
+- [ ] **Step 3: Implement.** Override `Generate` for `AddColumnOperation` / `DropColumnOperation` / `RenameColumnOperation` / `AlterColumnOperation` / `RenameTableOperation` targeting temporal tables (identification per spike verdict). Column-shaped overrides emit the five statements in the fixed order above — `TemporalSqlEmitter` gains `DropTimelineView(schema, table)` and the existing `TimelineView(...)` is reused for step 5; the main-table statement is base's output, sequenced between drop-view and the history mirror (restructure the override to compose the batch rather than call base first). History mirror per the projection rule (spec §3.4 — nullable regardless of main nullability; store type only). The `RenameTableOperation` override follows its six-step choreography above — `TemporalSqlEmitter` gains `DropTriggersAndFunction(schema, oldTable)`; the newly named function/triggers/view come from the existing Task 5 emitters with the new table name; never rely on PG renaming apparatus objects implicitly. For `AddPrimaryKeyOperation`/`DropPrimaryKeyOperation` and schema-differing table operations on temporal tables: throw `InvalidOperationException` whose message names the operation, the table, and the sanctioned path ("drop temporality first (remove ITemporalEntity — visible destruction), perform the change, re-mark; or author the migration by hand").
 - [ ] **Step 4:** Run — snapshot tests PASS.
 - [ ] **Step 5: Write and run the live-application tests.** Port the container fixture trio from Himinbjörg now (it was Task 8's; it moves here). `TemporalEvolutionLiveTests`: for each supported shape — add, drop, rename column, alter type, rename table — create the marked schema on real PG (`EnsureCreatedAsync` through the custom generator), seed one row and one update (so a live history row and view exist), then execute the shape's differ-generated SQL via `ExecuteSqlRawAsync` and assert it **applies without error** and the view SELECTs afterward. This is the test Task 8 cannot be left to discover: snapshot-green-but-unappliable DDL dies here.
 
@@ -586,7 +605,27 @@ public sealed class TemporalEvolutionLiveTests(PostgresContainerFixture fixture)
 		await context.Database.ExecuteSqlRawAsync(TransitionSql(from: MarkedWithExtraColumn, to: Marked));
 		(await context.TimelineRowCountAsync()).ShouldBe(2); // view recreated and queryable
 	}
-	// … one equivalent test per remaining shape (add, rename column, alter type, rename table)
+
+	[Fact]
+	async Task Rename_table_rebinds_triggers_to_the_new_function_with_new_names()
+	{
+		await using var context = await fixture.CreateWidgetContextAsync();
+		var id = await context.SeedWidgetAsync("v1");
+		await context.UpdateWidgetNameAsync(id, "v2");
+		await context.Database.ExecuteSqlRawAsync(TransitionSql(from: Marked, to: MarkedRenamed));
+		// TriggerBindingsAsync: pg_trigger joined to pg_proc for the table, tgisinternal = false,
+		// returning (trigger name, bound function name) pairs
+		var bindings = await context.TriggerBindingsAsync("renamed_widgets");
+		bindings.ShouldBe(
+			[
+				("renamed_widgets_versioning_delete", "renamed_widgets_versioning"),
+				("renamed_widgets_versioning_update", "renamed_widgets_versioning"),
+			],
+			ignoreOrder: true);
+		await context.UpdateWidgetNameAsync(id, "v3", table: "renamed_widgets"); // versioning survives the rename
+		(await context.HistoryRowCountAsync("renamed_widgets_history")).ShouldBe(2);
+	}
+	// … one equivalent application test per remaining shape (add, rename column, alter type)
 }
 ```
 
