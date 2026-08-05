@@ -63,6 +63,7 @@ A finalizing convention registered in `NorseModelConventions.Apply`, beside `Req
 
 1. **Validates**: the entity has a primary key; it is not JSON-mapped, owned, or complex-type-mapped; and **its derived names are free** — no other table in the model may claim `{table}_history` or `{table}_timeline` (PostgreSQL) or `{Table}History` (SQL Server). Violations throw at model finalize with a named diagnostic — fail at startup, not late and unclearly at migration time.
 2. **Stamps** a `Norse:Temporal` annotation on the entity's **main table mapping only** (`StoreObjectIdentifier` of the root table). Split-table fragments are never stamped.
+3. **Realizes** (amended 2026-08-05): when the provider binding supplies a `TemporalRealizationHook`, the convention invokes it immediately after each entity's stamp — stamp-then-realize in one deterministic pass, the `EntityRenameHook` precedent. A separately registered realization convention cannot work: plugin-added finalizing conventions run before context-added ones, so it would read the annotation before the stamp exists (full ruling: the plan's Task 4).
 
 ### 2.3 Split-table asymmetry is structural on PostgreSQL
 
@@ -70,11 +71,13 @@ Because the apparatus attaches to the main table only: a `SplitToTable` fragment
 
 ## 3. PostgreSQL emission — `.PostgreSQL` package
 
-`NorseNpgsqlMigrationsSqlGenerator` derives from Npgsql's generator, registered via `ReplaceService<IMigrationsSqlGenerator, …>` inside `NorsePostgresEfProvider.Configure` — the existing single choreography point. An annotation-provider companion surfaces `Norse:Temporal` onto migration operations so the generator sees it on creates, drops, and column operations.
+`NorseNpgsqlMigrationsSqlGenerator` derives from Npgsql's generator, registered via `ReplaceService<IMigrationsSqlGenerator, …>` inside `NorsePostgresEfProvider.Configure` — the existing single choreography point. An annotation-provider companion makes the marker visible to EF's relational differ: it reaches `CreateTableOperation` and the enable/disable `AlterTableOperation` transition (on `OldTable` for disable), while ordinary column operations identify temporal tables through target-model consultation in the generator.
 
 ### 3.0 Design gate — the emission-seam spike
 
 The EF interception point is this design's load-bearing unknown: if migration operations cannot reliably identify their temporal table mapping, automatic evolution — the entire "no remembered mirror call" promise — collapses back to Approach A. **Before the implementation plan is written**, a minimal spike (Glitnir `poc/ef-temporal-emission`, sibling to `poc/pg19-temporal`) scaffolds **seven** migration shapes from a marked entity: create, add-column, rename-column, drop-column, alter-column, **marker added to a pre-existing table, and marker removed** (the two annotation transitions — EF represents these as table alterations, and whether they surface as usable operations at all is precisely what the spike must answer). It inspects the generated operations and their annotations, applies them to real PostgreSQL through a derived generator, and names the exact supported seam (`IRelationalAnnotationProvider`, target-model consultation inside `Generate`, or both — including how drop-side operations, where the entity is absent from the target model, identify themselves). The spike's verdict amends this spec. If no seam supports reliable identification across all seven shapes, the emission approach returns to the court rather than shipping degraded.
+
+**Spike verdict (2026-08-05):** the seam is **both** a derived `IRelationalAnnotationProvider` and target-model consultation in `Generate`. The provider is required to make EF emit usable `AlterTableOperation`s for marker addition/removal; addition carries `Norse:Temporal=True`, while removal carries it only on `OldTable`, because the target model no longer contains the entity. Create plus add/rename/drop/alter-column all resolve their marked table through the target model even though their operations do not carry the marker. All seven shapes were scaffolded and applied against PostgreSQL 19beta2; the create override emitted and executed a hand-written apparatus probe. Evidence: `poc/ef-temporal-emission/FINDINGS.md`.
 
 ### 3.1 On `CreateTable` of a temporal table
 

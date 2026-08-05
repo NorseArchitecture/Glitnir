@@ -1,59 +1,59 @@
 Timing is on.
-psql:/scripts/02-fk-mechanics.sql:14: NOTICE:  table "policies_plain" does not exist, skipping
 ── setup: single-table temporal parent ──
+DROP TABLE
+Time: 0.414 ms
+psql:/scripts/02-fk-mechanics.sql:14: NOTICE:  table "policies_plain" does not exist, skipping
 psql:/scripts/02-fk-mechanics.sql:14: NOTICE:  table "policies_temporal" does not exist, skipping
 psql:/scripts/02-fk-mechanics.sql:14: NOTICE:  table "customers_st2" does not exist, skipping
 psql:/scripts/02-fk-mechanics.sql:14: NOTICE:  table "customers_mb" does not exist, skipping
 psql:/scripts/02-fk-mechanics.sql:14: NOTICE:  table "customers_mb_history" does not exist, skipping
-DROP TABLE
-Time: 0.540 ms
 CREATE TABLE
-Time: 3.536 ms
+Time: 5.238 ms
 
 ── TEST 2a: plain FK to single-table temporal parent (expect: ERROR, no unique on id) ──
-psql:/scripts/02-fk-mechanics.sql:28: ERROR:  there is no unique constraint matching given keys for referenced table "customers_st2"
-Time: 0.972 ms
+Time: 0.997 ms
 
 ── TEST 2b: temporal PERIOD FK — child must carry its own period (viral) ──
+psql:/scripts/02-fk-mechanics.sql:28: ERROR:  there is no unique constraint matching given keys for referenced table "customers_st2"
 CREATE TABLE
-Time: 4.879 ms
+Time: 2.962 ms
    (if the above succeeded, note: the CHILD was forced to become temporal — the viral cost)
 
 ── TEST 2c: temporal FK coverage semantics — child period must be covered by parent versions ──
 INSERT 0 1
-Time: 1.599 ms
-INSERT 0 1
-Time: 1.757 ms
+Time: 2.143 ms
 psql:/scripts/02-fk-mechanics.sql:55: ERROR:  insert or update on table "policies_temporal" violates foreign key constraint "policies_temporal_customer_id_valid_period_fkey"
 DETAIL:  Key (customer_id, valid_period)=(22222222-2222-2222-2222-222222222222, ["2025-01-01 00:00:00+00","2025-06-01 00:00:00+00")) is not present in table "customers_st2".
-Time: 0.323 ms
+psql:/scripts/02-fk-mechanics.sql:75: NOTICE:  table "policies_cascade" does not exist, skipping
+psql:/scripts/02-fk-mechanics.sql:84: ERROR:  unsupported ON DELETE action for foreign key constraint using PERIOD
+INSERT 0 1
+Time: 1.790 ms
+Time: 0.406 ms
 
 ── TEST 2c2: THE COVERAGE QUESTION — child span across TWO CONTIGUOUS parent versions ──
    (Neon PG18 docs claim single-row containment; SQL:2011 says aggregated coverage.
     If this INSERT fails, temporal FKs are practically dead against system-time
     parents — every parent edit splits versions and strands child spans.)
 INSERT 0 2
-Time: 3.312 ms
+Time: 0.960 ms
 INSERT 0 1
-Time: 1.064 ms
+Time: 1.533 ms
    (success = aggregated coverage; failure = single-row containment — record verdict)
 
 ── TEST 2c3: temporal FK referential actions — is CASCADE declarable in PG19? ──
    (PG18 shipped RESTRICT/NO ACTION; temporal CASCADE needs portion semantics = PG19 feature)
-psql:/scripts/02-fk-mechanics.sql:75: NOTICE:  table "policies_cascade" does not exist, skipping
 DROP TABLE
-Time: 0.159 ms
-psql:/scripts/02-fk-mechanics.sql:84: ERROR:  unsupported ON DELETE action for foreign key constraint using PERIOD
-Time: 1.096 ms
+Time: 0.218 ms
+Time: 1.661 ms
    (capture: accepted / rejected — and if accepted, test a portion delete cascading)
 
 ── TEST 2d: Model B — plain FK to lean current table works; history keeps temporal PK ──
 CREATE TABLE
-Time: 3.706 ms
+Time: 1.605 ms
 CREATE TABLE
-Time: 1.717 ms
+Time: 1.513 ms
 CREATE TABLE
-Time: 4.198 ms
+Time: 1.622 ms
    (expect: all three created cleanly — Model B preserves plain FKs)
             Table "public.policies_plain"
    Column    | Type | Collation | Nullable | Default 

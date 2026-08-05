@@ -1,7 +1,7 @@
 CREATE EXTENSION
-                                                          version                                                          
----------------------------------------------------------------------------------------------------------------------------
- PostgreSQL 19beta1 (Debian 19~beta1-1.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+                                                             version                                                             
+---------------------------------------------------------------------------------------------------------------------------------
+ PostgreSQL 19beta2 (Debian 19~beta2-1.pgdg13+1) on aarch64-unknown-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
 (1 row)
 
   extname   | extversion 

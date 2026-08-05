@@ -1,57 +1,57 @@
 Timing is on.
 ── setup: single-table system-versioned entity ──
 DROP TABLE
-Time: 0.413 ms
+Time: 0.231 ms
 DROP ROLE
-Time: 0.165 ms
+Time: 0.106 ms
 psql:/scripts/01-rls-immutability.sql:16: NOTICE:  table "customers_st" does not exist, skipping
 psql:/scripts/01-rls-immutability.sql:17: NOTICE:  role "app_rw" does not exist, skipping
 CREATE TABLE
-Time: 8.372 ms
+Time: 12.210 ms
 CREATE ROLE
-Time: 6.410 ms
+Time: 5.229 ms
 GRANT
-Time: 1.803 ms
+Time: 5.298 ms
 ALTER TABLE
-Time: 1.599 ms
+Time: 1.622 ms
 CREATE POLICY
-Time: 3.890 ms
+Time: 3.324 ms
 CREATE POLICY
-Time: 2.044 ms
+Time: 1.288 ms
 CREATE POLICY
-Time: 1.407 ms
+Time: 1.190 ms
 CREATE POLICY
-Time: 2.170 ms
+Time: 0.975 ms
 INSERT 0 2
-Time: 2.721 ms
+Time: 1.204 ms
 
 ── TEST 1a: app role rewrites a CLOSED portion (expect: 0 rows / denied) ──
 SET
-Time: 0.119 ms
+Time: 0.170 ms
 UPDATE 0
-Time: 0.680 ms
+Time: 0.715 ms
 
 ── TEST 1b: app role FOR PORTION OF rewrites HISTORY (expect: denied or 0 rows) ──
 UPDATE 0
-Time: 0.315 ms
+Time: 0.250 ms
 
 ── TEST 1c: THE CRUX — app role FOR PORTION OF on the CURRENT row ──
    (open item says RLS-incompatible: capture error vs. success vs. policy clash on flanks)
 UPDATE 1
-Time: 1.636 ms
+Time: 3.792 ms
 
 ── TEST 1d: app role INSERTs fake closed history directly (expect: WITH CHECK rejects) ──
-Time: 0.264 ms
+Time: 0.318 ms
+psql:/scripts/01-rls-immutability.sql:72: ERROR:  new row violates row-level security policy for table "customers_st"
 RESET
-Time: 0.067 ms
+Time: 0.373 ms
 
 ── final state (superuser view) ──
-psql:/scripts/01-rls-immutability.sql:72: ERROR:  new row violates row-level security policy for table "customers_st"
-  full_name   | risk_tier |                       system_period                        
---------------+-----------+------------------------------------------------------------
+  full_name   | risk_tier |                       system_period                       
+--------------+-----------+-----------------------------------------------------------
  Acme Old     |         2 | ["2026-01-01 00:00:00+00","2026-03-01 00:00:00+00")
- Acme Current |         3 | ["2026-03-01 00:00:00+00","2026-06-07 11:17:26.085241+00")
- Acme Current |         5 | ["2026-06-07 11:17:26.085241+00",infinity)
+ Acme Current |         3 | ["2026-03-01 00:00:00+00","2026-08-05 03:59:49.77736+00")
+ Acme Current |         5 | ["2026-08-05 03:59:49.77736+00",infinity)
 (3 rows)
 
-Time: 0.398 ms
+Time: 0.666 ms

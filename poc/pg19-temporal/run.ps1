@@ -20,7 +20,7 @@ if ($Down) {
 	return
 }
 
-# Official postgres:19beta1-trixie (pinned in docker-compose.yml). If the tag ever
+# Official postgres:19beta2-trixie (pinned in docker-compose.yml). If the tag ever
 # disappears, compose fails loudly here — no silent fallback to PG18; these scripts
 # test PG19 behavior, period.
 docker compose up -d --wait
@@ -42,4 +42,4 @@ foreach ($s in $scripts) {
 }
 
 Write-Host ''
-Write-Host 'done — record conclusions in FINDINGS.md (dated against beta1; re-verify at RC1)' -ForegroundColor Green
+Write-Host 'done — record conclusions in FINDINGS.md (dated against beta2; re-verify at RC1)' -ForegroundColor Green

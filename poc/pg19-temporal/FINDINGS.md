@@ -1,8 +1,10 @@
 # Findings — PG19 `FOR PORTION OF` Reconnaissance
 
-**PG version tested:** PostgreSQL 19beta1 — official image `postgres:19beta1-trixie` (`19~beta1-1.pgdg13+1`, gcc 14). Original run 2026-06-04 (beta1 release day) used the PGDG-apt bookworm shim (`19~beta1-1.pgdg12+1`, gcc 12); re-run 2026-06-07 on the official image with **full parity** — every error/notice/trigger/rowcount line identical across all five scripts, only timings and toolchain line moved. `results/` reflects the official-image run.
-**Date:** 2026-06-04 (beta1 release day); re-verified 2026-06-07 (official image)
+**PG version tested:** PostgreSQL 19beta2 — official image `postgres:19beta2-trixie` (`19~beta2-1.pgdg13+1`, gcc 14, aarch64). Original run 2026-06-04 (beta1 release day) used the PGDG-apt bookworm shim (`19~beta1-1.pgdg12+1`, gcc 12); re-run 2026-06-07 on the official beta1 image established full parity. `results/` reflects the beta2 official-image run.
+**Date:** 2026-06-04 (beta1 release day); re-verified 2026-06-07 (official beta1 image) and 2026-08-04 (official beta2 image; result timestamps are 2026-08-05 UTC)
 **Re-verify at:** RC1 — verdicts #1 and #4 sit on documented open items and may change.
+
+**Beta2 parity:** all five scripts completed with every error, notice, trigger, and rowcount line matching the beta1 official-image run; only timestamps, toolchain/platform, physical-size, and timing lines moved. No verdict changed.
 
 ## Matrix verdicts
 
@@ -24,4 +26,4 @@
 
 ## Reproduction
 
-`./run.ps1` (official `postgres:19beta1-trixie`; the release-day PGDG-apt shim was retired 2026-06-07 once docker-library published). Raw outputs in `results/*.out`.
+`./run.ps1` (official `postgres:19beta2-trixie`; the release-day PGDG-apt shim was retired 2026-06-07 once docker-library published). Raw outputs in `results/*.out`.
