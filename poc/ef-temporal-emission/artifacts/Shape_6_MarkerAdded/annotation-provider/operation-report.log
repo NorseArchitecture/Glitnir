@@ -1,0 +1,6 @@
+operation=CreateTableOperation; table=public.__EFMigrationsHistory; annotations=[]; oldAnnotations=[<none>]; targetTemporal=False
+operation=CreateTableOperation; table=public.widgets; annotations=[]; oldAnnotations=[<none>]; targetTemporal=False
+operation=AlterTableOperation; table=public.widgets; annotations=[Norse:Temporal=True]; oldAnnotations=[]; targetTemporal=True
+operation=CreateTableOperation; table=public.__EFMigrationsHistory; annotations=[]; oldAnnotations=[<none>]; targetTemporal=False
+operation=CreateTableOperation; table=public.widgets; annotations=[]; oldAnnotations=[<none>]; targetTemporal=False
+operation=AlterTableOperation; table=public.widgets; annotations=[Norse:Temporal=True]; oldAnnotations=[]; targetTemporal=True

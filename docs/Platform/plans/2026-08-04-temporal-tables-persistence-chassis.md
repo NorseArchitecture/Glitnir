@@ -41,7 +41,8 @@ Urdarbrunnr/
 		TemporalEntityTypeBuilderExtensions.cs (Task 3: NEW TemporalParkedOnSqlServer fluent)
 		NorseModelConventions.cs              (Task 3: MODIFY — register the convention)
 		INorseEfProvider.cs                   (Task 4: MODIFY — add TemporalRealizationHook seam)
-		NorseDbContextOptionsExtensions.cs    (Task 4: MODIFY — plugin registration when hook non-null)
+		NorseDbContextOptionsExtensions.cs    (Task 4: MODIFY — carrier-extension registration when hook non-null)
+		NorseTemporalRealizationOptionsExtension.cs (Task 4: NEW — carrier-only hook transport; see mechanism ruling)
 	src/Persistence.EntityFramework.SqlServer/
 		NorseSqlServerEfProvider.cs           (Task 4: MODIFY — realization hook: IsTemporal + naming + split guard)
 	src/Persistence.EntityFramework.PostgreSQL/
@@ -264,17 +265,20 @@ Register `TemporalEntityConvention` in `NorseModelConventions.Apply` exactly whe
 
 ### Task 4: SQL Server realization — `IsTemporal`, naming policy, split guard
 
-**Files:**
-- Modify: `Urdarbrunnr/src/Persistence.EntityFramework/INorseEfProvider.cs` (new nullable hook member)
-- Modify: `Urdarbrunnr/src/Persistence.EntityFramework/NorseDbContextOptionsExtensions.cs` (register realization plugin when hook non-null)
+**Files (amended 2026-08-05, mechanism ruling below):**
+- Modify: `Urdarbrunnr/src/Persistence.EntityFramework/INorseEfProvider.cs` (new nullable hook member — abstract, no default)
+- Modify: `Urdarbrunnr/src/Persistence.EntityFramework/NorseDbContextOptionsExtensions.cs` (register the carrier extension when hook non-null)
+- New: `Urdarbrunnr/src/Persistence.EntityFramework/NorseTemporalRealizationOptionsExtension.cs` (carrier-only options extension — no services, no plugin)
+- Modify: `Urdarbrunnr/src/Persistence.EntityFramework/TemporalEntityConvention.cs`, `NorseModelConventions.cs`, `NorseDbContext.cs` (hook parameter threaded to the stamping convention)
 - Modify: `Urdarbrunnr/src/Persistence.EntityFramework.SqlServer/NorseSqlServerEfProvider.cs` (implement the hook)
+- Modify: `Urdarbrunnr/src/Persistence.EntityFramework.PostgreSQL/NorsePostgresEfProvider.cs` (declare the hook `null` explicitly)
 - Test: `Urdarbrunnr/tests/Persistence.EntityFramework.SqlServer.Tests/SqlServerTemporalRealizationTests.cs`
 
 **Interfaces:**
-- Consumes: `NorseAnnotationNames.Temporal` / `.TemporalParkedOnSqlServer`, `ITemporalEntity` (Task 3); the existing options-extension → `IConventionSetPlugin` pattern (`NorseSnakeCaseNamingOptionsExtension` — mirror its shape).
-- Produces: `INorseEfProvider.TemporalRealizationHook` — `Action<IConventionEntityType>? TemporalRealizationHook => null` default; SQL Server period columns `SystemPeriodStart`/`SystemPeriodEnd`, history table `{Table}History`.
+- Consumes: `NorseAnnotationNames.Temporal` / `.TemporalParkedOnSqlServer`, `ITemporalEntity` (Task 3). `NorseAnnotationNames` is public — seam surface read by binding assemblies, like EF's own `RelationalAnnotationNames`.
+- Produces: `INorseEfProvider.TemporalRealizationHook` — abstract `Action<IConventionEntityType>? { get; }`, every binding states its posture (no silent default); SQL Server period columns `SystemPeriodStart`/`SystemPeriodEnd`, history table `{Table}History`.
 
-The hook seam mirrors `EntityRenameHook`: the foundation declares it, a plugin-registered finalizing convention invokes it once per marked entity, and only the SqlServer package touches SQL-Server-only EF APIs. PostgreSQL's hook stays `null` (the annotation alone drives Tasks 5–7).
+**Mechanism ruling (amended 2026-08-05):** the originally planned plugin-registered finalizing convention cannot work — plugin-added conventions enter the finalizing list when the convention set is built, before `ConfigureConventions` appends the Task 3 stamping convention, so a realization pass registered via `IConventionSetPlugin` runs before `Norse:Temporal` exists (confirmed RED: 2 of 3 realization tests failed under the plugin shape). The reactive alternative (annotation-changed trigger plus de-duplication) was considered and rejected as ordering fragility relocated into stateful machinery. Ratified shape: **stamp-then-realize in one deterministic pass** — `TemporalEntityConvention` takes the hook and invokes it immediately after stamping each validated entity, the exact `EntityRenameHook` precedent (provider supplies a delegate, the neutral convention drives it, inert when null). The hook travels from `ApplyNorseProviderOptions` to `NorseDbContext.ConfigureConventions` via a carrier-only options extension read with `FindExtension`. Only the SqlServer package touches SQL-Server-only EF APIs; PostgreSQL's hook is declared `null` (the annotation alone drives Tasks 5–7).
 
 - [ ] **Step 1: Write the failing tests.** Model-level against `UseSqlServer` options (no database touched — same pattern the existing `NorseSqlServerEfProviderTests` uses for the rename hook). Entities in the test file: `TemporalOrder` (marked, no split), `SplitTemporalUser` (marked, `SplitToTable("user_lockout", …)` moving one column), `ParkedSplitTemporalUser` (same + `TemporalParkedOnSqlServer()` in its `Configure`).
 
