@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Pairs with superpowers:test-driven-development on every task.
 
-**Goal:** Ship the ratified PII design end to end — four PII primitives with masking law and the NORSE061/062 analyzer (Svartálfheim), the `Erased` category + key-seam contracts (Asgard), edge mappings + dev key provider (Midgard), the protected-PII value converter (Urðarbrunnr), and Identity integration with the three-act shred ceremony and disclosure surface (Himinbjörg), wired at the composition root (Yggdrasil).
+**Goal:** Ship the ratified PII design end to end — four PII primitives with masking law and the NORSE061/062 analyzer (Svartálfheim), the `Erased` category + key-seam contracts (Asgard), edge mappings + dev key provider (Midgard), the protected-PII value converter (Urðarbrunnr), and Identity integration with the three-act shred ceremony and disclosure surface (Himinbjörg; the disclosure wire contract rides Heimdall's `AuthN.Services` per the 2026-08-04 amendment), wired at the composition root (Yggdrasil).
 
 **Architecture:** Spec: `../../Platform/specs/2026-08-03-pii-primitives-identity-erasure-seam-design.md` — read it before any task. Strict realm ship order (spec §9); each realm phase ends at a human ship gate (PR → CI → tag → NuGet) before the next realm's tasks consume the published surface. In-Bifröst development uses `NorseRef` project references, so tasks compile locally before gates.
 
@@ -16,7 +16,7 @@
   - **Wire format never leaves Infrastructure/Hosting (NORSE070, compiler-enforced).** `MaskedValueJsonConverter<T>` and every `[JsonConverter]` attribute are DELETED from this plan (Tasks 1–5 amended below); the masked-serialization defense-in-depth relocates to Midgard as new Task 12b. Tests/benchmarks are law-exempt.
   - **Resume protocol:** `feature/pii-primitives` carries Tasks 1–2 with the convicted files and has master (law included) merged in — the branch build prints the exact strip-list. The resume's FIRST commit strips: delete `src/Primitives/Pii/MaskedValueJsonConverter.cs` + `tests/Primitives.Tests/Pii/MaskedValueJsonConverterTests.cs`, remove the `[JsonConverter(...)]` attribute and `using System.Text.Json.Serialization;` from `EmailAddress.cs`. Then Task 3 dispatches per the amended text.
   - **Keys placement (ruled 2026-08-03: no per-functional-group packages — the `Infrastructure.Backend` precedent):** Task 8's contracts land in **`Asgard/src/Abstractions.Backend/Keys/`** (`namespace Norse.Abstractions.Backend.Keys;`), NOT a new `Abstractions.Keys` assembly; Task 12's dev store lands in **`Midgard/src/Infrastructure.Backend/Keys/`** (`namespace Norse.Infrastructure.Backend.Keys;`), NOT a new `Infrastructure.Keys` project. No new csproj/slnx work in either task; tests join the existing 1:1 `Abstractions.Backend.Tests`/`Infrastructure.Backend.Tests` under `Keys/` folders. Every `using Norse.Abstractions.Keys;` the original text mandated in later tasks reads `using Norse.Abstractions.Backend.Keys;`.
-  - **The serialization seam exists** (`ISerializerProvider`/`ISerializer`/`NamingStrategy` in `Abstractions.Backend`, STJ machinery in `Infrastructure.Backend`, composed at the tree): anything disclosure-adjacent that needs bytes uses the seam, never STJ directly. Himinbjörg master now carries the seam-restored `DownloadPersonalData` scaffold endpoint — the Task 19 disclosure surface supersedes it when it lands.
+  - **The serialization seam exists** (`ISerializerProvider`/`ISerializer`/`NamingStrategy` in `Abstractions.Backend`, STJ machinery in `Infrastructure.Backend`, composed at the tree): anything disclosure-adjacent that needs bytes uses the seam, never STJ directly. Himinbjörg master now carries the seam-restored `DownloadPersonalData` scaffold endpoint — Task 19b deletes it outright (download is a gRPC call per the 2026-08-04 ruling; `GetMyPersonalDataAsync` is the replacement, the ported Heimdall `PersonalData.razor` materializes the file client-side).
   - **Midgard is consumed only by the tree (NORSE071):** already true in this plan — the ONLY Midgard reference is Task 20's composition root, plus law-exempt test fixtures. Task 18/19's `PostgresIdentityFixture` composes the Midgard dev key store: the TEST csproj needs its own direct `<NorseRef Include="Infrastructure.Backend"><Repo>Midgard</Repo></NorseRef>` (nothing flows it transitively; the Mímir integration-test precedent).
 - **Branching:** every realm phase starts on a fresh local feature branch in that realm's repo; commits stay local and unpushed; Buvy pushes/PRs at the ship gate. Never branch or commit Bifröst itself.
 - **Commit policy:** subagents commit only files they authored, named explicitly — never `git add -A`/`git add .`.
@@ -71,6 +71,13 @@ Urdarbrunnr/
   src/Persistence.EntityFramework/ProtectedPiiValueConverter.cs      (new)
   src/Persistence.EntityFramework/PiiProtectionModelExtensions.cs    (new)
   tests/Persistence.EntityFramework.Tests/ProtectedPiiValueConverterTests.cs (new)
+Heimdall/
+  src/AuthN.Services/IIdentityService.cs                 (new — disclosure contract, Task 19a)
+  src/AuthN.Services/{GetMyPersonalDataRequest,GetMaskedPersonalDataRequest,PersonalDataResponse,MaskedPersonalDataResponse}.cs (new wire records)
+  src/AuthN.Services/IdentityPolicies.cs                 (new — policy names beside AuthNPolicies)
+  src/AuthN.Components/GetMaskedPersonalDataRequestValidator.cs (new)
+  tests/AuthN.Services.Tests/RequestContractTests.cs     (extend — purity lock covers new records)
+  tests/AuthN.Components.Tests/GetMaskedPersonalDataRequestValidatorTests.cs (new)
 Himinbjorg/
   src/Identity.EntityFramework/SubjectKey.cs             (new entity)
   src/Identity.EntityFramework/NorseUser.cs              (modify — index/lockout split)
@@ -80,8 +87,7 @@ Himinbjorg/
   src/Identity.Web.Server/NorseUserClaimsPrincipalFactory.cs (new)
   src/Identity.Web.Server/ErasureService.cs              (new)
   src/Identity.Web.Server/IdentityBuilderExtensions.cs   (modify — wiring)
-  src/Identity.Services/*.cs                             (new project — wire contracts)
-  src/Identity.Web.Server/Disclosure/*.cs                (new — handlers + service)
+  src/Identity.Web.Server/Disclosure/*.cs                (new — handlers + service, Task 19b)
   src/Identity.Migrations.PostgreSQL|SqlServer/Migrations/ (regenerated, squash law)
   tests/…                                                (per project, 1:1)
 Yggdrasil/
@@ -2648,6 +2654,10 @@ git commit -m "test: pin Identity attribute seam and temporal+split composition 
 
 ### Task 15: `SubjectKey` entity, schema changes, temporal sweep
 
+> **AMENDED 2026-08-04 (Buvy's ruling: temporal is deferred out of this effort — implementation surfaced an EF Core 11 preview defect).** `IsTemporal()` + `SplitToTable()` compose at model-build time (Task 14's pinning tests pass honestly) but the SQL Server migrations SQL generator NREs on the split table: `UserLockout`'s `CreateTableOperation` inherits `SqlServer:IsTemporal=True` from `NorseUser` with null period-column names (temporal annotations are per-entity-type, not per-table) and `EscapeIdentifier(null)` throws. Bisected and localized in the Task 15 implementation report. **Ruling:** this effort builds the PII framework, turns on the ASP.NET Identity protection flags, and solves the personal-data story — nothing else. Read this task WITHOUT the temporal sweep and WITHOUT the lockout split: no `IsTemporal()`, no `SplitToTable()`, anywhere. What remains: `SubjectKey` entity (its "non-temporal, excluded from the sweep" clause is moot — nothing is temporal now), nullable `NormalizedUserName`, provider-aware filtered unique index at the context, `UserName` stays required, `NormalizedEmail` non-unique tripwire test, migrations regen under the squash law (both providers — SQL Server regen works once temporal/split are gone). Model tests: drop the three temporal facts (`Subject_keys_table_exists_and_is_not_temporal`, `Users_table_is_temporal…`, `Every_identity_entity_is_temporal…`); a plain `SubjectKey`-exists/shape assertion replaces the first. Task 14's `TemporalSplitProofTests.cs` is DELETED in this task's commit — it pins machinery this plan no longer uses; the fold-in effort re-proves at DDL level, where the defect actually lives. The lockout-churn worry that motivated the split dies with the history table (no temporal → no history rows to churn).
+>
+> **Fold-in trigger (recorded, per the pre-release-tracking doctrine — run ahead only with an exit condition):** when EF's temporal+split composition generates clean SQL Server DDL (upstream fix), temporal + the lockout split return as their own effort, folded into the then-current schema, and the full e2e tie-out begins in earnest — including riding the custody seam across all realms against BOTH local vault containers (Vault/OpenBao Transit + Azure Key Vault emulator, the Bifröst §9 dual-provider fitness test). **Upstream:** logged 2026-08-04 on dotnet/efcore#26457 (comment 5186526882); .NET 11 hits RC1/feature lockdown in September, so expect a platform-side workaround rather than an upstream fix inside this cycle — escape-hatch exploration of the .NET 11 codebase is Buvy's open thread.
+
 **Files:**
 - Create: `src/Identity.EntityFramework/SubjectKey.cs`
 - Modify: `src/Identity.EntityFramework/NorseUser.cs` (drop `NormalizedUserName` `IsRequired`, filtered-unique index moves to context; lockout split — **if not already landed**, see coordination gate)
@@ -3390,18 +3400,24 @@ git add src/Identity.Web.Server/ErasureService.cs tests/Identity.Web.Server.Test
 git commit -m "feat: three-act shred ceremony — null hashes, rotate stamp, destroy key"
 ```
 
-### Task 19: The disclosure surface
+### Task 19a: The disclosure contract — Heimdall (`feature/pii-disclosure-contract`)
+
+> **AMENDED 2026-08-04 (ruling: the wire tier rides Heimdall, matching `IAuthenticationService`).** The original Task 19 minted a new `Identity.Services` project in Himinbjörg for the `[ServiceContract]` + wire records. Wrong realm: Himinbjörg is sealed server-side — nothing it ships crosses to WASM or MAUI — so a client-consumable disclosure contract could never live there without breaking the seal. The precedent already on the books is `IAuthenticationService`: contract + wire records + policy-name constants in Heimdall's `AuthN.Services` (WASM-lean, references nothing above Asgard's `Abstractions.Contracts`), validators in `AuthN.Components`, concrete hydrate-and-send host in Himinbjörg's `Identity.Web.Server`. The disclosure surface follows it exactly. Himinbjörg's `Identity.Services` project is **never created**.
+>
+> **Sequencing this introduces:** Himinbjörg consumes Heimdall via `NorseRef` → floating `PackageReference` (`Norse.AuthN.Services`, `Version="*"`), so this task carries its **own ship gate** — Task 19b cannot compile until the amended package is on the feed.
+>
+> **Razor components assessed 2026-08-04, amended same day — `PersonalData.razor` moves, `DeletePersonalData.razor` stays.** Both pages carry backend injections today (`UserManager<NorseUser>`, delete also takes `SignInManager<NorseUser>`, `HttpContext` cascade, `IdentityRedirectManager`, server form-POST). But the manager work is not what blocks a move — the sweep mechanism is exactly the Login/Register precedent: push the server work into handlers behind the service contract, and the page needs only the injected `I{Context}Service`. Ruled 2026-08-04: **download personal data becomes a gRPC call** — `PersonalData.razor`'s only real server dependency was the `DownloadPersonalData` form-POST endpoint, which `GetMyPersonalDataAsync` replaces outright, so the page ports to Heimdall in this task (inject `IIdentityService` + `NavigationManager`, materialize the download client-side from `PersonalDataResponse`; exact save mechanism — JS-interop anchor/data URI — decided at implementation). `DeletePersonalData.razor` stays in Himinbjörg: its `UserManager.DeleteAsync` semantics are superseded by the shred ceremony (Task 18), and the wire-exposed shred trigger is a recorded deliberate deferral (spec §7, Syn DSAR trigger) — designing that contract method (password re-confirmation, `CheckPasswordAsync` + `ErasureService` + `SignOutAsync` in a handler) is the validation-work round, not this one.
 
 **Files:**
-- Create: `src/Identity.Services/Identity.Services.csproj` (+ slnx wiring) — `[DataContract]` wire types + `[ServiceContract]` interface, Heimdall `AuthN.Services` precedent, WASM-lean, no mediator markers
-- Create: `src/Identity.Services/IIdentityService.cs`, `GetMyPersonalDataRequest.cs`, `GetMaskedPersonalDataRequest.cs`, `PersonalDataResponse.cs`, `MaskedPersonalDataResponse.cs`
-- Create: `src/Identity.Web.Server/Disclosure/IdentityPolicies.cs`, `Disclosure/GetMyPersonalDataHandler.cs`, `Disclosure/GetMaskedPersonalDataHandler.cs`, `Disclosure/IdentityService.cs` (+ the `CommandRequest` wrapper types the mediator generator expects — mirror the Mímir/Heimdall handler registration shape exactly, including `[Authorize(Policy = ...)]` so NORSE011 passes)
-- Test: `tests/Identity.Web.Server.Tests/DisclosureHandlerTests.cs`
+- Create: `src/AuthN.Services/IIdentityService.cs`, `GetMyPersonalDataRequest.cs`, `GetMaskedPersonalDataRequest.cs`, `PersonalDataResponse.cs`, `MaskedPersonalDataResponse.cs`, `IdentityPolicies.cs`
+- Create: `src/AuthN.Components/GetMaskedPersonalDataRequestValidator.cs`
+- Create: `src/AuthN.Components.FluentUI/PersonalData.razor` — port of Himinbjörg's page, injection-clean (`IIdentityService` + `NavigationManager` only, Login.razor precedent); Download button calls `GetMyPersonalDataAsync` and saves client-side; the delete link keeps pointing at Himinbjörg's still-hosted `/Account/Manage/DeletePersonalData` route
+- Test: extend `tests/AuthN.Services.Tests/RequestContractTests.cs` (the purity lock's record inventory covers the four new wire shapes — no `[Authorize]`, no mediator marker, and the assembly still never references `Norse.Abstractions.Web.Server`); create `tests/AuthN.Components.Tests/GetMaskedPersonalDataRequestValidatorTests.cs`; create `tests/AuthN.Components.FluentUI.Tests/PersonalDataTests.cs` (LoginTests precedent — fake `IIdentityService`, assert render + call)
 
-**Interfaces:**
+**Interfaces** (namespace `Norse.AuthN.Services`, brand-injected):
 
 ```csharp
-[ServiceContract]
+[ServiceContract(Name = "grpc.identity.v1.IdentityService")]
 public interface IIdentityService
 {
 	[OperationContract] Task<Outcome<PersonalDataResponse>> GetMyPersonalDataAsync(GetMyPersonalDataRequest request, CancellationToken cancellationToken = default);
@@ -3414,7 +3430,25 @@ public interface IIdentityService
 [DataContract] public sealed record MaskedPersonalDataResponse { … same two members, masked … }
 ```
 
-- Policies: `IdentityPolicies.Self` = authenticated user (the handler discloses only the principal's own row — authorization is decidable from the principal alone); `IdentityPolicies.MaskedDisclosure` = system-role requirement (`RequireRole(IdentityPolicies.SystemRole)`); both registered where the realm's existing policies register (follow Heimdall's `AuthNPolicies` registration site).
+- `IdentityPolicies` rides the contract assembly exactly as `AuthNPolicies` does — constants only (`Self`, `MaskedDisclosure`, `SystemRole`); the `RequireRole`/policy **registration** stays server-side (Task 19b). The names are wire-adjacent metadata the concrete host mirrors onto its methods for gRPC endpoint discovery, same as `AuthNPolicies.Public` today.
+- Validator: `GetMaskedPersonalDataRequestValidator` — `RuleFor(x => x.SubjectId).NotEmpty()` — lands beside `LoginRequestValidator`/`RegisterRequestValidator` in `AuthN.Components` and gets the same dual run: Blazilla client-side against the wire type, and server-side through Asgard's generated `CommandRequestValidator<TCommand,TRequest,TResponse>` adapter reaching through Task 19b's command wrapper. `GetMyPersonalDataRequest` is an empty record by design — no validator exists; nothing to validate **is** the point.
+
+- [ ] **Step 1: Write the failing tests** — the `RequestContractTests` extension and the validator tests.
+- [ ] **Step 2: Run to verify failure** — the types do not exist.
+- [ ] **Step 3: Implement** per the Interfaces block, then `dotnet build Heimdall.slnx && dotnet test Heimdall.slnx`.
+- [ ] **Step 4: Update realm docs and stage** — `Heimdall/CLAUDE.md` + `README.md` (boy-scout law: `AuthN.Services` now carries the disclosure contract alongside the issuance contract), `git add src/AuthN.Services src/AuthN.Components tests CLAUDE.md README.md`.
+
+**SHIP GATE (human): Heimdall** — PR, CI, tag, publish. **Blocking:** Task 19b's `NorseRef` floats on `Version="*"` — do not start 19b until the package restores from the feed.
+
+### Task 19b: The disclosure surface — Himinbjörg (`feature/pii-identity-erasure`, continued)
+
+**Files:**
+- Create: `src/Identity.Web.Server/Disclosure/GetMyPersonalDataHandler.cs`, `Disclosure/GetMaskedPersonalDataHandler.cs`, `Disclosure/IdentityService.cs` (+ the `CommandRequest` wrapper types the mediator generator expects — mirror the Mímir/Heimdall handler registration shape exactly, including `[Authorize(Policy = ...)]` so NORSE011 passes). The contract, wire records, and `IdentityPolicies` come from Heimdall's `Norse.AuthN.Services` (Task 19a) — `using Norse.AuthN.Services;`, no new project, no slnx change.
+- Delete: `src/Identity.Web.Server/Components/Pages/Manage/PersonalData.razor` (ported to Heimdall in Task 19a) and the `DownloadPersonalData` endpoint mapping in `IdentityComponentsEndpointRouteBuilderExtensions.cs` (superseded by `GetMyPersonalDataAsync` — the 2026-08-04 download-is-a-gRPC-call ruling; the seam-restored scaffold endpoint dies here, no deprecation period)
+- Modify: `src/Identity.Web.Server/ServiceCollectionExtensions.cs` — register the concrete `IdentityService` as `IIdentityService` for the Blazor Server in-process path (`AuthenticationService` precedent), alongside the generated gRPC server wiring's automatic `I{Context}Service` discovery
+- Test: `tests/Identity.Web.Server.Tests/DisclosureHandlerTests.cs`
+
+- Policies: `IdentityPolicies.Self` = authenticated user (the handler discloses only the principal's own row — authorization is decidable from the principal alone); `IdentityPolicies.MaskedDisclosure` = system-role requirement (`RequireRole(IdentityPolicies.SystemRole)`); both registered where the realm's existing policies register (follow Heimdall's `AuthNPolicies` registration site), using the constants from Task 19a.
 - **The repository fold (spec §3.1):** each handler wraps its query in `try { … } catch (KeyDestroyedException e) { return new(new Failed(new Problem { Category = ErrorCategory.Erased, Receipt = e.Receipt })); }` — `KeyMissingException` is deliberately **not** caught (falls to `ExceptionTranslationBehavior` → Fault + correlation id + telemetry: the incident path with zero code). This try/catch **is** the subject-singular fold: both queries are single-subject by construction (spec §4.1 — no list-shaped decrypted read exists on this surface).
 - Masked handler masks **through the structs, never by hand**: `EmailAddress.Parse(decrypted)` → `.Masked`; `PhoneNumber.Parse` → `.Masked`; a parse failure of decrypted data is storage corruption → let it throw (`InvalidOperationException` → Fault). No `BirthDate`/`PersonalName` methods yet — no such columns exist; they arrive with the profile surface.
 - Self handler: subject id from `IPrincipalAccessor`'s principal (`UserIdClaimType` claim), **never** from the request. No row → `NotFound` (an authenticated principal whose row vanished — legitimate after shred + reregistration churn? No: a shredded user's session died at revalidation; a live principal with no row is data drift → `NotFound` is the honest answer).
@@ -3521,10 +3555,10 @@ sealed class GetMaskedPersonalDataHandler(NorseIdentityDbContext context) :
 
 - [ ] **Step 5: Update realm docs and commit**
 
-Update `Himinbjorg/CLAUDE.md` + `README.md` (protection seam live, disclosure surface, subject_keys, temporal posture, new `Identity.Services` project).
+Update `Himinbjorg/CLAUDE.md` + `README.md` (protection seam live, disclosure surface, subject_keys, temporal posture, disclosure contract consumed from Heimdall's `AuthN.Services` — Task 19a amendment).
 
 ```bash
-git add src/Identity.Services src/Identity.Web.Server/Disclosure Himinbjorg.slnx tests/Identity.Web.Server.Tests/DisclosureHandlerTests.cs CLAUDE.md README.md
+git add src/Identity.Web.Server/Disclosure tests/Identity.Web.Server.Tests/DisclosureHandlerTests.cs CLAUDE.md README.md
 git commit -m "feat: PII disclosure surface — self full, second-party masked, erased honest"
 ```
 
@@ -3565,10 +3599,11 @@ git commit -m "feat: wire dev-grade key seam at the composition root"
 
 0. **Curation pass (2026-08-03, post-Law-of-the-Realms — see the Global Constraints CURATION block):** `MaskedValueJsonConverter<T>` deleted from Tasks 1–5 (NORSE070) and reborn as Task 12b inside the wire border; the Keys contracts/dev store fold into the `Abstractions.Backend`/`Infrastructure.Backend` pair under `Keys/` folders (no-functional-group-packages ruling) — Tasks 8, 12, 16, 18–20 amended accordingly; Task 6's analyzer metadata names ride `Norse.Primitives.Pii.*`; the resume opens with the strip commit on `feature/pii-primitives`. Where a coverage line below says "§1.5 layer 2 → Task 1", read Task 12b.
 1. **Spec coverage:** §1 → Tasks 1–5; §1.5 layer 2 → Task 12b (curated; originally Task 1); §1.6 → Task 1; §2 → Tasks 7, 9, 10, 11; §3.1 → Tasks 8, 16, 19; §3.2 → Tasks 8, 15; §3.3 → Tasks 12, 20; §3.4 TTL/backup laws → dev-scope in Task 12 (production-provider obligations documented, not testable until a vault provider exists — deliberate); §4.1 → Tasks 13, 16; §4.2 → Tasks 15, 18; §4.3 → Tasks 14, 15; §4.4 → Task 17; §4.5 → Tasks 6 (fixture), 15, 16; §5 → Task 6; §6 → Task 19; §8 items 1–3 → Task 14, item 4 → Tasks 13/16 (singleton law), items 5–6 → Tasks 10/15, item 7 → Task 17, items 8–9 → Tasks 12/16, items 10–11 → Tasks 18/19.
-2. **Known deliberate deferrals** (spec §7 already blesses them): production vault-backed `ISubjectKeyStore` over the `subject_keys` table; Syn DSAR trigger for `ErasureService`; `ProtectPiiScalars` call site in `NorseIdentityDbContext` (lands with the first struct-typed profile property); lookup-keyring re-hash ceremony tooling.
+2. **Known deliberate deferrals** (spec §7 already blesses them): production vault-backed `ISubjectKeyStore` over the `subject_keys` table; Syn DSAR trigger for `ErasureService`; `ProtectPiiScalars` call site in `NorseIdentityDbContext` (lands with the first struct-typed profile property); lookup-keyring re-hash ceremony tooling. **Added 2026-08-04 (ruled during Phase E):** the temporal sweep + lockout split (spec §4.3) — deferred on an EF Core 11 preview defect (see the Task 15 amendment banner for the diagnosis and fold-in trigger); returns as its own effort when EF's composition generates clean DDL, at which point the full e2e tie-out runs across all realms with the dual local vault containers (Vault/OpenBao Transit + Azure Key Vault emulator) composed in Bifröst.
 3. **Type-consistency pass:** `IPiiScalar<TSelf>` (Tasks 1/13/19), `SubjectKeyResult.Match(available, destroyed, missing)` (Tasks 8/12/16/18), `ErasureReceipt(ReceiptId, SeveredAt)` (Tasks 7–19), envelope `v1:{subjectId:D}:{base64}` (Tasks 16/20) — verified consistent.
 4. **Coordination:** Phase E opens with the rebaseline gate for the parallel `SplitToTable` session; Tasks 14–15 collapse to consumption if that work lands first.
-5. **Forseti corrections folded (2026-08-03 review):** (1) `NorseUserManager` is the production `SubjectCryptoScope` chokepoint — the seam is wired at the one point every write traverses, with a no-manual-scope test proving it (Task 16); (2) session-death test upgraded to the real path — principal built by the real claims factory, verdict from `SignInManager.ValidateSecurityStampAsync`, interlocking with Task 17's allowlist (Task 18); (3) ceremony partial-failure contract documented as half-severed-but-retryable, with a throw-once/retry-completes test (Task 18); (4) analyzer restructured to an explicit three-way with a `TestEmail[]` fixture pinning array-of-PII to NORSE062 (Task 6). Margin notes: `NormalizedEmail` index non-uniqueness tripwire test (Task 15); fresh-instance-per-access comment on the dev-store test property (Task 12).
+5. **Amendment (2026-08-04, disclosure contract rides Heimdall — Buvy's ruling):** Task 19 split into **19a** (Heimdall `feature/pii-disclosure-contract`: `IIdentityService` + four wire records + `IdentityPolicies` in `AuthN.Services`, `GetMaskedPersonalDataRequestValidator` in `AuthN.Components`, own ship gate — Himinbjörg's `NorseRef` floats on `Version="*"`, so publish precedes 19b) and **19b** (Himinbjörg: handlers, command wrappers, `IdentityService` passthrough — otherwise unchanged). The Himinbjörg `Identity.Services` project is never created. Where a line elsewhere says "Task 19", read 19a for the wire tier and 19b for the server tier. Assessed in the same pass, second ruling folded same day: **download personal data becomes a gRPC call**, so `PersonalData.razor` ports to Heimdall in 19a (injection-clean — `IIdentityService` + `NavigationManager`; client-side file save) and 19b deletes Himinbjörg's page + the seam-restored `DownloadPersonalData` scaffold endpoint. `DeletePersonalData.razor` alone stays in Himinbjörg — its delete semantics become the shred ceremony, and the wire-exposed shred trigger is the recorded spec-§7 deferral (Syn DSAR trigger), designed in the validation-work round.
+6. **Forseti corrections folded (2026-08-03 review):** (1) `NorseUserManager` is the production `SubjectCryptoScope` chokepoint — the seam is wired at the one point every write traverses, with a no-manual-scope test proving it (Task 16); (2) session-death test upgraded to the real path — principal built by the real claims factory, verdict from `SignInManager.ValidateSecurityStampAsync`, interlocking with Task 17's allowlist (Task 18); (3) ceremony partial-failure contract documented as half-severed-but-retryable, with a throw-once/retry-completes test (Task 18); (4) analyzer restructured to an explicit three-way with a `TestEmail[]` fixture pinning array-of-PII to NORSE062 (Task 6). Margin notes: `NormalizedEmail` index non-uniqueness tripwire test (Task 15); fresh-instance-per-access comment on the dev-store test property (Task 12).
 
 
 
