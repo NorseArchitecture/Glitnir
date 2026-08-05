@@ -1,6 +1,6 @@
 # Temporal (System-Versioned) Tables in the Persistence Chassis — Design
 
-**Status:** DRAFT for review (brainstorm output, 2026-08-04; revised same day across two review passes — rulings 8–12, then 13–15). No plan, no implementation, until this passes the gate — and no implementation of §3 until the §3.0 spike renders its verdict.
+**Status:** DRAFT for review (brainstorm output, 2026-08-04; revised same day across three review passes — rulings 8–12, 13–15, then 16 at plan review). No plan, no implementation, until this passes the gate — and no implementation of §3 until the §3.0 spike renders its verdict.
 **Realms touched:** Urðarbrunnr (chassis: marker, convention, PostgreSQL emission, SQL Server realization), Himinbjörg (identity enablement, gated), Bifröst (proving ground, primary+replica assertion), Glitnir (this verdict, POC re-run).
 **Issues:** NorseArchitecture/Urdarbrunnr#52 (this design) · NorseArchitecture/Himinbjorg#47 (identity enablement, downstream) · NorseArchitecture/Bifrost#14 (custody proving ground, sibling).
 **Inherits without re-litigation:** the Norns storage-model split (`docs/Platform/specs/2026-06-04-norns-design.md` §6.4 — Model B current+history universal for system time; the parked single-table leaf variant stays parked per its stated re-entry trigger); the §7.3 history-table apparatus shape; the PG19 `FOR PORTION OF` reconnaissance verdicts (`poc/pg19-temporal/FINDINGS.md`, beta1); crypto-shredding over tombstoning and the envelope law (`docs/Platform/specs/2026-08-03-pii-primitives-identity-erasure-seam-design.md`); hard-delete erasure superseding darken-in-place (Himinbjorg#47 direction change).
@@ -34,6 +34,10 @@ Second review pass (same day):
 13. **The enable/disable transition is a first-class emission path** (§3.3). Adding the marker to an existing table — Himinbjörg's actual adoption — is an annotation/table alteration, not `CreateTable`; it emits the full apparatus with a single-timestamp backfill of existing rows. Removing the marker tears the apparatus down as visible destruction. The §3.0 spike expands to cover both annotation transitions — seven scaffold shapes, not five.
 14. **Period residence, stated precisely** (§2.1): `system_period` never enters the entity CLR contract or any payload; PostgreSQL keeps it outside the EF model entirely, while SQL Server carries it as the provider-owned shadow period properties `IsTemporal()` requires, named by the §4 policy.
 15. **Derived names are reserved** (§2.2): a model claiming a temporal entity's derived history/timeline names fails model finalize with a named diagnostic — never a late, unclear collision at migration time.
+
+Third review pass (plan review, same day):
+
+16. **Evolution DDL emits in a fixed drop-view-first order** (§3.4). PostgreSQL rejects `DROP COLUMN` and `ALTER … TYPE` on columns a view depends on, and `CREATE OR REPLACE VIEW` cannot change the output column set — so every evolution operation drops the timeline view first and recreates it fresh from the target column list last. Each evolution shape is also applied to real PostgreSQL in its own implementation task, not deferred to the final integration suite — snapshot-green-but-unappliable DDL must be impossible to ship.
 
 ## 2. Opt-in contract — provider-neutral, in the EF foundation
 
@@ -103,9 +107,9 @@ Himinbjörg's real adoption is not `CreateTable` — it is adding `ITemporalEnti
 
 **History-column projection rule:** a history column copies **name and store type only**. Nullability: the temporal PK components (`{pk columns}`, `system_period`) are `NOT NULL`; every other history column is nullable regardless of what the main column declares. Never projected: defaults, identity, `GENERATED` expressions (a generated column projects as a plain column holding the materialized value from `OLD`), foreign keys, CHECK and unique constraints, and secondary indexes — history integrity is the temporal PK, full stop.
 
-Column operations against a temporal table are the generator's job for the life of the schema:
+Column operations against a temporal table are the generator's job for the life of the schema. **Every evolution operation emits in one fixed order** (ruling 16): (1) `DROP VIEW {table}_timeline`; (2) the main-table operation; (3) the history-table mirror; (4) `CREATE OR REPLACE FUNCTION` with the target column list; (5) `CREATE VIEW` afresh from the target column list. PostgreSQL blocks column drops and type changes under a dependent view, and `CREATE OR REPLACE VIEW` cannot change the output shape — drop-first/recreate-last is the only appliable order, uniformly applied to every shape below.
 
-- **`AddColumn`** → mirrored onto history per the projection rule — history rows predating the column honestly say NULL. Trigger function regenerated with the new column list; view re-emitted via `CREATE OR REPLACE VIEW`.
+- **`AddColumn`** → mirrored onto history per the projection rule — history rows predating the column honestly say NULL. Trigger function and view regenerated per the fixed order.
 - **`DropColumn`** → mirrored: the column drops from history too. **History is a version log, not an archive of dead columns** — the ruling is mirror-always, and a dropped column's historical values go with it. (A realm needing to preserve a retiring column's history renames or snapshots before dropping — a deliberate act, not a chassis default.)
 - **`AlterColumn`** (type/nullability changes) → mirrored onto history (nullability in history stays nullable); trigger function and view regenerated.
 - **`RenameColumn` / `RenameTable`** → renamed in history (and the history/timeline/trigger object names re-derived); function and view regenerated. Rename, not drop+add — history data mapping is preserved.
