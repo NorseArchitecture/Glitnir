@@ -741,16 +741,47 @@ public sealed class TemporalApparatusIntegrationTests(PostgresContainerFixture f
 
 ---
 
-### Task 10 (GATED): Himinbjörg enablement
+### Task 10 (GATE PARTIALLY WAIVED 2026-08-05): Himinbjörg enablement, pre-split
 
-**Gate:** .NET 11 preview 7 installed (~2026-08-11) AND Himinbjorg#47's operational-noise split verified on it (split tables create with dependent FKs bound to `users` — #47 sequencing step 1) AND Task 9 shipped (Urðarbrunnr package published carrying the chassis). **Re-plan this task at gate-open if preview 7 changed EF's split-table emission** — the #47 FK bug's fate decides the exact model configuration.
+**Gate as amended:** the preview-7/split half of the gate is **explicitly waived by Buvy (2026-08-05)** — temporal enablement proceeds now against the un-split identity schema. The `feature/access-count-breakout` split stays parked for preview 7 (#47 sequencing step 1 unchanged); until it lands, lockout churn (`AccessFailedCount`/`LockoutEnd` updates) mints history rows on `users` — accepted on the record for the local proving ground, and erased from relevance the day the split merges. The Task 9 half of the gate is satisfied: the chassis merged via Urdarbrunnr PR #53 and shipped in tag `v0.0.12`; the Bifröst workspace consumes it as project references, standalone/CI floats on `Version="*"`.
 
-**Files (expected shape):**
-- Modify: `Himinbjorg/src/Identity.EntityFramework/NorseIdentityDbContext.cs` + identity entity configurations — `ITemporalEntity` on the post-split PII-bearing tables; `TemporalParkedOnSqlServer()` on the split user entity; `user_lockout` unmarked
-- Create: new scaffolded migrations in `Himinbjorg/src/Identity.Migrations.PostgreSQL/` and `.SqlServer/` (`dotnet ef migrations add EnableTemporalIdentity` per provider)
-- Test: `Himinbjorg/tests/Identity.Migrations.Tests/` — container tests asserting: identity flows through `UserManager`/`SignInManager` write history on `users`; lockout churn (failed sign-ins) writes none; which side tables (claims/logins/tokens) take the marker is **Himinbjorg#47 open question 4's ruling — read it from that issue's brainstorm output at gate-open, do not decide here**
+**Himinbjorg#47 open question 4 — RULED (2026-08-05, in session):** temporal marks the **durable identity and authorization record**; **secret stores, counters, and prunable runtime state stay non-temporal** — and secret material never archives to history (rotation/destruction must destroy, the `subject_keys` crypto-shred argument generalized).
 
-- [ ] Steps written at gate-open against preview-7 reality; the chassis contract they consume is fixed by Tasks 3–7 (`ITemporalEntity`, `TemporalParkedOnSqlServer()`, two-act adoption).
+- **Temporal (8):** `users`, `roles`, `user_claims`, `role_claims`, `user_roles`, `user_logins`, and the OpenIddict `applications` and `scopes` tables (`NorseOpenIddictApplication`/`NorseOpenIddictScope` — this schema's OpenIddict tables carry no `openiddict_` prefix; corrected 2026-08-05 during implementation). `user_logins` is deliberately in: a third-party link that existed and was later disconnected is identity record worth keeping.
+- **Non-temporal:** `user_tokens` (secret store — TOTP authenticator keys, recovery codes consumed by UPDATE; superseded secrets must not survive in history), `user_passkeys` (WebAuthn `SignCount` updates every sign-in — lockout-churn shape; a future `SignCount` split-off is the same pattern as `user_lockout`, not this pass), OpenIddict `authorizations` (runtime consent state, bulk-pruned — history would be landfill; if revocation audit is ever wanted it is an event-log concern), OpenIddict `tokens` (one-time codes and refresh tokens, redeemed by UPDATE and pruned), `subject_keys` (crypto-shred law — a temporal DELETE would preserve the wrapped DEK in history and make erasure reversible), and post-split `user_lockout` (the #47 premise).
+
+**Branch:** new Himinbjörg fork `feature/temporal-identity` beside the parked `feature/access-count-breakout` — the sanctioned parked-preview-7-branch-beside-active-fork shape; the cadences are genuinely independent (this ships pre-preview-7, the split waits on it).
+
+**Files:**
+- Modify: `Himinbjorg/src/Identity.EntityFramework/NorseIdentityDbContext.cs` — `ConfigureConventions` passes the options-sourced realization hook (`options.GetTemporalRealizationHook()`, mirroring `NorseDbContext`, since this context replicates conventions rather than inheriting) into the four-parameter `NorseModelConventions.Apply`; the stale "deferred to a future effort" comment block in `OnModelCreating` is rewritten to tell the current truth (enabled un-split; the split composes at preview 7)
+- Modify: the eight ruled entity classes in `Himinbjorg/src/Identity.EntityFramework/` — add `ITemporalEntity`
+- Create: `dotnet ef migrations add EnableTemporalIdentity` in `Himinbjorg/src/Identity.Migrations.PostgreSQL/` and `.SqlServer/` (regenerated schema dumps ride along per §3.5)
+- Test: `Himinbjorg/tests/` — model-level facts pinning exactly which root tables carry the temporal stamp (the eight, and none of the ruled-out tables); container facts on the existing PostgreSQL fixture
+- Modify: `Himinbjorg/README.md` + `Himinbjorg/CLAUDE.md` pair (boy-scout law — the "temporal deferred" narrative is over)
+
+- [ ] **Step 1 (TDD):** model-level failing facts: the eight ruled tables carry `NorseAnnotationNames.Temporal` on their root table mapping; `user_tokens`, `user_passkeys`, `openiddict_authorizations`, `openiddict_tokens`, `subject_keys` do not. RED, then mark the eight entities and wire the realization hook through `ConfigureConventions`. GREEN.
+- [ ] **Step 2:** scaffold `EnableTemporalIdentity` for PostgreSQL — verify the §3.3 enable transition (floor assert, `btree_gist` guard, backfilled `system_period`, history table, triggers, timeline view) appears for all eight tables and nothing else; SQL Server scaffold emits EF-native `IsTemporal()` DDL (no split entities exist on this branch, so no `TemporalParkedOnSqlServer()` declarations and no #30366 exposure).
+- [ ] **Step 3 (TDD, container):** live facts on the PostgreSQL fixture: the migration applies clean; an identity flow through `UserManager` (e.g. email change) writes a closed version into `users_history`; a role grant + revoke versions `user_roles`; a failed-password attempt **does** currently version `users` — pinned deliberately with a comment naming the split gate, so the split task flips this assertion to the #47 exit criterion ("wrong-password churn never mints a history row").
+- [ ] **Step 4:** README/CLAUDE.md pair updated; stage everything and stop. **Ship ceremony is human-driven**: PR, CI green, tag, NuGet publish. Do not open the PR unprompted.
+
+**Squash ruling (Buvy, 2026-08-05, at whole-branch review):** the stacked `InitialCreate` + `EnableTemporalIdentity` shape is overruled — the realm's one-`InitialCreate`-per-provider law stands, un-retired. Migrations are blown away and re-issued as a single `InitialCreate` per provider with the apparatus emitted at table birth (spec §3.1 create path); the §3.3 brownfield enable transition stays proven at chassis level (Task 8), not here. The regenerated `InitialCreate` is **not** the memorialized schema yet: V1 is committed only when preview 7's `SplitToTable` fix is live and the model's final shape lands — `users` temporal, `user_lockout` split and non-temporal. Until that gate, the branch's `InitialCreate` keeps regenerating in place.
+
+### Task 10b (added 2026-08-05, Buvy's direct ask): Mímisbrunnr enablement
+
+**Ruling (Buvy, 2026-08-05):** both reference root tables go temporal — `region` and `country_or_area`. ISO/UN canon is static data that changes rarely, and the record of when it changed is exactly what system-time history is for. There is no non-temporal side: the realm has no secret stores, counters, or prunable runtime state. The owned `CountryOrAreaView` jsonb document graph (`RegionNode`/`SubregionNode`/`IntermediateRegionNode`) takes no marker — owned/JSON-mapped types are outside the temporal contract by chassis validation, and the View column's contents ride the owner's history like any other column.
+
+**Shape:** `ReferenceDbContext` inherits `NorseDbContext`, so the realization hook flows without any call-site change — adoption is two `ITemporalEntity` markers plus migrations. The standing squash law applies (this realm's own spec §7.1 agrees): blow away and re-issue one `InitialCreate` per provider with the apparatus at table birth (§3.1 create path), never a stacked enable migration. Branch: new fork `feature/temporal-reference` (no fork currently open in the realm).
+
+**Files:**
+- Modify: `Mimisbrunnr/src/Reference.Data.EntityFramework/Region.cs`, `CountryOrArea.cs` — add `ITemporalEntity`
+- Recreate: single `InitialCreate` per provider in `Reference.Data.EntityFramework.Migrations.PostgreSQL/` and `.SqlServer/` + regenerated snapshots and schema dumps
+- Test: model-level facts pinning exactly the two root tables stamped and nothing else; container facts — apparatus present on both tables, an UPDATE to a seeded row writes history, and the TSV seed itself mints zero history rows (INSERTs never version; the seeded state is the opening version, not churn)
+- Modify: `Mimisbrunnr/README.md` + `Mimisbrunnr/CLAUDE.md` pair (boy-scout law); never assert on a migration name (the Himinbjörg testing rule generalizes)
+
+- [ ] Step 1 (TDD): model-level pin RED → mark both entities → GREEN.
+- [ ] Step 2: nuke both providers' migrations, re-scaffold `InitialCreate` each; verify create-path apparatus for both tables (PG: history/timeline/function/triggers ×2; SQL Server: 2 × `SYSTEM_VERSIONING = ON`) and no backfill statements.
+- [ ] Step 3 (TDD, container): live facts per the test list above.
+- [ ] Step 4: docs pair; stage everything and stop — ship ceremony human-driven.
 
 ### Task 11 (GATED): Bifröst proving-ground assertion
 
