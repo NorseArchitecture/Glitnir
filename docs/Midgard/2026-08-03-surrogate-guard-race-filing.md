@@ -47,3 +47,16 @@ Confirmed unreachable in production today: the client and server registration pa
 same process. Worth recording anyway for a future reader who changes that — running both paths in one
 process does not make registering through one guard block a concurrent caller going through another;
 each guard protects only its own call site against `RuntimeTypeModel.Default`.
+
+## Generalized (2026-08-06, same day)
+
+Rather than continue fixing instances as they surface, the pattern itself is now closed: a shared,
+tested primitive (`Norse.Infrastructure.Web.Grpc.WireModelRegistrationGuard`, `EnsureRegistered`)
+is the only sanctioned path to `RuntimeTypeModel.Add`, and a new analyzer (NORSE080,
+`Norse.Infrastructure.Web.Grpc.Analyzers`) makes any unguarded call a compile error, platform-wide.
+All five known call sites (`IdentifierSerializers.Register`, `ResultSerializers.Register`, and both
+generator emitters `ServerRegistrationEmitter`/`ClientRegistrationEmitter` plus the fifth found
+live in Yggdrasil's `SwoopHostFixture`) are retrofitted onto the primitive. NORSE080 was narrowed
+during closing review to `RuntimeTypeModel.Add` only — bare `IsDefined` reads paired with no unguarded
+`Add` are inert and do not strike — fixing two bare-Add test-setup calls in `IdentifierSerializersTests.cs`
+in the same pass. Full design: `../specs/2026-08-06-wire-model-registration-guard-design.md`.
