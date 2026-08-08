@@ -541,6 +541,28 @@ CREATE TABLE country_or_area (
   Package Management is on there, and as the composition root it pins everything
   explicitly — one place to pick up a hotfix/patch instead of walking the tree
   and cutting a cascade of releases.
+- **The composition root's full-blast shape: flow in each transitive's direct
+  dependencies, grouped by provenance.** A Yggdrasil host re-declares, as
+  versionless `PackageReference`s (CPM supplies every version), the direct
+  package dependencies of each top-level reference it composes — one
+  comment-headed block per upstream:
+
+  ```xml
+  <!-- Pull CPM versions of Infrastructure.Web.Server -->
+  <PackageReference Include="protobuf-net.Grpc.AspNetCore" />
+  <PackageReference Include="FluentValidation" />
+  ```
+
+  The flow-down is auditable per source, and NuGet's nearest-wins resolution
+  always lands on the composition root's pin, never on a floor baked into some
+  package's nuspec — that is what makes the build deterministic. It is also the
+  sev1 playbook: a vulnerable package that is transitive anywhere in the runtime
+  gets hoisted to a top-level entry at the composition root, floated
+  (`Version="*"` at RTM; `11.*-*` on the preview train), and the whole graph
+  takes the fix in one bump — one file, one PR, done. When an upstream's direct
+  dependencies change, its block here changes in the same train; a block whose
+  upstream no longer needs a package drops the line rather than leaving a
+  mystery pin.
 - **Tag package versions to the major:** `Version="3.*"`. While .NET 11 is in
   preview, framework-tracking packages are `Version="11.*-*"` — drop the
   prerelease wildcard at RTM.

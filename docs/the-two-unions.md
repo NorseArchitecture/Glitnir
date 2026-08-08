@@ -34,6 +34,25 @@ police this from different angles, and they are the same law enforced thrice:
    design. No EF value converter, no document mapping, no message-body serialization of the
    union itself.
 
+## The inverse law on `Result<T>`
+
+The forge's union has its own edge enforcement, mirror-imaged. Going out (client → wire), **only
+proven scalars cross**: a success serializes as the scalar's own native wire form — the union never
+rides the wire — and a failed or default `Result<T>` is illegal to write (one shared literal across
+the gRPC, JSON, and XML legs: *"a failed or default Result<T> is illegal to write"*). The failure
+arm has no wire representation, and that absence is the design: the validator gate — the same
+FluentValidation class Blazilla runs before submit — makes a failure at the marshaller unreachable
+on the sanctioned path, and the serializer's throw is the tripwire for everything else. Coming in,
+deserialization is the parse event: the receiving side re-stamps every scalar through the platform's
+one parsing door, so a hostile client that skips the gate buys nothing — the server-materialized
+failure is converted to `Failed(Problem)` by the server-side run of the identical validator before
+any handler executes. A handler that is executing holds only proven values, by construction.
+
+The corollary completes the polarity: **`Problem` never flows client → server.** It is exclusively
+the server's outbound vocabulary, riding `Outcome`'s translated edges. Requests carry data wearing
+customs stamps; responses carry events translated at the border; neither union's failure state can
+cross in the wrong direction.
+
 ## The starved API is the enforcement mechanism
 
 Immutable once constructed: you have the thing, and that's it. The ban targets TYPED happy-path
