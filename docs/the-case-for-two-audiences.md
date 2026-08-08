@@ -40,7 +40,7 @@ slice, 2026-07-31 → 2026-08-01):
   through roughly fifteen isolated experiments, correctly separated a red herring (an apparent
   multi-pass compiler behavior that turned out to be MSBuild target-import ordering) from the real
   cause, and proposed a fix precise enough that the actual author implemented it verbatim. That
-  fix is now itself documented platform doctrine (`the-two-crossings.md`).
+  fix is now itself documented platform doctrine (`the-runes.md`, ch. 3 and ch. 9).
 - **A cryptographic correctness claim, verified two independent ways — not asserted once and
   trusted.** Task 8 hand-rolled RFC 9562 UUIDv5 derivation in a constrained (netstandard2.0)
   runtime that lacked the modern span-based APIs the platform's own reference implementation used.
@@ -117,7 +117,7 @@ Verified, currently shipped and load-bearing in this codebase — not aspiration
   country code wrong and the code doesn't compile; it isn't a runtime bug waiting to be found.
 - **Cross-realm dependency isolation is itself enforced by the same build graph developers already
   use, not a separate CI-only check that can drift from what runs locally.** `NorseRef`'s dual
-  resolution (`the-two-crossings.md`) means the guarantee that a realm cannot depend on unshipped
+  resolution (`the-runes.md`, ch. 3) means the guarantee that a realm cannot depend on unshipped
   sibling code is provable with the identical toolchain a developer already has open, by flipping
   one property — not a promise kept by a separate pipeline nobody can reproduce on their own
   machine.
