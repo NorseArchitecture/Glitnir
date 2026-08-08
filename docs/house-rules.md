@@ -138,6 +138,11 @@ reading point.
       falseValue;
   ```
 
+  Nested ternaries chop the same way, each level indented one further — and
+  nesting caps at three conditions. Past three, the chain is a readability
+  crime; it becomes a `switch` expression, which reads flat at any branch
+  count and brings compiler exhaustiveness a ternary chain never has.
+
 - **Nesting ternaries is fine — keep indenting one level per nest, and never
   nest more than 3 in total:**
 
@@ -288,6 +293,26 @@ reading point.
   project carries XML docs, in the house style the exemplars in this document
   demonstrate — `<summary>` always; `<param>`/`<returns>` where they say
   something the signature doesn't; `<see cref=...>`/`<c>` for symbols.
+- **Doc-comment layout is ReSharper's, declared as law so cleanup passes
+  produce no churn.** Content that fits one line stays inline on the tag line;
+  content that wraps goes block form — tags on their own lines, content
+  indented four spaces after the `///`, wrapping at the 120-column limit the
+  platform `.editorconfig` declares. Write new doc comments in this shape from
+  the start — in plans, in generated exemplars, in implementations — so an R#
+  reformat leaves them byte-identical:
+
+  ```csharp
+  /// <summary>Resolves a key by id.</summary>
+  /// <remarks>
+  ///     Implementations return a caller-owned copy — the caller may zero the returned buffer after use
+  ///     without affecting the ring's internal state.
+  /// </remarks>
+  /// <exception cref="KeyNotFoundException">The id is not on the ring.</exception>
+  ```
+
+  Never hand-reflow an existing comment to a different wrap — the formatter
+  owns the wrap; a human (or agent) re-wrapping by eye is exactly the diff
+  noise this rule exists to prevent.
 
 ## Records
 
