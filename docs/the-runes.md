@@ -57,7 +57,7 @@ directory tree until it finds the next layer or finds nothing:
 | Layer | File(s) | Who authors it | Job |
 |---|---|---|---|
 | **Bifröst root** | `Directory.Build.targets` | Hand-authored, this repo only | Owns both crossings' `Choose` (workspace `ProjectReference`/`Analyzer` resolution, including workspace *package* mode); wildcard-aggregates every realm's analyzer manifest |
-| **Realm root** | `Directory.Build.targets` | Ginnungagap-scattered, canonical | "Law that binds `src`, `tests`, `gen`, and `schema` exactly once" — NORSE070 `Using Remove`, the platform-analyzer `Choose`, the standalone `NorseRef` fallback, the standalone manifest-attach, the hoisted generator-strip target |
+| **Realm root** | `Directory.Build.targets` | Ginnungagap-scattered, canonical* | "Law that binds `src`, `tests`, `gen`, and `schema` exactly once" — NORSE070 `Using Remove`, the platform-analyzer `Choose`, the standalone `NorseRef` fallback, the standalone manifest-attach, the hoisted generator-strip target |
 | **Group level** | `src`/`tests`/`gen`/`schema` `Directory.Build.props`+`.targets` | Ginnungagap-scattered, canonical | Thin chain stub plus that layer's own subject only — `OutputType`, `IsPackable`, the DacFx property set |
 | **Project** | `{Project}.csproj` | Hand-authored, per project | Declares the actual dependency intent — `NorseRef`, `NorseGeneratorRef`, `NorseDesignRef` items |
 
@@ -82,6 +82,22 @@ have a next layer to chain to.
 **The ownership rule that makes the rest of this page make sense:** a scattered file is canonical
 by definition. Nothing realm-specific is ever hand-edited into one — realm law lives in the
 manifest or the seam, both unscattered (ch. 7 states this as a hard law, not a convention).
+
+**\*The realm-root file's one exception (2026-08-08).** Every rule above holds for a realm that
+*might* someday declare a `NorseRef` — which is every realm but two. Svartálfheim and Naglfar are
+permanent architectural leaves: Svartálfheim is the platform's dependency-graph root (nothing sits
+below it to reference), Naglfar's C# is entirely generated from Style Dictionary output (no
+hand-authored surface to reference anything from). Neither will ever declare a `NorseRef`/
+`NorseDesignRef`/`NorseGeneratorRef`, by design, not by current absence — which is what
+distinguishes them from a realm like Ratatoskr, empty today only because its code hasn't landed
+yet. For these two, and only these two, the realm-root file is realm-owned instead of scattered
+(ch. 7 has the mechanism). Svartálfheim keeps a lean hand-written copy — the chain import, the
+`Using Remove`, its own standalone analyzer self-check, the seam — with the `NorseRef` fallback,
+the platform-analyzer `Choose`, and the generator-strip target all dropped, since none can ever
+fire and the analyzer `Choose` was actively double-delivering `Norse.Architecture.Analyzers`
+alongside Svartálfheim's own manifest `ProjectReference` (the bug that surfaced this whole
+question). Naglfar has no realm-root file at all — an RCL with no hand-authored surface has
+nothing for even the lean version to check.
 
 ---
 
@@ -336,14 +352,27 @@ reproducibility mechanism.
 
 Ginnungagap's `scatter-the-runes.ps1` fans canonical config files out to every realm as
 auto-merging PRs, grouped by `manifest.psd1`'s `Groups`: `git`, `universal`, `sdk`, `dotnet`,
-`nuget`, `tests`, `schema`, `ci`, `release`, `workflows`, `claude`. `DefaultGroups` excludes `git`
-(the reduced set for git-hygiene-only realms) and `schema` (opt-in only — a repo joins the day it
-grows its first `{Realm}/schema/{Name}.Database` project, ch. 8).
+`msbuild`, `nuget`, `tests`, `schema`, `ci`, `release`, `workflows`, `claude`. `DefaultGroups`
+excludes `git` (the reduced set for git-hygiene-only realms) and `schema` (opt-in only — a repo
+joins the day it grows its first `{Realm}/schema/{Name}.Database` project, ch. 8).
 
 **The canonicity law.** *A scattered file is canonical by definition — realm-owned law never
 edits one.* Realm-specific declarations live in the analyzer manifest (`Directory.Analyzers.props`,
 ch. 5) or the realm seam (below) — both unscattered, both realm-owned, neither ever touched by
 `scatter-the-runes.ps1`.
+
+**The realm-root exception, and why it's a group split, not a special case in the engine
+(2026-08-08).** `Directory.Build.targets` used to ride in `dotnet` alongside `Directory.Build.props`
+and `{Realm}.sln.DotSettings` — two files every realm genuinely needs regardless of leaf-status.
+Splitting it into its own group, `msbuild`, meant Svartálfheim and Naglfar (ch. 2) could opt out of
+*just* the one file via the existing per-realm `Exceptions.Groups` mechanism — the same mechanism
+Yggdrasil already uses to opt out of `nuget` — with zero new plumbing in `scatter-the-runes.ps1` or
+`Get-RuneClassification`. `DefaultGroups` carries `msbuild`; Svartálfheim's `Exceptions` entry is
+`DefaultGroups` minus `msbuild` (its first-ever entry — previously a fully default realm); Naglfar's
+existing entry simply never listed `msbuild` to begin with. Once a file isn't in a realm's group
+set, neither the scatter's copy loop nor its divergence guard ever look at it for that realm — its
+total absence (Naglfar) or realm-owned content (Svartálfheim) is the expected, correct state, not
+something the audit flags.
 
 **The realm seam.** The canonical realm-root `Directory.Build.targets` ends with a conditional
 import of `Directory.Realm.targets` — realm-owned, unscattered, **additive only**: it may declare
