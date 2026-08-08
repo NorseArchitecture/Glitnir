@@ -165,6 +165,15 @@ This is the behavioral logic Bragi's design-system exemption clause anticipated 
 
 ---
 
+## Addendum (2026-08-08, same day): the wire-shape adaptation — `NavigationResult` and wire-stamped scalars
+
+**This section amends §1.3's outcome shapes and §5's construction details.** Heimdall v0.0.13 (PR #46, with the Asgard release carrying `NavigationResult`) landed a same-day refactor of the issuance wire tier — designed in `../../Platform/specs/2026-08-08-wire-stamped-request-scalars-design.md`, which this addendum consumes, not re-argues:
+
+- **`LoginResult`/`RegisterResult`/`LogoutResult` are deleted.** All three issuance ops return `Task<Outcome<NavigationResult>>` — `NavigationResult` (Asgard `Abstractions.Contracts`): one `required string NextUrl`, the server-resolved next hop.
+- **Requests carry wire-stamped scalars:** `LoginRequest.Email`/`RegisterRequest.Email`/`EmailExistsRequest.Email` are `Result<EmailAddress>` (the serialized member); `EmailInput` is the never-serialized form buffer whose setter stamps the parse. Construction in fakes/tests goes through `EmailInput`.
+- **§1.3 amendments:** `Success` for Login returns `Ok(new NavigationResult { NextUrl = "/" })`; for Register, catalog-canonical `NextUrl = "/"` — **a deliberate placeholder**: Himinbjörg's handlers have not yet adapted to v0.0.13, so no real producer ruling exists for register-success's hop; the parity test pins "/" and the authoritative-source note updates when Himinbjörg lands. The sentinel comparison matches the parsed `Success<EmailAddress>` wire value case-insensitively. `Logout` returns `Outcome<NavigationResult>` on the wire, but the fake's stance is unchanged — throws, non-visual, never in a story. Every canonical error message and `Errors` dictionary in §1.3's table is **verified unchanged verbatim** in the landed handler source.
+- **Validator reality for driven stories:** the Email rule chain is now `Cascade(Stop)`: empty → "Enter your email address.", unparseable → "Enter a valid email address (local@domain.tld).", then the async `EmailExists` round trip. `Validation Errors` (SubmitOnly) stories therefore render the new empty-email message; the driven FillAndSubmit path is unchanged in mechanics (the driver fills the `EmailInput`-bound input; binding stamps the scalar).
+
 ## Self-Review
 
 **Placeholder scan:** No TBDs. Deferred items (§7) are named deferrals with reasons, not gaps.

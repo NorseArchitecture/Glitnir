@@ -79,4 +79,57 @@ match"; Bragi runs in its own dedicated `UseProjectReferences=false` thread)
 **Exit gate met:** Himinbjörg 137/137 green, real-Postgres and SqlServer integration suites
 included. Staged, not committed.
 
+### Step 3 — the bridge folds into the base (architect's step: "mechanics without presentation")
+
+`StampFieldBridge` — a markup-less `ComponentBase`, a tag someone must remember to place — is
+deleted. The mechanic moves into `OutcomeFormComponentBase` itself: the base owns the
+`EditContext` (`EditContextFor(request)` — created once, echo subscription wired at creation),
+forms bind `<EditForm EditContext="EditContextFor(_request)">`, and `SubmitAsync` fails loudly on
+any foreign context — so a form bound `Model="..."` is a thrown exception, not a quietly severed
+blur mechanic. No cascading parameter, no `Dispose` dance (the context and the page share a
+lifetime), one fewer thing to forget. The guard is canary-pinned
+(`A_foreign_edit_context_is_rejected_loudly`), and the pre-existing blur test proves the folded
+mechanic exactly as it proved the component form.
+
+**Exit gate met:** Heimdall 64/64 green.
+
+### Step 4 — the name (architect's step: "call it NavigationResult for my sanity")
+
+`NextUrlResult` → **`NavigationResult`**; the member stays `NextUrl`. The grammar, as the
+architect read it back: *NavigationResult → NextUrl → go there* — the type names what was decided,
+the member names what to do about it, and the client contract is the third word. The saga's
+charter in the architect's four words: **the Æsir demand answers** — every record in
+`Abstractions.Contracts` answers a universal question (`BoolResponse`: is it so?;
+`NavigationResult`: where now?; `Unit`: done, that's all), and realms ask their domain questions
+in that vocabulary.
+
+**Exit gate met:** Asgard 93/93 · Heimdall 64/64 · Himinbjörg 137/137, all staged.
+
+### Step 5 — the Empty escape hatch, verified (and a collision surfaced the right way)
+
+The architect probed whether `google.protobuf.Empty` exists as a success-side escape hatch —
+momentarily as "Register/Login/Logout return `Task<Outcome<Unit>>`," which collided with step 2's
+own ruling (`NavigationResult` carries 2FA-rides-success, deferred cookie completion, and
+server-resolved routing — none of which `Unit` can say). Per the standing law, the collision was
+surfaced in one objection instead of executed; the architect resolved it: **`NavigationResult`
+stands; the probe's real intent was confirming the hatch exists.** It does, in two grades:
+
+- **Sanctioned:** `Task<Outcome<Unit>>` — `Unit` erases to zero bytes, byte-identical to
+  `google.protobuf.Empty` (proven machinery: the pre-2026-07-27 `Register` shipped this shape),
+  failure arm intact. The reach-for when an operation genuinely has nothing to say.
+- **Native backstop:** bare `Task`/`ValueTask` → `google.protobuf.Empty` (protobuf-net.Grpc's
+  own mapping, mirroring the CT-only request side `Logout` spike-proved). True fire-and-forget
+  only — no failure story — which no gate operation has.
+
+Message names never ride protobuf wire — only field tags — so `Unit` and `Empty` are
+indistinguishable in binary; the difference is `.proto` text only, mappable at Midgard's wire
+layer the day a stranger-facing schema demands Google's spelling.
+
+**Docket (accepted from external review, not yet a step):** mirror the invalid *state* (not the
+messages, not the keys) onto the bound control — stamp failures key `Email` (wire-stable, shared
+with server error keys) while the control's styling/aria reads its own bound `FieldIdentifier`
+(`EmailInput`); the mirror is presentation mechanics and lands in `OutcomeFormComponentBase` by
+the same `XInput ↔ X` convention as the blur echo. Summary display, submit blocking, and
+edit-to-clear are unaffected today.
+
 *(awaiting the next step)*

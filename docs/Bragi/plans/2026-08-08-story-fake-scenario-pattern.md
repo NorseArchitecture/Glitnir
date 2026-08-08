@@ -1214,7 +1214,9 @@ git -C Bragi add src/DesignSystem.Stories/Primitives/ValidationSummaryHarness.ra
 ### Task 8: The Scenarios catalog page
 
 **Files:**
-- Create: `Bragi/src/DesignSystem.Stories/Scenarios.md` (beside `Welcome.md`, same MD2RazorGenerator mechanism)
+- Create: `Bragi/src/DesignSystem.Stories/ScenarioCatalog.md` (beside `Welcome.md`, same MD2RazorGenerator mechanism)
+
+**Filename is deliberate:** `Scenarios.md` would generate `class Scenarios` inside `Norse.DesignSystem.Stories` — CS0101 against the `Scenarios/` folder's namespace (found live during execution, 2026-08-08). The generated class is `ScenarioCatalog`; the sidebar title stays "Scenarios" because the `CustomPage("Scenarios")` front-matter string is display text, not an identifier.
 
 - [ ] **Step 1: Write the page**
 
