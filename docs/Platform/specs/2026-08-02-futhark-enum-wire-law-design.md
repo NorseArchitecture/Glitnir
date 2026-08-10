@@ -1,7 +1,7 @@
 # Futhark Enum Wire Law — Governed Names Everywhere, Flags Stay Home
 
 **Date:** 2026-08-02
-**Status:** **Ratified** — operator verdict rendered in session 2026-08-02, closing the named remainder of the Futhark postmortem gap pass (`../plans/2026-08-02-futhark-xml-serialization.md`, "Postmortem gap closure" item 5). Next gate: `/writing-plans` (human gate; nothing proceeds until it passes).
+**Status:** **Ratified** — operator verdict rendered in session 2026-08-02, closing the named remainder of the Futhark postmortem gap pass (`../plans/2026-08-02-futhark-xml-serialization.md`, "Postmortem gap closure" item 5). Next gate: `/writing-plans` (human gate; nothing proceeds until it passes). **Amended 2026-08-09 — §2.2's flags ban is overturned; see the amendment at the end of this document.**
 **Supersedes in part:** `2026-08-01-opinionated-xml-serialization-design.md` — the §6.5 `[Flags]` wire grammar (space-separated list, greedy decomposition, canonical-form selection, duplicate-flags-token accumulable, leftover-bits write law, and the default-initialized-flags sharp edge) is struck for facade-exposed contracts; §7's enum row narrows to non-flags enums; §12 gains the governed-list stamping obligation. The parent spec carries pointer notes at each struck site.
 
 ---
@@ -22,7 +22,7 @@ Restated as the standing law it already was, with one explicit rejection added:
 - **No `[EnumMember]`-style wire-name override attribute.** The historical habit of pinning API text constants in attributes was a manual workaround for serializers with no deterministic naming policy — it forces maintaining two names per member. Futhark's name tables *are* the policy: one name maintained (the C# member), the wire string derived by `NameCasing`, post-transform collisions caught at build time (NORSE026). Zero-attributes stays ratified.
 - **Named trigger for revisiting:** the first genuine external-vocabulary case — a partner-mandated wire word that no casing of a legal C# member name can produce. Until a real one exists, an override attribute is a negotiation axis and is rejected before evaluation.
 
-### 2.2 `[Flags]` enums are banned from the facade closure
+### 2.2 `[Flags]` enums are banned from the facade closure — OVERTURNED 2026-08-09 (see amendment)
 
 **The verdict.** Bitwise flags are interior compression. At the ambassador desk — where text channels serve integrators who should never need to understand bit composition — the concept is *a set of named options*, and Futhark already has exactly one set shape: a collection of a role-named record (§5.8's wrap-the-scalar law, unchanged). A `[Flags]` enum reachable from either closure of a facade action is a **build-time diagnostic** (ID assigned at plan time from the platform's live block — expected next-in-sequence after NORSE028, confirmed against shipped IDs then, per the collision lesson recorded in the parent plan):
 
@@ -88,3 +88,26 @@ Walking §2.6's WASM flow exposed a question **larger than enums, deliberately n
 4. `EnumLexical` API surface and how generated XML shapes consume it (direct static calls, per the `XmlLexical` precedent).
 5. Migration order for deleting the generator's per-enum parse/write emission and the swoop/parity fixture updates (corpus row 13, `ParityRequest` change ripples to validator, handler, wire fixture).
 6. Whether `ResultRules`' required-rule wording needs an enum-specific message source touch (expected: no — `FailureDetail.Render` is type-agnostic; verify).
+
+---
+
+## Amendment (2026-08-09) — flags ride the closure bare; the channels translate
+
+**Operator verdict, session 2026-08-09.** Triggered deliberately: Mímir's `CountryResponse` gained the full `CountryOrAreaView` graph — including the `[Flags] Classification` member — precisely to force the first facade-exposed flags contract and settle this law against a real consumer. It struck NORSE029 on contact, and the collision audit traced §2.2's record-wrap shape to a mutation: the original operator statement ruled the *rendering* ("normies don't speak bitwise operations" — a stranger sees an array of strings), and the 8/02 session reconciled that against the wrap-the-scalar law by reshaping the *contract*, which was never the ask.
+
+### The ruling
+
+1. **§2.2 is overturned.** A `[Flags]` enum is legal in either closure of a facade action, carried as the bare member on the contract — no role-named record wrap, no parallel non-flags "kind" enum, no boundary↔interior mapping in the handler. Interim vocabulary types per realm were the maintenance cost the record-wrap shape imposed and the reason it falls: the ease-of-mapping axis outweighs the set-shape purity argument, and the contract stays a single source of truth.
+2. **The channels own the translation.** Text channels render a flags member as an **array of governed names** — JSON `["LeastDevelopedCountry","SmallIslandDevelopingState"]`, XML repeated elements — decomposed at write, OR-accumulated at read, using the same generated name tables and `EnumLexical` mechanism as every non-flags enum (§2.3 stands unchanged: one table, one algorithm, three consumers). The binary channel keeps the single composed varint both directions.
+3. **The wrap-the-scalar law is not pierced.** The array is a channel *rendering* of a scalar member, not a contract-declared scalar collection — §5.8 continues to govern declared collections; nothing here reopens it.
+4. **The 8/02 "ratified price" is refunded.** Facade-exposed contracts no longer pay the bulkier `repeated`-message protobuf representation — the gRPC leg carries the composed integral again, and `ResultEnumSerializer<TEnum>`'s flags branch is live law for facade-exposed contracts too, not just gRPC-only ones.
+5. **NORSE029 is deleted, not narrowed** — the same gateway-retirement precedent this spec itself invoked to delete the `ParseFlags` machinery now runs the other direction. Machinery returning from the struck §6.5 subtree returns in **array form, not xsd:list**: leftover/undefined bits are illegal to write; each read token resolves by exact governed-name match (unknown token → accumulable with suggestion; duplicate token → accumulable); the parsed set is the OR of its tokens; the empty array is the zero value, legal with or without a named zero member — the array form has a natural empty, so §6.5's default-initialized-with-no-zero-member throw edge stays dead.
+
+### Consequences for the mechanism (§2.3 consumers)
+
+- **XML shape generator:** a flags member emits the repeated governed-name element shape (write: decompose set bits in member-declaration order, composite/aggregate members never emitted; read: accumulate); the `FlagsEnumInClosure` diagnostic and its tests are deleted.
+- **JSON converters:** the plain-enum and `Result<TEnum>` funnel families gain the flags branch — array out, array in, same laws.
+- **OpenAPI transformers:** a flags member stamps `type: array` with `items: {type: string, enum: [...]}` from the same table — the governed picklist survives, one schema for both text channels, no per-media-type fork.
+- **§2.6 dissolves:** first-party clients bind the `[Flags]` type directly (it is the contract member again); the multi-checkbox HashSet flow and the set→flags handler composition it described are no longer needed anywhere.
+
+**First consumer:** Mímir's `GetCountry` (`CountryResponse.Classification`, backed by Mímisbrunnr's `Classification` — relocated to `Reference.Data.Contracts` the same day so the wire member is browser-safe). Parent-spec (`2026-08-01-opinionated-xml-serialization-design.md`) pointer notes at the struck §6.5 sites update in the pending Glitnir curation pass, not here.

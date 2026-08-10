@@ -9,11 +9,12 @@
 InteractiveAuto WebAssembly gRPC-Web round trip, and renders every released Bragi story state without
 recursive catalog startup.
 
-**Architecture:** Ginnungagap supplies an opt-in reusable-workflow capability; Bragi releases the
-guarded story-driver lifecycle against an exact BlazingStory version; Yggdrasil pins that release and
-owns two Playwright tests in its existing host test assemblies. The tests share linked-source browser
+**Architecture:** Bragi releases the guarded story-driver lifecycle against an exact BlazingStory
+version; Yggdrasil pins that release and owns two explicit Playwright tests in its existing host test
+assemblies plus a repository-local Chromium workflow. The tests share linked-source browser
 infrastructure, launch real Kestrel listeners through `WebApplicationFactory`, serialize Chromium
-with an OS file lease, and retain evidence only on failure.
+with an OS file lease, and retain evidence only on failure. Ginnungagap's generic workflow remains
+unchanged.
 
 **Tech Stack:** .NET 11 preview 6, C# 15, xUnit v3/Microsoft Testing Platform v2, bUnit,
 NSubstitute, Shouldly, `Microsoft.Playwright` 1.61.0, ASP.NET Core
@@ -33,6 +34,8 @@ NSubstitute, Shouldly, `Microsoft.Playwright` 1.61.0, ASP.NET Core
   broad console allowlists, or browser caching.
 - This estate runs xUnit v3 on MTP. Every focused command passes xUnit arguments after `--` and uses
   `--filter-class`/`--filter-not-class`; VSTest `dotnet test --filter` syntax is forbidden.
+- Chromium-dependent fixture and smoke tests use `[Fact(Explicit = true)]`. Ordinary `dotnet test`
+  runs exclude them; deliberate local and CI runs use `--explicit only` with exact class filters.
 - The successful-country seam replaces only `IReadRepository<CountryOrAreaView>` after normal host
   composition. It must not replace a DbContext, factory, handler, gRPC client, service, pipeline, or
   interceptor.
@@ -44,181 +47,73 @@ NSubstitute, Shouldly, `Microsoft.Playwright` 1.61.0, ASP.NET Core
   exactly `Aggregate browser-test ceiling expired; no per-state timeout was exceeded.`
 - Every Playwright web-first assertion supplies the relevant 90-second startup or 15-second
   operation/state timeout explicitly; none may inherit Playwright's five-second assertion default.
-- `-m:1` under MTP is a hypothesis until the first Chromium CI run proves it. The gate is not trusted
-  until project start/end output demonstrates non-overlapping test modules. If it does not, replace
-  the Chromium branch with explicit per-project sequential `dotnet test` invocations; do not rely on
-  the cross-process lease to hide CI scheduling.
+- Yggdrasil's browser workflow owns separate five-minute Build, Install Chromium, and Test step
+  ceilings nested beneath a ten-minute job ceiling. It invokes the two host test projects in explicit
+  sequential commands; `-m:1` is neither needed nor used.
 - Follow `Glitnir/docs/house-rules.md`: US English, tabs in C#/Razor, xUnit underscore names,
   cancellation for async work, no mocked-database claims, no warning suppressions without a written
   explanation, and no generated-file edits.
 
 ---
 
-## Train 1 — Ginnungagap: reusable Chromium capability
+## Train 1 — Ownership boundary reset
 
-### Task 1: Lock the workflow contract with a failing verification script
-
-**Files:**
-
-- Create: `../.github/scripts/tests/verify-ci-build-test-playwright.ps1`
-- Test: `../.github/.github/workflows/ci-build-test.yml`
-
-- [ ] Write a repository-owned contract test that reads the workflow as raw text and fails unless it
-  contains the boolean input/default, gated Release build, literal Chromium install, two test
-  branches, timeouts, and compound artifact condition. It must also reject browser input
-  interpolation inside any `run:` body.
-
-```powershell
-$ErrorActionPreference = 'Stop'
-$workflowPath = Join-Path $PSScriptRoot '../../.github/workflows/ci-build-test.yml'
-$workflow = Get-Content $workflowPath -Raw
-
-$required = @(
-	'playwright_chromium:',
-	'type: boolean',
-	'default: false',
-	'if: inputs.playwright_chromium',
-	'dotnet build -c Release',
-	'install --with-deps chromium',
-	'--no-build -m:1',
-	'timeout-minutes: 20',
-	'timeout-minutes: 30',
-	'actions/upload-artifact@v7',
-	"if: failure() && inputs.playwright_chromium"
-)
-
-foreach ($fragment in $required) {
-	if (-not $workflow.Contains($fragment, [StringComparison]::Ordinal)) {
-		throw "ci-build-test.yml is missing required Playwright contract: $fragment"
-	}
-}
-
-$runBlocks = [regex]::Matches($workflow, '(?ms)^\s+run:\s*(?:\|\s*\r?\n(?:(?:\s{8,}.*)?\r?\n)+|[^\r\n]+)')
-foreach ($runBlock in $runBlocks) {
-	if ($runBlock.Value.Contains('${{ inputs.playwright_chromium }}', [StringComparison]::Ordinal)) {
-		throw 'playwright_chromium may appear in workflow if-expressions, never in run scripts.'
-	}
-}
-```
-
-- [ ] Run the test and confirm the expected RED lists the missing `playwright_chromium` contract.
-
-```bash
-cd ../.github
-pwsh -NoProfile -File ./scripts/tests/verify-ci-build-test-playwright.ps1
-```
-
-Expected: non-zero exit, first missing-fragment message names `playwright_chromium:`.
-
-### Task 2: Implement the opt-in reusable-workflow branch
+### Task 1: Withdraw the rejected shared-workflow experiment
 
 **Files:**
 
-- Modify: `../.github/.github/workflows/ci-build-test.yml`
-- Test: `../.github/scripts/tests/verify-ci-build-test-playwright.ps1`
+- Restore: `../.github/.github/workflows/ci-build-test.yml`
+- Remove: `../.github/scripts/tests/verify-ci-build-test-playwright.ps1`
 
-- [ ] Add the workflow-call input and job ceiling.
+**Interfaces:**
 
-```yaml
-      playwright_chromium:
-        description: 'Build first, install Playwright Chromium, and run test modules sequentially'
-        type: boolean
-        default: false
+- Consumes: the unmerged staged experiment from the first execution attempt.
+- Produces: a clean Ginnungagap worktree with no browser-specific workflow contract.
 
-jobs:
-  build:
-    timeout-minutes: 30
-```
-
-- [ ] Insert a gated Release build and literal Playwright installation after coverage settings. The
-  script path is discovered from build output; the browser command itself remains literal.
-
-```yaml
-      - name: Build for Playwright
-        if: inputs.playwright_chromium
-        env:
-          NUGET_AUTH_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN }}
-        run: dotnet build -c Release
-
-      - name: Install Playwright Chromium
-        if: inputs.playwright_chromium
-        shell: pwsh
-        run: |
-          $script = Get-ChildItem -Path . -Filter playwright.ps1 -Recurse |
-            Where-Object FullName -Match '[\\/]bin[\\/]Release[\\/]' |
-            Select-Object -First 1
-          if ($null -eq $script) { throw 'Release build produced no playwright.ps1.' }
-          & $script.FullName install --with-deps chromium
-          if ($LASTEXITCODE -ne 0) { throw "Playwright install exited $LASTEXITCODE." }
-```
-
-- [ ] Split Test into mutually exclusive branches. Preserve the existing coverage command byte for
-  byte in the non-browser branch; add only `--no-build -m:1` to the Chromium branch. Give both a
-  20-minute step ceiling and the existing NuGet token.
-
-```yaml
-      - name: Test
-        if: ${{ !inputs.playwright_chromium }}
-        timeout-minutes: 20
-        env:
-          NUGET_AUTH_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN }}
-        run: dotnet test -c Release --coverage --coverage-output-format cobertura --coverage-settings coverage-settings.xml
-
-      - name: Test with Chromium
-        if: inputs.playwright_chromium
-        timeout-minutes: 20
-        env:
-          NUGET_AUTH_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN }}
-        run: dotnet test -c Release --no-build -m:1 --coverage --coverage-output-format cobertura --coverage-settings coverage-settings.xml --tl:off --verbosity normal
-```
-
-- [ ] Upload failure evidence before coverage report generation. Missing files must not replace the
-  original test failure.
-
-```yaml
-      - name: Upload Playwright failure evidence
-        if: failure() && inputs.playwright_chromium
-        uses: actions/upload-artifact@v7
-        with:
-          name: playwright-failure-evidence
-          path: '**/TestResults/playwright/**'
-          if-no-files-found: ignore
-          retention-days: 7
-```
-
-- [ ] Run the contract test and the repository's existing rune-lineage test.
+- [ ] Confirm the staged Ginnungagap diff contains only the rejected `playwright_chromium` input,
+  conditional build/install/test branches, global timeouts, artifact upload, and its new contract
+  script. If unrelated changes appear, stop rather than resetting them.
 
 ```bash
-cd ../.github
-pwsh -NoProfile -File ./scripts/tests/verify-ci-build-test-playwright.ps1
-pwsh -NoProfile -File ./scripts/tests/verify-rune-lineage.ps1
-git diff --check
-git add .github/workflows/ci-build-test.yml scripts/tests/verify-ci-build-test-playwright.ps1
+git -C ../.github diff --cached -- .github/workflows/ci-build-test.yml scripts/tests/verify-ci-build-test-playwright.ps1
 ```
 
-Expected: both scripts exit zero; staged diff contains no caller-specific Yggdrasil logic.
+- [ ] Restore the tracked workflow from `HEAD`, remove only the new contract script, and unstage both
+  paths. This task is an approved withdrawal of this session's own unmerged experiment; it is not a
+  general worktree reset.
 
-### Human gate G1
+```bash
+git -C ../.github restore --source=HEAD --staged --worktree .github/workflows/ci-build-test.yml
+git -C ../.github restore --staged scripts/tests/verify-ci-build-test-playwright.ps1
+```
 
-Ginnungagap must be reviewed and merged before Yggdrasil passes the new input to `@master`. Record the
-merged workflow revision in the execution notes. Do not start Yggdrasil CI wiring against an input the
-published reusable workflow does not yet accept.
+Delete only `../.github/scripts/tests/verify-ci-build-test-playwright.ps1` with `apply_patch` after it
+is unstaged. Do not use a recursive or wildcard deletion.
 
-The 30-minute job and 20-minute Test-step ceilings deliberately apply to all reusable-workflow
-callers, including the 11 callers that leave `playwright_chromium: false`. G1 review records recent
-duration evidence for those callers and confirms each remains below both ceilings; the timeouts are
-an estate-wide hung-job safety bound, not a Yggdrasil-only side effect.
+- [ ] Prove Ginnungagap is byte-for-byte outside the feature boundary.
+
+```bash
+git -C ../.github status --short
+git -C ../.github diff --check
+```
+
+Expected: no Ginnungagap changes remain.
 
 ---
 
 ## Train 2 — Bragi: guarded driver lifecycle and exact canvas dependency
 
-### Task 3: Specify the driver readiness lifecycle in bUnit
+### Task 2: Specify the driver readiness lifecycle in bUnit
 
 **Files:**
 
 - Modify: `Bragi/tests/DesignSystem.Stories.Tests/Scenarios/StoryDriverTests.cs`
-- Modify later: `Bragi/src/DesignSystem.Stories/Scenarios/StoryDriver.razor`
+
+**Interfaces:**
+
+- Consumes: bUnit JS module setup for `drive(bool, string, string)`.
+- Produces: executable lifecycle requirements for Task 3: layout-neutral marker, complete state,
+  distinct no-form failure, and propagated JavaScript settlement failure.
 
 - [ ] Add a test that asserts the layout-neutral wrapper and completion transition after the JS
   module reports a settled submit.
@@ -284,7 +179,7 @@ void A_driver_settlement_failure_surfaces_the_javascript_exception()
 dotnet test Bragi/tests/DesignSystem.Stories.Tests/DesignSystem.Stories.Tests.csproj -- --filter-class "*.StoryDriverTests"
 ```
 
-### Task 4: Complete the guarded submit and readiness marker
+### Task 3: Complete the guarded submit and readiness marker
 
 **Files:**
 
@@ -292,6 +187,12 @@ dotnet test Bragi/tests/DesignSystem.Stories.Tests/DesignSystem.Stories.Tests.cs
 - Modify: `Bragi/src/DesignSystem.Stories/Scenarios/StoryDriver.razor`
 - Modify: `Bragi/src/DesignSystem.Stories/DesignSystem.Stories.csproj`
 - Test: `Bragi/tests/DesignSystem.Stories.Tests/Scenarios/StoryDriverTests.cs`
+
+**Interfaces:**
+
+- Consumes: the Task 2 lifecycle tests and the existing capture-phase submit guard.
+- Produces: released `StoryDriver` marker contract and exact BlazingStory preview.91 dependency for
+  Yggdrasil's Task 10 package-boundary smoke.
 
 - [ ] Preserve the user's existing capture-phase guard and add bounded post-submit observation.
   Start the observer before `requestSubmit`. SubmitOnly may settle from synchronous validation DOM
@@ -437,12 +338,17 @@ the released package contains both the marker and guarded JavaScript asset.
 
 ## Train 3 — Yggdrasil: shared browser chassis
 
-### Task 5: Add deterministic pre-boot environment setup
+### Task 4: Add deterministic pre-boot environment setup
 
 **Files:**
 
 - Create: `Yggdrasil/tests/Hosting.Web.Server.Tests/TestHostEnvironment.cs`
 - Modify: `Yggdrasil/tests/Hosting.Web.Server.Tests/CompositionTests.cs`
+
+**Interfaces:**
+
+- Consumes: the two connection-string names read before host construction.
+- Produces: deterministic process-wide pre-boot configuration for the Web.Server browser fixture.
 
 - [ ] Move the two process-global connection strings out of `CompositionTests`' static constructor
   and into one module initializer.
@@ -486,7 +392,7 @@ void Test_host_connection_strings_exist_before_factory_boot()
 dotnet test Yggdrasil/tests/Hosting.Web.Server.Tests/Hosting.Web.Server.Tests.csproj -- --filter-class "*.CompositionTests"
 ```
 
-### Task 6: Build and test the cross-process browser lease
+### Task 5: Build and test the cross-process browser lease
 
 **Files:**
 
@@ -495,6 +401,12 @@ dotnet test Yggdrasil/tests/Hosting.Web.Server.Tests/Hosting.Web.Server.Tests.cs
 - Create: `Yggdrasil/tests/Hosting.Stories.Server.Tests/BrowserProcessLeaseTests.cs`
 - Modify: `Yggdrasil/tests/Hosting.Web.Server.Tests/Hosting.Web.Server.Tests.csproj`
 - Modify: `Yggdrasil/tests/Hosting.Stories.Server.Tests/Hosting.Stories.Server.Tests.csproj`
+
+**Interfaces:**
+
+- Consumes: `Microsoft.Playwright` 1.61.0 and the operating-system temporary directory.
+- Produces: `BrowserTimeouts` and `BrowserProcessLease.AcquireAsync(CancellationToken)` linked into
+  both host test assemblies for Tasks 6, 8, and 10.
 
 - [ ] Pin the library package in both test projects and link shared sources rather than inventing a
   third assembly.
@@ -558,11 +470,16 @@ async Task A_second_browser_process_waits_until_the_first_lease_releases()
 
 ```csharp
 using System.Diagnostics;
+using System.Globalization;
 
 namespace Norse.Hosting.BrowserTesting;
 
 sealed class BrowserLeaseWaitException(TimeSpan elapsed, string owner, Exception innerException) :
-	TimeoutException($"Browser lease phase ended after waiting {elapsed.TotalSeconds:F1}s; holder {owner}.", innerException);
+	TimeoutException(
+		string.Create(
+			CultureInfo.InvariantCulture,
+			$"Browser lease phase ended after waiting {elapsed.TotalSeconds:F1}s; holder {owner}."),
+		innerException);
 
 sealed class BrowserProcessLease(FileStream stream, string ownerPath) : IAsyncDisposable
 {
@@ -655,7 +572,7 @@ sealed class BrowserProcessLease(FileStream stream, string ownerPath) : IAsyncDi
 dotnet test Yggdrasil/tests/Hosting.Stories.Server.Tests/Hosting.Stories.Server.Tests.csproj -- --filter-class "*.BrowserProcessLeaseTests"
 ```
 
-### Task 7: Add the Kestrel/Chromium fixture and failure evidence collector
+### Task 6: Add the Kestrel/Chromium fixture and failure evidence collector
 
 **Files:**
 
@@ -668,10 +585,19 @@ dotnet test Yggdrasil/tests/Hosting.Stories.Server.Tests/Hosting.Stories.Server.
 - Create: `Yggdrasil/tests/Hosting.Stories.Server.Tests/BrowserHostFixtureTests.cs`
 - Create: `Yggdrasil/tests/Hosting.Stories.Server.Tests/BrowserTimeoutClassificationTests.cs`
 
-- [ ] Write a fixture contract test using `Hosting.Stories.Server.Program`: initialize, assert
+**Interfaces:**
+
+- Consumes: `BrowserTimeouts` and `BrowserProcessLease` from Task 5 plus each host's internal
+  top-level `Program`.
+- Produces: `BrowserHostFixture<TEntryPoint>`, `BrowserEvidence`, `BrowserFailure`,
+  `BrowserPhaseRunner`, and `FrameworkRequestQuiescence.WaitAsync` for both runtime smokes.
+
+- [ ] Write an explicit fixture contract test using `Hosting.Stories.Server.Program`: initialize, assert
   `Origin.Scheme == "http"`, assert a non-default port, assert `.Server` is never touched, open a
-  page, and get `/` successfully. Confirm RED before adding the shared types. Build once and install
-  the package-matched local Chromium before the first fixture run:
+  page, and get `/` successfully. Its attribute is
+  `[Fact(Explicit = true, Timeout = 300_000)]`, so ordinary runs do not require Chromium. Confirm RED
+  before adding the shared types. Build once and install the package-matched local Chromium before
+  the first fixture run:
 
 ```bash
 dotnet build Yggdrasil/tests/Hosting.Stories.Server.Tests/Hosting.Stories.Server.Tests.csproj
@@ -691,8 +617,10 @@ abstract class BrowserHostFixture<TEntryPoint> : IAsyncLifetime where TEntryPoin
 	WebApplicationFactory<TEntryPoint>? _factory;
 	IPlaywright? _playwright;
 	IBrowser? _browser;
+	Uri? _origin;
 
-	internal Uri Origin { get; private set; } = null!;
+	internal Uri Origin =>
+		_origin ?? throw new InvalidOperationException("Kestrel origin is unavailable before fixture initialization.");
 
 	protected virtual void ConfigureWebHost(IWebHostBuilder builder) { }
 
@@ -712,7 +640,7 @@ abstract class BrowserHostFixture<TEntryPoint> : IAsyncLifetime where TEntryPoin
 		_factory.UseKestrel(0);
 
 		using var client = _factory.CreateClient(new() { AllowAutoRedirect = false });
-		Origin = client.BaseAddress ?? throw new InvalidOperationException("Kestrel exposed no origin.");
+		_origin = client.BaseAddress ?? throw new InvalidOperationException("Kestrel exposed no origin.");
 
 		_playwright = await Playwright.CreateAsync();
 		_browser = await _playwright.Chromium.LaunchAsync(new() { Headless = true });
@@ -720,7 +648,8 @@ abstract class BrowserHostFixture<TEntryPoint> : IAsyncLifetime where TEntryPoin
 
 	internal async Task<BrowserEvidence> OpenEvidenceAsync(string testName)
 	{
-		var context = await _browser!.NewContextAsync(new()
+		var browser = _browser ?? throw new InvalidOperationException("Chromium is unavailable before fixture initialization.");
+		var context = await browser.NewContextAsync(new()
 		{
 			BaseURL = Origin.AbsoluteUri,
 			IgnoreHTTPSErrors = false,
@@ -756,6 +685,8 @@ from `BrowserLeaseWaitException`; it must not emit the aggregate/no-state-overru
 named inner phase is known.
 
 ```csharp
+using System.Globalization;
+
 sealed class BrowserFailure(string message, Exception? innerException = null) :
 	Exception(message, innerException)
 {
@@ -772,11 +703,17 @@ sealed class BrowserFailure(string message, Exception? innerException = null) :
 		bool phaseBudgetExpired,
 		Exception exception)
 	{
-		var phaseVerdict = phaseBudgetExpired
-			? $"phase budget {phaseBudget.TotalSeconds:F1}s also expired before cancellation was observed"
-			: $"phase budget {phaseBudget.TotalSeconds:F1}s was not exceeded";
+		var phaseVerdict = phaseBudgetExpired ?
+			string.Create(
+				CultureInfo.InvariantCulture,
+				$"phase budget {phaseBudget.TotalSeconds:F1}s also expired before cancellation was observed") :
+			string.Create(
+				CultureInfo.InvariantCulture,
+				$"phase budget {phaseBudget.TotalSeconds:F1}s was not exceeded");
 		return new(
-			$"Aggregate browser-test ceiling expired during phase '{phase}' after {elapsed.TotalSeconds:F1}s; {phaseVerdict}.",
+			string.Create(
+				CultureInfo.InvariantCulture,
+				$"Aggregate browser-test ceiling expired during phase '{phase}' after {elapsed.TotalSeconds:F1}s; {phaseVerdict}."),
 			exception);
 	}
 
@@ -786,7 +723,9 @@ sealed class BrowserFailure(string message, Exception? innerException = null) :
 		TimeSpan budget,
 		Exception exception) =>
 		new(
-			$"Browser phase '{phase}' timed out after {elapsed.TotalSeconds:F1}s (budget {budget.TotalSeconds:F1}s).",
+			string.Create(
+				CultureInfo.InvariantCulture,
+				$"Browser phase '{phase}' timed out after {elapsed.TotalSeconds:F1}s (budget {budget.TotalSeconds:F1}s)."),
 			exception);
 
 	internal static BrowserFailure WriteStartupFailure(
@@ -1030,7 +969,8 @@ void Aggregate_expiry_outside_a_phase_names_no_per_state_overrun()
 - [ ] Run fixture and lease tests, then build both assemblies.
 
 ```bash
-dotnet test Yggdrasil/tests/Hosting.Stories.Server.Tests/Hosting.Stories.Server.Tests.csproj -- --filter-class "*.BrowserProcessLeaseTests" "*.BrowserHostFixtureTests" "*.BrowserTimeoutClassificationTests"
+dotnet test Yggdrasil/tests/Hosting.Stories.Server.Tests/Hosting.Stories.Server.Tests.csproj -- --filter-class "*.BrowserProcessLeaseTests" "*.BrowserTimeoutClassificationTests"
+dotnet test Yggdrasil/tests/Hosting.Stories.Server.Tests/Hosting.Stories.Server.Tests.csproj -- --explicit only --filter-class "*.BrowserHostFixtureTests"
 dotnet build Yggdrasil/tests/Hosting.Web.Server.Tests/Hosting.Web.Server.Tests.csproj
 dotnet build Yggdrasil/tests/Hosting.Stories.Server.Tests/Hosting.Stories.Server.Tests.csproj
 ```
@@ -1042,12 +982,18 @@ use that emitted directory rather than changing project configuration.
 
 ## Train 4 — Yggdrasil Web.Server: InteractiveAuto gRPC-Web proof
 
-### Task 8: Expose and component-test the renderer readiness marker
+### Task 7: Expose and component-test the renderer readiness marker
 
 **Files:**
 
 - Create: `Yggdrasil/tests/Hosting.Web.Components.Tests/CountryLookupTests.cs`
 - Modify: `Yggdrasil/src/Hosting.Web.Components/Pages/CountryLookup.razor`
+
+**Interfaces:**
+
+- Consumes: `ComponentBase.RendererInfo` and bUnit's explicit `SetRendererInfo` setup.
+- Produces: `data-norse-renderer` and `data-norse-interactive` readiness attributes consumed by the
+  Web.Server smoke in Task 8.
 
 - [ ] Add a bUnit test that registers Fluent UI plus a substitute `IReferenceService`, supplies the
   renderer metadata bUnit requires before any component reads `ComponentBase.RendererInfo`, renders
@@ -1102,13 +1048,19 @@ dotnet test Yggdrasil/tests/Hosting.Web.Components.Tests/Hosting.Web.Components.
 dotnet test Yggdrasil/tests/Hosting.Web.Components.Tests/Hosting.Web.Components.Tests.csproj
 ```
 
-### Task 9: Write the Web.Server smoke against the still-real persistence descriptor
+### Task 8: Write the Web.Server smoke against the still-real persistence descriptor
 
 **Files:**
 
 - Create: `Yggdrasil/tests/Hosting.Web.Server.Tests/BrowserRuntime/WebServerBrowserFixture.cs`
 - Create: `Yggdrasil/tests/Hosting.Web.Server.Tests/BrowserRuntime/WebServerBrowserCollection.cs`
 - Create: `Yggdrasil/tests/Hosting.Web.Server.Tests/BrowserRuntime/WebServerBrowserRuntimeSmokeTests.cs`
+
+**Interfaces:**
+
+- Consumes: the shared fixture/evidence API from Task 6 and renderer markers from Task 7.
+- Produces: an explicit full-stack Web.Server smoke whose intentional RED stops at the production
+  repository descriptor before Task 9 replaces that boundary.
 
 - [ ] Declare a collection fixture with `DisableParallelization = true`.
 
@@ -1137,7 +1089,7 @@ public sealed class WebServerBrowserCollection : ICollectionFixture<WebServerBro
 [Collection(WebServerBrowserCollection.Name)]
 public sealed class WebServerBrowserRuntimeSmokeTests(WebServerBrowserFixture fixture)
 {
-	[Fact(Timeout = 300_000)]
+	[Fact(Explicit = true, Timeout = 300_000)]
 	async Task Interactive_auto_executes_a_successful_country_lookup_in_webassembly()
 	{
 		await using var evidence = await fixture.OpenEvidenceAsync(nameof(Interactive_auto_executes_a_successful_country_lookup_in_webassembly));
@@ -1190,15 +1142,21 @@ public sealed class WebServerBrowserRuntimeSmokeTests(WebServerBrowserFixture fi
   than browser installation or host startup.
 
 ```bash
-dotnet test Yggdrasil/tests/Hosting.Web.Server.Tests/Hosting.Web.Server.Tests.csproj -- --filter-class "*.WebServerBrowserRuntimeSmokeTests"
+dotnet test Yggdrasil/tests/Hosting.Web.Server.Tests/Hosting.Web.Server.Tests.csproj -- --explicit only --filter-class "*.WebServerBrowserRuntimeSmokeTests"
 ```
 
-### Task 10: Replace only the read-repository descriptor and turn the browser smoke green
+### Task 9: Replace only the read-repository descriptor and turn the browser smoke green
 
 **Files:**
 
 - Modify: `Yggdrasil/tests/Hosting.Web.Server.Tests/BrowserRuntime/WebServerBrowserFixture.cs`
 - Test: `Yggdrasil/tests/Hosting.Web.Server.Tests/BrowserRuntime/WebServerBrowserRuntimeSmokeTests.cs`
+
+**Interfaces:**
+
+- Consumes: `IReadRepository<CountryOrAreaView>` and the Task 8 browser flow.
+- Produces: deterministic successful `US` projection while preserving the real handler, transport,
+  mediator, interceptors, and component render.
 
 - [ ] In `ConfigureWebHost`, use `ConfigureTestServices` to remove all
   `IReadRepository<CountryOrAreaView>` descriptors and add one NSubstitute singleton. Build the view
@@ -1245,18 +1203,15 @@ protected override void ConfigureWebHost(IWebHostBuilder builder) =>
   success artifact directory may remain.
 
 ```bash
-dotnet test Yggdrasil/tests/Hosting.Web.Server.Tests/Hosting.Web.Server.Tests.csproj -- --filter-class "*.WebServerBrowserRuntimeSmokeTests"
-dotnet test Yggdrasil/tests/Hosting.Web.Server.Tests/Hosting.Web.Server.Tests.csproj -- --filter-class "*.WebServerBrowserRuntimeSmokeTests"
+dotnet test Yggdrasil/tests/Hosting.Web.Server.Tests/Hosting.Web.Server.Tests.csproj -- --explicit only --filter-class "*.WebServerBrowserRuntimeSmokeTests"
+dotnet test Yggdrasil/tests/Hosting.Web.Server.Tests/Hosting.Web.Server.Tests.csproj -- --explicit only --filter-class "*.WebServerBrowserRuntimeSmokeTests"
 ```
-
-- [ ] Add one fixture-level assertion that an unexpected ID receives NotFound if the substitute API
-  defaults do not already preserve that contract. Do not implement or exercise EF behavior.
 
 ---
 
 ## Train 5 — Yggdrasil Stories.Server: catalog and runtime topology proof
 
-### Task 11: Pin the released Bragi package and write the catalog smoke
+### Task 10: Pin the released Bragi package and write the catalog smoke
 
 **Prerequisite:** Human gate B1 is complete and the released version is known.
 
@@ -1266,6 +1221,13 @@ dotnet test Yggdrasil/tests/Hosting.Web.Server.Tests/Hosting.Web.Server.Tests.cs
 - Create: `Yggdrasil/tests/Hosting.Stories.Server.Tests/BrowserRuntime/StoriesBrowserFixture.cs`
 - Create: `Yggdrasil/tests/Hosting.Stories.Server.Tests/BrowserRuntime/StoriesBrowserCollection.cs`
 - Create: `Yggdrasil/tests/Hosting.Stories.Server.Tests/BrowserRuntime/StoriesBrowserRuntimeSmokeTests.cs`
+
+**Interfaces:**
+
+- Consumes: the released Bragi marker/guard contract from Task 3 and shared evidence infrastructure
+  from Task 6.
+- Produces: explicit dynamic catalog sweep, driver-marker floor, and preview.91 frame-law proof for
+  the workflow in Task 11.
 
 - [ ] Replace `<BragiVersion>0.0.6</BragiVersion>` with the exact published version and restore
   Yggdrasil standalone so this test exercises the released input rather than only Bifrost project
@@ -1281,6 +1243,9 @@ dotnet restore Yggdrasil/Yggdrasil.slnx
 ```text
 /Hosting.Stories.Client.styles.css (302) -> /Norse.Hosting.Stories.Client.styles.css (200)
 ```
+
+The smoke method uses `[Fact(Explicit = true, Timeout = 300_000)]`; ordinary solution, pull-request,
+and release test runs therefore exclude it unless the caller deliberately passes `--explicit only`.
 
 - [ ] Discover links only from rendered story nodes:
 
@@ -1370,8 +1335,8 @@ legitimate rendered story link cannot become actionable through its disclosure c
   the intended ship-order proof. After the published bump, run twice GREEN with no retries.
 
 ```bash
-dotnet test Yggdrasil/tests/Hosting.Stories.Server.Tests/Hosting.Stories.Server.Tests.csproj -- --filter-class "*.StoriesBrowserRuntimeSmokeTests"
-dotnet test Yggdrasil/tests/Hosting.Stories.Server.Tests/Hosting.Stories.Server.Tests.csproj -- --filter-class "*.StoriesBrowserRuntimeSmokeTests"
+dotnet test Yggdrasil/tests/Hosting.Stories.Server.Tests/Hosting.Stories.Server.Tests.csproj -- --explicit only --filter-class "*.StoriesBrowserRuntimeSmokeTests"
+dotnet test Yggdrasil/tests/Hosting.Stories.Server.Tests/Hosting.Stories.Server.Tests.csproj -- --explicit only --filter-class "*.StoriesBrowserRuntimeSmokeTests"
 ```
 
 - [ ] On any failure, inspect `frames.log` and confirm it contains state, every frame URL/path, body
@@ -1382,84 +1347,234 @@ dotnet test Yggdrasil/tests/Hosting.Stories.Server.Tests/Hosting.Stories.Server.
 
 ## Train 6 — Yggdrasil CI activation and proof
 
-### Task 12: Enable Chromium only for Yggdrasil and document local execution
+### Task 11: Add the Yggdrasil-owned browser workflow and contract
 
 **Files:**
 
-- Modify: `Yggdrasil/.github/workflows/ci.yml`
+- Create: `Yggdrasil/scripts/tests/verify-browser-runtime-workflow.ps1`
+- Create: `Yggdrasil/.github/workflows/browser-runtime.yml`
 - Create: `Yggdrasil/tests/BrowserTesting/README.md`
+- Verify unchanged: `Yggdrasil/.github/workflows/ci.yml`
+- Verify unchanged: `../.github/.github/workflows/ci-build-test.yml`
 
-- [ ] Enable the published boolean capability.
+**Interfaces:**
 
-```yaml
-    with:
-      minimum_coverage: 0
-      playwright_chromium: true
+- Consumes: explicit browser test classes from Tasks 6, 8, and 10; Release-generated
+  `playwright.ps1`; failure artifacts beneath `**/TestResults/playwright/**`.
+- Produces: required pull-request and manually dispatchable Chromium workflow with ordered host
+  commands and separate build/install/test diagnostic legs.
+
+- [ ] Write the raw-text contract first. It fails when the local workflow is missing; after the
+  workflow exists it requires both triggers, one ten-minute job ceiling, at least three five-minute
+  step ceilings, Chromium-only installation, explicit-only execution, the two host projects in web
+  then stories order, and failure-only artifact upload. It rejects coverage, `-m:1`, Firefox, and
+  WebKit from the workflow.
+
+```powershell
+$ErrorActionPreference = 'Stop'
+$workflowPath = Join-Path $PSScriptRoot '../../.github/workflows/browser-runtime.yml'
+if (-not (Test-Path $workflowPath)) {
+	throw 'Yggdrasil browser-runtime.yml does not exist.'
+}
+
+$workflow = Get-Content $workflowPath -Raw
+$required = @(
+	'pull_request:',
+	'workflow_dispatch:',
+	'timeout-minutes: 10',
+	'install --with-deps chromium',
+	'--explicit only',
+	'tests/Hosting.Web.Server.Tests/Hosting.Web.Server.Tests.csproj',
+	'tests/Hosting.Stories.Server.Tests/Hosting.Stories.Server.Tests.csproj',
+	'actions/upload-artifact@v7',
+	'if: failure()',
+	"path: '**/TestResults/playwright/**'",
+	'if-no-files-found: ignore'
+)
+
+foreach ($fragment in $required) {
+	if (-not $workflow.Contains($fragment, [StringComparison]::Ordinal)) {
+		throw "browser-runtime.yml is missing required contract: $fragment"
+	}
+}
+
+if ([regex]::Matches($workflow, 'timeout-minutes:\s*5').Count -lt 3) {
+	throw 'browser-runtime.yml requires separate five-minute Build, Install Chromium, and Test steps.'
+}
+
+$web = $workflow.IndexOf('tests/Hosting.Web.Server.Tests/Hosting.Web.Server.Tests.csproj', [StringComparison]::Ordinal)
+$stories = $workflow.IndexOf('tests/Hosting.Stories.Server.Tests/Hosting.Stories.Server.Tests.csproj', [StringComparison]::Ordinal)
+if ($web -lt 0 -or $stories -le $web) {
+	throw 'Browser host test commands must run Web.Server before Stories.Server.'
+}
+
+foreach ($forbidden in @('--coverage', '-m:1', 'firefox', 'webkit')) {
+	if ($workflow.Contains($forbidden, [StringComparison]::OrdinalIgnoreCase)) {
+		throw "browser-runtime.yml contains forbidden contract: $forbidden"
+	}
+}
 ```
 
-- [ ] Document the local build/install/run sequence and the failure evidence location. Include the
-  package/browser coupling and explicitly say that Firefox/WebKit are deferred.
-
-```text
-dotnet build Yggdrasil.slnx -c Release
-pwsh tests/Hosting.Web.Server.Tests/bin/Release/net11.0/playwright.ps1 install chromium
-dotnet test Yggdrasil.slnx -c Release --no-build -m:1
-```
-
-- [ ] Run the exact local CI-shaped sequence. Then run all non-browser tests once normally to prove
-  the shared harness did not impose a browser prerequisite on discovery/build-only callers.
+- [ ] Run the contract and confirm RED names the missing Yggdrasil workflow, not Ginnungagap.
 
 ```bash
-cd Yggdrasil
-dotnet build Yggdrasil.slnx -c Release
-pwsh tests/Hosting.Web.Server.Tests/bin/Release/net11.0/playwright.ps1 install chromium
-dotnet test Yggdrasil.slnx -c Release --no-build -m:1 --tl:off --verbosity normal
-dotnet test Yggdrasil.slnx -- --filter-not-class "*BrowserRuntimeSmokeTests" "*BrowserHostFixtureTests"
-git diff --check
+pwsh -NoProfile -File Yggdrasil/scripts/tests/verify-browser-runtime-workflow.ps1
 ```
 
-- [ ] Confirm the full run produced exactly two browser lease intervals with no overlap and no
-  `TestResults/playwright` success payloads.
+Expected: non-zero exit with `Yggdrasil browser-runtime.yml does not exist.`
 
-### Task 13: First-CI serialization and budget checkpoint
+- [ ] Add the repository-owned workflow. The existing generic `ci.yml` remains unchanged.
+
+```yaml
+name: Browser Runtime
+
+on:
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+env:
+  DOTNET_VERSION: "11.0.x"
+  DOTNET_QUALITY: "preview"
+
+jobs:
+  browser-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+          dotnet-quality: ${{ env.DOTNET_QUALITY }}
+
+      - name: Build browser hosts
+        timeout-minutes: 5
+        env:
+          NUGET_AUTH_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN }}
+        run: |
+          dotnet build tests/Hosting.Web.Server.Tests/Hosting.Web.Server.Tests.csproj -c Release
+          dotnet build tests/Hosting.Stories.Server.Tests/Hosting.Stories.Server.Tests.csproj -c Release
+
+      - name: Install Chromium
+        timeout-minutes: 5
+        shell: pwsh
+        run: |
+          $script = Get-ChildItem -Path . -Filter playwright.ps1 -Recurse |
+            Where-Object FullName -Match '[\\/]bin[\\/]Release[\\/]' |
+            Select-Object -First 1
+          if ($null -eq $script) { throw 'Release build produced no playwright.ps1.' }
+          & $script.FullName install --with-deps chromium
+          if ($LASTEXITCODE -ne 0) { throw "Playwright install exited $LASTEXITCODE." }
+
+      - name: Test browser hosts
+        timeout-minutes: 5
+        run: |
+          dotnet test tests/Hosting.Web.Server.Tests/Hosting.Web.Server.Tests.csproj -c Release --no-build -- --explicit only --filter-class "*.WebServerBrowserRuntimeSmokeTests"
+          dotnet test tests/Hosting.Stories.Server.Tests/Hosting.Stories.Server.Tests.csproj -c Release --no-build -- --explicit only --filter-class "*.StoriesBrowserRuntimeSmokeTests"
+
+      - name: Upload Playwright failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-failure-evidence
+          path: '**/TestResults/playwright/**'
+          if-no-files-found: ignore
+          retention-days: 7
+```
+
+- [ ] Document the exact local equivalent, failure-evidence location, xUnit explicit-test behavior,
+  package/browser coupling, ten-minute outer/five-minute leg budgets, and deferral of Firefox/WebKit.
+
+```text
+dotnet build tests/Hosting.Web.Server.Tests/Hosting.Web.Server.Tests.csproj -c Release
+dotnet build tests/Hosting.Stories.Server.Tests/Hosting.Stories.Server.Tests.csproj -c Release
+pwsh tests/Hosting.Web.Server.Tests/bin/Release/net11.0/playwright.ps1 install chromium
+dotnet test tests/Hosting.Web.Server.Tests/Hosting.Web.Server.Tests.csproj -c Release --no-build -- --explicit only --filter-class "*.WebServerBrowserRuntimeSmokeTests"
+dotnet test tests/Hosting.Stories.Server.Tests/Hosting.Stories.Server.Tests.csproj -c Release --no-build -- --explicit only --filter-class "*.StoriesBrowserRuntimeSmokeTests"
+```
+
+- [ ] Run GREEN plus a normal solution test proving explicit browser tests impose no browser
+  prerequisite. Confirm exactly two non-overlapping lease intervals during the explicit sequence and
+  no success artifacts.
+
+```bash
+pwsh -NoProfile -File Yggdrasil/scripts/tests/verify-browser-runtime-workflow.ps1
+cd Yggdrasil
+dotnet build tests/Hosting.Web.Server.Tests/Hosting.Web.Server.Tests.csproj -c Release
+dotnet build tests/Hosting.Stories.Server.Tests/Hosting.Stories.Server.Tests.csproj -c Release
+pwsh tests/Hosting.Web.Server.Tests/bin/Release/net11.0/playwright.ps1 install chromium
+dotnet test tests/Hosting.Web.Server.Tests/Hosting.Web.Server.Tests.csproj -c Release --no-build -- --explicit only --filter-class "*.WebServerBrowserRuntimeSmokeTests"
+dotnet test tests/Hosting.Stories.Server.Tests/Hosting.Stories.Server.Tests.csproj -c Release --no-build -- --explicit only --filter-class "*.StoriesBrowserRuntimeSmokeTests"
+dotnet test Yggdrasil.slnx
+git diff --check
+git -C ../.github status --short
+```
+
+Expected: contract and ordinary suite pass; Ginnungagap is clean; the ordinary run does not acquire
+the browser lease or launch Chromium.
+
+### Human gate C1
+
+Review and commit the staged Yggdrasil train, push the feature branch, and open or refresh its pull
+request. Task 12 requires a clean GitHub runner and protected-branch administration, so it cannot be
+completed against an unpushed working tree. Do not widen any timeout to make the first run green.
+
+### Task 12: Prove clean-runner budgets, manual dispatch, and failure artifacts
 
 **Files:**
 
-- Modify only if evidence disproves the assumption:
-  `../.github/.github/workflows/ci-build-test.yml`
+- Modify only if evidence disproves the workflow contract:
+  `Yggdrasil/.github/workflows/browser-runtime.yml`
 - Record evidence in the implementation handoff; do not add permanent noisy artifacts solely for
   this checkpoint.
 
-- [ ] Run the Yggdrasil pull-request workflow on a clean runner. Verify from `--tl:off --verbosity
-  normal` output that MTP starts and finishes one test module before the next begins. Correlate the two
-  browser lease PID/UTC intervals and GUID-named coverage file creation times with module output.
+**Interfaces:**
 
-- [ ] If module execution overlaps despite `-m:1`, stop and revise the Chromium branch to enumerate
-  solution test projects in a deterministic order and invoke each project with the same Release,
-  no-build, and coverage arguments one at a time. Re-run the workflow until logs prove non-overlap.
-  The cross-process lease is retained either way.
+- Consumes: the workflow and artifact collector from Tasks 6 and 11.
+- Produces: clean-runner duration evidence, required-check registration, manual-dispatch proof, and
+  verified failure artifacts.
 
-- [ ] Run the permanent timeout-classification tests and inspect the deliberate failure-artifact
-  exercise below. Confirm phase budget, aggregate-during-phase, and aggregate-outside-phase produce
-  three distinct verdicts; the exact aggregate/no-state sentence appears only in the third branch.
+- [ ] Run the Yggdrasil browser workflow on a pull request and by `workflow_dispatch` against the
+  feature branch. Record checkout/setup duration, Build duration, Install Chromium duration, Test
+  duration, and total job duration. Each named leg must finish below five minutes and the job below
+  ten. A budget miss requires test/setup redesign; do not widen the ceiling.
+
+- [ ] Verify logs show the Web.Server command completes before the Stories.Server command starts.
+  Correlate the two browser lease PID/UTC intervals and confirm they do not overlap. There is no
+  solution-level scheduler or `-m:1` hypothesis to audit.
+
+- [ ] Add the successful `Browser Runtime / browser-runtime` check to Yggdrasil's protected-branch
+  required checks. This is a human/admin gate; record the ruleset evidence in the handoff.
+
+- [ ] Run the permanent timeout-classification tests. Confirm phase budget,
+  aggregate-during-phase, and aggregate-outside-phase produce three distinct verdicts; the exact
+  aggregate/no-state sentence appears only in the third branch.
 
 ```bash
 dotnet test Yggdrasil/tests/Hosting.Stories.Server.Tests/Hosting.Stories.Server.Tests.csproj -- --filter-class "*.BrowserTimeoutClassificationTests"
 ```
 
 - [ ] Check uploaded diagnostics by creating one temporary failing assertion in each smoke, running
-  locally, and confirming trace, screenshot, browser log, network log, server log, and frame inventory
-  are present. Revert only the temporary assertions, rerun GREEN, and confirm success creates no
-  uploadable directory.
+  the explicit class locally and through manual dispatch, and confirming trace, screenshot, browser
+  log, network log, server log, and frame inventory are present. Revert only the temporary assertions,
+  rerun GREEN, and confirm success creates no uploadable directory.
 
 Insert this line immediately before each smoke's successful `CompleteAsync()` call, run that class
-with its MTP `--filter-class` command, inspect the artifacts, then remove only this line:
+with its `--explicit only --filter-class` command, inspect the artifacts, then remove only this line:
 
 ```csharp
 throw new InvalidOperationException("Playwright failure-evidence probe.");
 ```
 
-### Task 14: Final verification, spec traceability, and staging
+### Task 13: Final verification, spec traceability, and staging
 
 **Files:**
 
@@ -1467,46 +1582,55 @@ throw new InvalidOperationException("Playwright failure-evidence probe.");
 - Verify: `Glitnir/docs/Platform/specs/2026-08-08-browser-runtime-smoke-gate-design.md`
 - Verify: `Glitnir/docs/Platform/plans/2026-08-08-browser-runtime-smoke-gate.md`
 
-- [ ] Run all changed-realm tests from clean standalone checkouts/package resolution where release
-  boundaries matter.
+**Interfaces:**
+
+- Consumes: every prior task and the released Bragi package boundary.
+- Produces: staged realm-local trains and a 14-criterion acceptance record for the human owner.
+
+- [ ] Run all changed-realm tests from standalone/package resolution where release boundaries matter,
+  then run the explicit browser sequence using the already-installed package-matched Chromium.
 
 ```bash
 dotnet test Bragi/Bragi.slnx
-dotnet test Yggdrasil/Yggdrasil.slnx -c Release --no-build -m:1 --tl:off --verbosity normal
-pwsh -NoProfile -File ../.github/scripts/tests/verify-ci-build-test-playwright.ps1
+dotnet test Yggdrasil/Yggdrasil.slnx
+dotnet test Yggdrasil/tests/Hosting.Web.Server.Tests/Hosting.Web.Server.Tests.csproj -c Release --no-build -- --explicit only --filter-class "*.WebServerBrowserRuntimeSmokeTests"
+dotnet test Yggdrasil/tests/Hosting.Stories.Server.Tests/Hosting.Stories.Server.Tests.csproj -c Release --no-build -- --explicit only --filter-class "*.StoriesBrowserRuntimeSmokeTests"
+pwsh -NoProfile -File Yggdrasil/scripts/tests/verify-browser-runtime-workflow.ps1
 git -C Bragi diff --check
 git -C Yggdrasil diff --check
 git -C ../.github diff --check
 git -C Glitnir diff --check
 ```
 
-- [ ] Trace all 13 design acceptance criteria to a passing assertion or workflow check. In
+- [ ] Trace all 14 design acceptance criteria to a passing assertion or workflow check. In
   particular, record: released Bragi version, Playwright/Chromium version, discovered state count,
   Authentication/Primitives counts, maximum live-frame count observed, exact stylesheet redirect,
-  gRPC-Web request path/content type, two lease intervals, CI module ordering, and artifact behavior.
+  gRPC-Web request path/content type, two lease intervals, ordered project commands, workflow step
+  durations, manual-dispatch run, protected-branch check, and artifact behavior.
 
-- [ ] Search for forbidden shortcuts.
+- [ ] Search for forbidden shortcuts and shared-workflow leakage.
 
 ```bash
 rg -n "IgnoreHTTPSErrors = true|Retry|Firefox|Webkit|WebKit|Testcontainers|UseInMemoryDatabase|ReferenceDbContext" Yggdrasil/tests/BrowserTesting Yggdrasil/tests/Hosting.Web.Server.Tests/BrowserRuntime Yggdrasil/tests/Hosting.Stories.Server.Tests/BrowserRuntime
 rg -n "1\.\*-\*" Bragi/src/DesignSystem.Stories/DesignSystem.Stories.csproj
 rg -n "WebApplicationFactory<.*>\.Server|\.Server\b" Yggdrasil/tests/BrowserTesting Yggdrasil/tests/Hosting.Web.Server.Tests/BrowserRuntime Yggdrasil/tests/Hosting.Stories.Server.Tests/BrowserRuntime
+rg -n "playwright_chromium|Playwright|Chromium" ../.github/.github/workflows/ci-build-test.yml
 ```
 
 Expected: no forbidden browser/database bypass; the only `Retry` text may be explanatory test output,
-not behavior; exact BlazingStory pin; no TestServer access.
+not behavior; exact BlazingStory pin; no TestServer access; no browser concern in Ginnungagap.
 
-- [ ] Stage only the files belonging to each realm. Leave commits, tags, package publication, pushes,
-  and pull requests to the human gates.
+- [ ] Stage only the files belonging to Bragi, Yggdrasil, and Glitnir. Leave commits, tags, package
+  publication, pushes, pull requests, and protected-branch administration to the human gates.
 
 ## Plan self-review checklist
 
-- [ ] Every approved design section (§§2–8) maps to at least one task and executable assertion.
-- [ ] No task depends on Bragi source when it claims to test the released package boundary.
-- [ ] All code snippets use existing namespaces/types; there are no `TODO`, ellipsis, fake project
+- [x] Every approved design section (§§2–8) maps to at least one task and executable assertion.
+- [x] No task depends on Bragi source when it claims to test the released package boundary.
+- [x] All code snippets use existing namespaces/types; there are no `TODO`, ellipsis, fake project
   names, or invented host entry points.
-- [ ] All behavior tasks have an intentional RED before implementation and a focused GREEN before the
+- [x] All behavior tasks have an intentional RED before implementation and a focused GREEN before the
   broader run.
-- [ ] The aggregate timeout and MTP serialization observations are acceptance checkpoints, not buried
-  notes.
-- [ ] The plan changes neither EF semantics nor Mimir ownership and creates no second end-to-end tier.
+- [x] Aggregate timeout classification, ordered CI project commands, the 10/5-minute budget split,
+  and manual dispatch are acceptance checkpoints, not buried notes.
+- [x] The plan changes neither EF semantics nor Mimir ownership and creates no second end-to-end tier.

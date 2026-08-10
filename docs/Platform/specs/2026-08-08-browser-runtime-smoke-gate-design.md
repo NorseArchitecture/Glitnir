@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-08
 **Status:** Approved
-**Realms:** Yggdrasil (gate owner), Bragi (released input), Ginnungagap (`.github`, CI capability)
+**Realms:** Yggdrasil (gate and workflow owner), Bragi (released input)
 
 ## 1. Purpose
 
@@ -21,12 +21,11 @@ The browser tests live in Yggdrasil and gate Yggdrasil pull requests against the
 
 That delayed-detection window is accepted for this tier. Bragi ships content and an RCL, not a runnable host; duplicating Yggdrasil's WASM/server host inside Bragi solely to move this smoke across a repository boundary would create a second composition whose fidelity must itself be maintained. A future cross-repository or black-box gate may close the window without inventing a duplicate host.
 
-The first ship train is nevertheless ordered because the current race mitigation is a pending Bragi working-tree change, not part of released `Norse.DesignSystem.Stories` 0.0.6:
+The ship train is ordered because the current race mitigation is not part of released `Norse.DesignSystem.Stories` 0.0.6:
 
-1. Ginnungagap ships the opt-in Chromium workflow capability.
-2. Bragi pins the same BlazingStory version as Yggdrasil, lands the capture-phase submit guard plus the driver-readiness marker specified in §6.3, passes its unit/component tests, and releases.
-3. Yggdrasil pins that Bragi release.
-4. Yggdrasil lands both browser smokes and enables Chromium in its reusable-workflow call.
+1. Bragi pins the same BlazingStory version as Yggdrasil, lands the capture-phase submit guard plus the driver-readiness marker specified in §6.3, passes its unit/component tests, and releases.
+2. Yggdrasil pins that Bragi release.
+3. Yggdrasil lands both browser smokes and its repository-owned Chromium workflow.
 
 The Yggdrasil gate is not considered implemented against the old, unmitigated Bragi package.
 
@@ -44,7 +43,7 @@ The Yggdrasil gate is not considered implemented against the old, unmitigated Br
 - BlazingStory preview.91's real iframe-pool behavior, rather than a fictional single persistent canvas.
 - Strict browser-error, fallback-shell, and recursive-runtime detection.
 - Failure-only traces, screenshots, browser logs, server logs, and runtime/frame inventories.
-- An opt-in Playwright Chromium capability in Ginnungagap's reusable CI workflow.
+- A Yggdrasil-owned required pull-request workflow that is also manually dispatchable on any branch.
 
 ### 3.2 Out of scope
 
@@ -75,9 +74,9 @@ The factory binds HTTP only and leaves `HttpsRedirectionOptions.HttpsPort` unset
 
 ### 4.1 Serialization
 
-Within each assembly, the browser class belongs to an xUnit collection declared with `DisableParallelization = true`, following Midgard's `GrpcWebRoundTripTests` precedent. Across the two concurrently discoverable test modules, the Chromium fixtures also acquire the same bounded cross-process lease under the operating system's temporary directory before launching a browser. This keeps ordinary local `dotnet test` runs serialized even when the outer test runner schedules projects concurrently.
+Within each assembly, the browser class belongs to an xUnit collection declared with `DisableParallelization = true`, following Midgard's `GrpcWebRoundTripTests` precedent. Across the two test modules, the Chromium fixtures also acquire the same bounded cross-process lease under the operating system's temporary directory before launching a browser. This keeps deliberately enabled local browser runs serialized even when the outer test runner schedules projects concurrently.
 
-In CI, Yggdrasil additionally runs test modules with MSBuild node parallelism disabled (`-m:1`) when Chromium is enabled. The cross-process lease remains the correctness mechanism; CI serialization keeps the second browser test from spending its timeout merely waiting for the first.
+Chromium-dependent fixture and smoke tests are xUnit v3 explicit tests. The normal shared CI gate, release workflow, and ordinary local `dotnet test` therefore continue to discover and run only the non-explicit suite and require no installed browser. The Yggdrasil browser workflow opts in with the runner's native `--explicit only` switch and invokes the two host test projects in separate, ordered `dotnet test` commands. CI serialization is therefore structural rather than an assumption about `-m:1`; the cross-process lease remains the correctness mechanism for local explicit runs started concurrently.
 
 One Chromium browser and one browser context are used per host test. No Playwright or test-runner retry is permitted. Hosts, contexts, browsers, traces, and the cross-process lease are disposed on every exit path.
 
@@ -220,25 +219,30 @@ The initial budgets are explicit:
 - 90 seconds for first host/WebAssembly startup;
 - 15 seconds for each story-state navigation and settle;
 - 5 minutes for either browser test;
-- 20 minutes for the complete CI test step;
-- 30 minutes for the CI job, including build and browser installation.
+- 5 minutes for the CI build step;
+- 5 minutes for the Chromium-install step;
+- 5 minutes for the complete sequential browser-test step;
+- 10 minutes for the complete CI job, including checkout and SDK setup.
 
-Timeout diagnostics name the phase and route/state. Growing the catalog does not silently grow the gate without limit; the five-minute browser-test ceiling forces an intentional revisit if the dynamic sweep outgrows its canary budget.
+The step budgets are diagnostic seams nested beneath, not added to, the ten-minute job ceiling. GitHub's failed step identifies whether build, Chromium installation, or browser execution consumed its leg. Timeout diagnostics inside the test step additionally name the host phase and route/state. Growing the catalog does not silently grow the gate without limit; the five-minute browser-test ceiling forces an intentional rewrite if the dynamic sweep outgrows its canary budget. If clean-runner evidence later proves the entire job consistently fits inside five minutes, the outer ceiling may collapse to the same five-minute bound without changing the workflow shape.
 
 ## 8. CI integration
 
-Yggdrasil calls Ginnungagap's `ci-build-test.yml` reusable workflow and cannot inject setup steps into that job. Browser installation becomes an explicit reusable-workflow capability with no string interpolation:
+Ginnungagap's generic `ci-build-test.yml` remains byte-for-byte unchanged. Browser runtime composition is a Yggdrasil concern and does not add inputs, timeouts, conditional steps, or artifact vocabulary to the other realms' shared gate.
 
-1. Add a boolean `playwright_chromium` input, default `false`.
-2. Yggdrasil passes `playwright_chromium: true`; every other caller inherits `false`.
-3. Under `if: inputs.playwright_chromium`, build the caller in Release with `NUGET_AUTH_TOKEN` present, locate the generated .NET Playwright script, and invoke its literal `install --with-deps chromium` command.
-4. The Test step uses the existing coverage arguments plus `--no-build -m:1` when Chromium is enabled. This consumes the Release build rather than compiling the solution twice and serializes test projects on the runner. The non-Chromium branch retains the current command.
-5. Set the Test step timeout to 20 minutes and the job timeout to 30 minutes.
-6. Immediately after Test, upload diagnostics only under `if: failure() && inputs.playwright_chromium`, before coverage steps are skipped. Missing diagnostic files do not mask the original test failure.
+Yggdrasil owns `.github/workflows/browser-runtime.yml` with two triggers: pull requests targeting `master`, where its job is a required check, and `workflow_dispatch`, which allows the same smoke to run against any selected branch on demand. The existing Yggdrasil `ci.yml` continues to call the generic shared build/coverage workflow independently.
 
-The boolean is used only in workflow `if:` expressions; no caller-controlled string enters `run:`. Future engines require a separate, deliberate workflow edit. Browser binaries are not cached: the Playwright package/browser version pair is the reproducible unit, and cache restoration cost is comparable to downloading the browser.
+The browser workflow performs one purpose-built job:
 
-Browser tests remain ordinary xUnit tests under the normal `dotnet test` entry point. There is no Node toolchain or second test runner.
+1. Check out Yggdrasil and install the pinned preview .NET SDK.
+2. Build the two existing host test projects in Release under a five-minute step ceiling with `NUGET_AUTH_TOKEN` present.
+3. Locate the package-generated Playwright script from Release output and invoke the literal `install --with-deps chromium` command under its own five-minute step ceiling.
+4. Under one five-minute Test step, invoke `Hosting.Web.Server.Tests` and then `Hosting.Stories.Server.Tests` as two explicit sequential commands using `--no-build -- --explicit only` plus exact browser-test class filters. No solution-level scheduling hypothesis or `-m:1` is involved.
+5. On failure, upload `**/TestResults/playwright/**` immediately with `actions/upload-artifact@v7`; absent files never replace the original failure.
+
+The job ceiling is ten minutes. Step names and independent five-minute ceilings preserve the build/install/test diagnostic split even though the three maxima are non-additive beneath that outer ceiling. The workflow does not collect coverage: the unchanged generic gate already owns coverage for the ordinary suite, while this workflow owns runtime composition and failure evidence.
+
+A Yggdrasil-owned raw-text contract test locks both triggers, the 10/5-minute budget relationship, literal Chromium-only installation, explicit sequential host commands, and failure-only artifact upload. Future engines require a separate, deliberate workflow edit. Browser binaries are not cached: the Playwright package/browser version pair is the reproducible unit, and cache restoration cost is comparable to downloading the browser. There is no Node toolchain or second test runner.
 
 ## 9. Test tiers and future expansion
 
@@ -257,9 +261,9 @@ The black-box suite is intentionally not designed here. Its trigger, environment
 Implementation is complete only when all of the following are true:
 
 1. Bragi pins BlazingStory preview.91, lands the guarded submit/readiness behavior, releases, and Yggdrasil pins that release before its smoke is enabled.
-2. A clean CI runner installs only Chromium through the boolean reusable-workflow capability.
+2. A clean CI runner installs only Chromium through Yggdrasil's repository-owned browser workflow; Ginnungagap's shared workflow remains unchanged.
 3. Both browser tests launch their real host entry point over Kestrel on port zero and obtain the browser origin from `CreateClient().BaseAddress`.
-4. Browser execution is serialized within assemblies, across local test processes, and across CI test modules.
+4. Browser execution is serialized within assemblies, across local test processes, and by explicit ordered project commands in CI; ordinary test runs exclude the explicit browser tests.
 5. Yggdrasil waits for an interactive WebAssembly renderer before clicking and observes the resulting browser-originated gRPC-Web request.
 6. The successful `US` lookup traverses the real handler/pipeline/interceptors over the deterministic repository and renders the expected response plus client-baked identifier match.
 7. Bragi discovers at least 20 story states across both required roots and visits every discovered state in one browser page.
@@ -269,3 +273,4 @@ Implementation is complete only when all of the following are true:
 11. The known stories stylesheet redirect is asserted narrowly; no other first-party redirect is accepted.
 12. A failed run uploads sufficient trace/log/frame evidence to identify the host, route or state, and runtime topology.
 13. A successful run produces no Playwright artifact upload.
+14. The browser workflow is required on Yggdrasil pull requests, manually dispatchable on any branch, capped at ten minutes overall, and exposes separate five-minute build, install, and test legs.
