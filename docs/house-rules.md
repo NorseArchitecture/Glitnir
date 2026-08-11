@@ -202,6 +202,17 @@ reading point.
   syntax for new code.
 - At the callsite, **invoke extension methods in extension style 100% of the time**.
   Never static-invocation style.
+- **Carve-out — a shadowing instance method** (ruled 2026-08-10). When the receiver's
+  own type declares an instance method with the same name that the compiler binds
+  ahead of the extension, extension style silently retargets to the wrong method and
+  the code still compiles. There, static-invocation style is mandatory, with a comment
+  naming the shadowing member. The live case: .NET 11 added
+  `EditContext.ValidateAsync(CancellationToken)`, which shadows Blazilla's
+  `EditContextExtensions.ValidateAsync` — under extension style every form reports
+  valid and no validator ever runs. Asgard's `OutcomeFormComponentBase` therefore
+  writes `EditContextExtensions.ValidateAsync(editContext)`. Do not "fix" a
+  static-invocation callsite carrying such a comment; the orphaned `using` that
+  extension style would leave behind is the tripwire (`IDE0005` as error), not a nit.
 
 ## Regex
 

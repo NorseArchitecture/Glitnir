@@ -1211,9 +1211,138 @@ dotnet test Yggdrasil/tests/Hosting.Web.Server.Tests/Hosting.Web.Server.Tests.cs
 
 ## Train 5 — Yggdrasil Stories.Server: catalog and runtime topology proof
 
+### Task 10A: Prevent stale scenario scopes from resetting their successor
+
+**Discovered by:** Task 10's released-package sweep against Bragi `0.0.7`.
+
+**Files:**
+
+- Modify: `Bragi/src/DesignSystem.Stories/Scenarios/Scenario.cs`
+- Modify: `Bragi/src/DesignSystem.Stories/Scenarios/ScenarioScope.razor`
+- Modify: `Bragi/tests/DesignSystem.Stories.Tests/Scenarios/ScenarioScopeTests.cs`
+- Test: `Bragi/tests/DesignSystem.Stories.Tests/Scenarios/ScenarioTests.cs`
+
+**Interfaces:**
+
+- Consumes: the singleton `Scenario<TScenario>` shared by each fake family.
+- Produces: an ownership token for every scenario pin so an older scope's delayed disposal cannot
+  reset a newer scope, including when both scopes select the same enum value.
+
+- [ ] Add bUnit tests that render scope A, render scope B of the same scenario family before
+  disposing A, then dispose A and prove B's value remains pinned. Cover both different values and
+  identical values so equality-based conditional reset cannot pass.
+- [ ] Confirm RED because the current unconditional `Scenario.Reset()` restores Success when A
+  disposes.
+- [ ] Replace ambient setter/reset ownership with one typed, nested `ScenarioPin` held for the
+  lifetime of each scope. Initial `Pin(value)` intentionally supersedes a live owner because Blazor
+  mounts a successor before disposing its predecessor. Subsequent parameter sets call `Repin(value)`
+  on that same handle; repinning a superseded handle throws rather than stealing the slot. Release is
+  private and restores the initial value only when the disposing pin still owns the slot. Document
+  the deliberately single-slot, non-composing behavior, including the quiescent stale-scope case.
+- [ ] Preserve deterministic re-application on every parameter set, the unwrapped happy-path value,
+  and fake-service behavior.
+- [ ] Run focused scenario tests and the full Bragi solution.
+
+```bash
+dotnet test Bragi/tests/DesignSystem.Stories.Tests/DesignSystem.Stories.Tests.csproj -- --filter-class "*.ScenarioScopeTests" "*.ScenarioTests"
+dotnet test Bragi/Bragi.slnx
+```
+
+### Human gate B2
+
+Review, merge, tag, and publish the corrected Bragi package, then propagate that released version to
+Yggdrasil. Task 10 must remain RED against `0.0.7`; do not reorder or separate driven stories to hide
+the stale-disposal race. Resume the package-mode sweep only after the released package contains the
+ownership-token fix.
+
+Human gate B2 completed with `Norse.DesignSystem.Stories` `0.0.8`.
+
+### Task 10B: Scope StoryDriver form discovery to its owning story
+
+**Discovered by:** Task 10's released-package sweep against Bragi `0.0.8`.
+
+**Files:**
+
+- Modify: `Bragi/.github/workflows/ci.yml`
+- Create: `Bragi/package.json`
+- Modify: `Bragi/src/DesignSystem.Stories/Scenarios/StoryDriver.razor`
+- Modify: `Bragi/src/DesignSystem.Stories/wwwroot/storyDriver.js`
+- Test: `Bragi/tests/DesignSystem.Stories.Tests/Scenarios/StoryDriverTests.cs`
+- Test: `Bragi/tests/DesignSystem.Stories.Tests/Scenarios/storyDriver.test.mjs`
+
+- [ ] Reproduce the persistent-canvas transition with a stale departing form outside the incoming
+  driver's wrapper and the incoming form inside it. Confirm RED because global
+  `document.querySelector("form")` submits the departing form.
+- [ ] Pass the driver's wrapper `ElementReference` to JavaScript. Discover the form only through
+  `root.querySelector("form")`, retain the bounded retry, and observe that same root for post-submit
+  settlement. Preserve submit prevention, fill timing, readiness marker, and failure semantics.
+- [ ] Prove the real JavaScript module submits the incoming form exactly once and never submits the
+  stale external form. A dependency-free root `package.json` runs
+  `node --test "tests/**/*.test.mjs"` so later JavaScript tests join the same harness automatically;
+  Bragi's own workflow adds a dedicated Node job with job-local `contents: read`. Do not place this
+  product-specific check in Ginnungagap's shared .NET workflow.
+- [ ] Retain exact C# interop contracts for the wrapper `ElementReference`, fill mode, default email,
+  and eight-character password on success, no-form, and JavaScript-failure paths. Run `npm test`,
+  focused StoryDriver tests, and the full Bragi suite.
+
+### Human gate B3
+
+Review, merge, tag, and publish the root-scoped StoryDriver package, then propagate that exact release
+to Yggdrasil. Task 10 must remain RED against `0.0.8` at
+`authentication-register--validation-errors`; do not reorder stories or weaken the canvas law to hide
+the stale-form race.
+
+### Task 10C: Keep explicit browser fixtures inert until first use
+
+**Discovered by:** Task 10's ordinary-run explicit-skip proof.
+
+**Files:**
+
+- Modify: `Yggdrasil/tests/BrowserTesting/BrowserHostFixture.cs`
+- Modify: `Yggdrasil/tests/Hosting.Stories.Server.Tests/BrowserHostFixtureTests.cs`
+
+- [ ] Confirm RED: xUnit constructs the collection fixture even when the explicit smoke is skipped,
+  causing ordinary runs to acquire the browser lease, start Kestrel, and launch Chromium.
+- [ ] Make `InitializeAsync` inert and start resources single-flight from `OpenEvidenceAsync`. Cache
+  startup failures, serialize disposal with in-flight startup, reject operations after disposal, and
+  release partial resources independently.
+- [ ] Cover asynchronous and synchronous startup failure caching plus disposal before, during, and
+  after startup. Prove ordinary Stories and Web selections skip their explicit tests with no browser,
+  lease, or Kestrel output; prove explicit host startup still works with the exact Stories evidence
+  policy.
+
+### Task 10D: Bind Register validation explicitly to Blazilla on .NET 11
+
+**Discovered by:** Task 10's released-package sweep against Bragi `0.0.9` and browser/component
+instrumentation at `authentication-register--validation-errors`.
+
+**Files:**
+
+- Modify: `Heimdall/src/AuthN.Components.FluentUI/Register.razor`
+- Test: `Heimdall/tests/AuthN.Components.FluentUI.Tests/RegisterTests.cs`
+
+- [ ] Prove both submit guards execute and prevent default, then trace the remaining `/` navigation
+  through Register's successful service outcome rather than misclassifying it as a native-form or
+  StoryDriver escape.
+- [ ] Add a real-component empty-submit test that uses the production validator, proves
+  `IAuthenticationService.Register` is never called, and proves password validation failures render.
+  Confirm RED because .NET 11's new `EditContext.ValidateAsync(CancellationToken)` instance method
+  shadows Blazilla's one-argument extension method and sees no FluentValidation handler.
+- [ ] Call `Blazilla.EditContextExtensions.ValidateAsync(editContext)` explicitly. Audit every
+  production EditContext validation call for the same binding; do not add a Bragi workaround.
+- [ ] Run the focused Register test, the full FluentUI component suite, and the full Heimdall suite.
+
+### Human gate B4
+
+Review, merge, tag, and publish Heimdall above `0.0.14`. Then rebuild and publish Bragi above `0.0.9`
+against that Heimdall release so `Norse.DesignSystem.Stories` raises its
+`Norse.AuthN.Components.FluentUI` nuspec dependency floor. Propagate both exact versions to
+Yggdrasil. A Yggdrasil-only direct reference is not an acceptable substitute because it would leave
+Bragi's released catalog dependency graph broken for other consumers.
+
 ### Task 10: Pin the released Bragi package and write the catalog smoke
 
-**Prerequisite:** Human gate B1 is complete and the released version is known.
+**Prerequisite:** Human gate B4 is complete and both released versions are known.
 
 **Files:**
 
@@ -1234,7 +1363,7 @@ dotnet test Yggdrasil/tests/Hosting.Web.Server.Tests/Hosting.Web.Server.Tests.cs
   references.
 
 ```bash
-dotnet restore Yggdrasil/Yggdrasil.slnx
+dotnet restore Yggdrasil/Yggdrasil.slnx -p:UseProjectReferences=false
 ```
 
 - [ ] Declare the second `DisableParallelization = true` collection and a fixture derived from the
@@ -1335,8 +1464,8 @@ legitimate rendered story link cannot become actionable through its disclosure c
   the intended ship-order proof. After the published bump, run twice GREEN with no retries.
 
 ```bash
-dotnet test Yggdrasil/tests/Hosting.Stories.Server.Tests/Hosting.Stories.Server.Tests.csproj -- --explicit only --filter-class "*.StoriesBrowserRuntimeSmokeTests"
-dotnet test Yggdrasil/tests/Hosting.Stories.Server.Tests/Hosting.Stories.Server.Tests.csproj -- --explicit only --filter-class "*.StoriesBrowserRuntimeSmokeTests"
+dotnet test Yggdrasil/tests/Hosting.Stories.Server.Tests/Hosting.Stories.Server.Tests.csproj -p:UseProjectReferences=false --no-restore -- --explicit only --filter-class "*.StoriesBrowserRuntimeSmokeTests"
+dotnet test Yggdrasil/tests/Hosting.Stories.Server.Tests/Hosting.Stories.Server.Tests.csproj -p:UseProjectReferences=false --no-restore -- --explicit only --filter-class "*.StoriesBrowserRuntimeSmokeTests"
 ```
 
 - [ ] On any failure, inspect `frames.log` and confirm it contains state, every frame URL/path, body
@@ -1364,6 +1493,12 @@ dotnet test Yggdrasil/tests/Hosting.Stories.Server.Tests/Hosting.Stories.Server.
 - Produces: required pull-request and manually dispatchable Chromium workflow with ordered host
   commands and separate build/install/test diagnostic legs.
 
+The workflow is a released-package gate, not a Bifrost source-integration check. Every build and test
+command therefore sets `UseProjectReferences=false`: `true` deliberately consumes sibling realm code
+from the filesystem, while `false` resolves the NuGet graph seen by standalone Yggdrasil CI. Keep the
+property explicit even though standalone Yggdrasil currently defaults it to `false`; losing this
+literal must fail the workflow contract rather than silently changing what the browser gate certifies.
+
 - [ ] Write the raw-text contract first. It fails when the local workflow is missing; after the
   workflow exists it requires both triggers, one ten-minute job ceiling, at least three five-minute
   step ceilings, Chromium-only installation, explicit-only execution, the two host projects in web
@@ -1384,6 +1519,7 @@ $required = @(
 	'timeout-minutes: 10',
 	'install --with-deps chromium',
 	'--explicit only',
+	'-p:UseProjectReferences=false',
 	'tests/Hosting.Web.Server.Tests/Hosting.Web.Server.Tests.csproj',
 	'tests/Hosting.Stories.Server.Tests/Hosting.Stories.Server.Tests.csproj',
 	'actions/upload-artifact@v7',
@@ -1460,8 +1596,8 @@ jobs:
         env:
           NUGET_AUTH_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN }}
         run: |
-          dotnet build tests/Hosting.Web.Server.Tests/Hosting.Web.Server.Tests.csproj -c Release
-          dotnet build tests/Hosting.Stories.Server.Tests/Hosting.Stories.Server.Tests.csproj -c Release
+          dotnet build tests/Hosting.Web.Server.Tests/Hosting.Web.Server.Tests.csproj -c Release -p:UseProjectReferences=false
+          dotnet build tests/Hosting.Stories.Server.Tests/Hosting.Stories.Server.Tests.csproj -c Release -p:UseProjectReferences=false
 
       - name: Install Chromium
         timeout-minutes: 5
@@ -1477,8 +1613,8 @@ jobs:
       - name: Test browser hosts
         timeout-minutes: 5
         run: |
-          dotnet test tests/Hosting.Web.Server.Tests/Hosting.Web.Server.Tests.csproj -c Release --no-build -- --explicit only --filter-class "*.WebServerBrowserRuntimeSmokeTests"
-          dotnet test tests/Hosting.Stories.Server.Tests/Hosting.Stories.Server.Tests.csproj -c Release --no-build -- --explicit only --filter-class "*.StoriesBrowserRuntimeSmokeTests"
+          dotnet test tests/Hosting.Web.Server.Tests/Hosting.Web.Server.Tests.csproj -c Release -p:UseProjectReferences=false --no-build -- --explicit only --filter-class "*.WebServerBrowserRuntimeSmokeTests"
+          dotnet test tests/Hosting.Stories.Server.Tests/Hosting.Stories.Server.Tests.csproj -c Release -p:UseProjectReferences=false --no-build -- --explicit only --filter-class "*.StoriesBrowserRuntimeSmokeTests"
 
       - name: Upload Playwright failure evidence
         if: failure()
@@ -1494,11 +1630,11 @@ jobs:
   package/browser coupling, ten-minute outer/five-minute leg budgets, and deferral of Firefox/WebKit.
 
 ```text
-dotnet build tests/Hosting.Web.Server.Tests/Hosting.Web.Server.Tests.csproj -c Release
-dotnet build tests/Hosting.Stories.Server.Tests/Hosting.Stories.Server.Tests.csproj -c Release
+dotnet build tests/Hosting.Web.Server.Tests/Hosting.Web.Server.Tests.csproj -c Release -p:UseProjectReferences=false
+dotnet build tests/Hosting.Stories.Server.Tests/Hosting.Stories.Server.Tests.csproj -c Release -p:UseProjectReferences=false
 pwsh tests/Hosting.Web.Server.Tests/bin/Release/net11.0/playwright.ps1 install chromium
-dotnet test tests/Hosting.Web.Server.Tests/Hosting.Web.Server.Tests.csproj -c Release --no-build -- --explicit only --filter-class "*.WebServerBrowserRuntimeSmokeTests"
-dotnet test tests/Hosting.Stories.Server.Tests/Hosting.Stories.Server.Tests.csproj -c Release --no-build -- --explicit only --filter-class "*.StoriesBrowserRuntimeSmokeTests"
+dotnet test tests/Hosting.Web.Server.Tests/Hosting.Web.Server.Tests.csproj -c Release -p:UseProjectReferences=false --no-build -- --explicit only --filter-class "*.WebServerBrowserRuntimeSmokeTests"
+dotnet test tests/Hosting.Stories.Server.Tests/Hosting.Stories.Server.Tests.csproj -c Release -p:UseProjectReferences=false --no-build -- --explicit only --filter-class "*.StoriesBrowserRuntimeSmokeTests"
 ```
 
 - [ ] Run GREEN plus a normal solution test proving explicit browser tests impose no browser
@@ -1508,12 +1644,12 @@ dotnet test tests/Hosting.Stories.Server.Tests/Hosting.Stories.Server.Tests.cspr
 ```bash
 pwsh -NoProfile -File Yggdrasil/scripts/tests/verify-browser-runtime-workflow.ps1
 cd Yggdrasil
-dotnet build tests/Hosting.Web.Server.Tests/Hosting.Web.Server.Tests.csproj -c Release
-dotnet build tests/Hosting.Stories.Server.Tests/Hosting.Stories.Server.Tests.csproj -c Release
+dotnet build tests/Hosting.Web.Server.Tests/Hosting.Web.Server.Tests.csproj -c Release -p:UseProjectReferences=false
+dotnet build tests/Hosting.Stories.Server.Tests/Hosting.Stories.Server.Tests.csproj -c Release -p:UseProjectReferences=false
 pwsh tests/Hosting.Web.Server.Tests/bin/Release/net11.0/playwright.ps1 install chromium
-dotnet test tests/Hosting.Web.Server.Tests/Hosting.Web.Server.Tests.csproj -c Release --no-build -- --explicit only --filter-class "*.WebServerBrowserRuntimeSmokeTests"
-dotnet test tests/Hosting.Stories.Server.Tests/Hosting.Stories.Server.Tests.csproj -c Release --no-build -- --explicit only --filter-class "*.StoriesBrowserRuntimeSmokeTests"
-dotnet test Yggdrasil.slnx
+dotnet test tests/Hosting.Web.Server.Tests/Hosting.Web.Server.Tests.csproj -c Release -p:UseProjectReferences=false --no-build -- --explicit only --filter-class "*.WebServerBrowserRuntimeSmokeTests"
+dotnet test tests/Hosting.Stories.Server.Tests/Hosting.Stories.Server.Tests.csproj -c Release -p:UseProjectReferences=false --no-build -- --explicit only --filter-class "*.StoriesBrowserRuntimeSmokeTests"
+dotnet test Yggdrasil.slnx -p:UseProjectReferences=false
 git diff --check
 git -C ../.github status --short
 ```
