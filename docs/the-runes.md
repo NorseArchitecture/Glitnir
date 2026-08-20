@@ -99,6 +99,29 @@ alongside Svartálfheim's own manifest `ProjectReference` (the bug that surfaced
 question). Naglfar has no realm-root file at all — an RCL with no hand-authored surface has
 nothing for even the lean version to check.
 
+**Both leaves keep the props chain import (2026-08-20 amendment).** The same 2026-08-08 ruling
+also dropped the `_ParentProps` import from both leaves' realm-root `Directory.Build.props`, on
+the reasoning that a permanent leaf never needs the workspace-vs-standalone crossing decision
+`UseProjectReferences` carries. That was right about `UseProjectReferences` and wrong about the
+file. Bifröst's root `Directory.Build.props` carries a **second, unrelated payload**: a
+`PropertyGroup` conditioned on `NORSE_BUILD_ARTIFACTS_DIR` that redirects `BaseIntermediateOutputPath`
+and `BaseOutputPath` out of the tree. It exists because this checkout is shared between build
+environments — a devcontainer (`remoteEnv`) and a bare-metal Windows/Visual Studio build against
+the same ReFS mount — and whichever side builds in-tree last leaves its own RID and absolute paths
+baked into `obj/project.assets.json` for the other side to fail on (`Unable to find fallback
+package folder 'C:\Program Files (x86)\...'`, seen from Linux reading a Windows-restored tree).
+That payload applies to **every realm that compiles anything, leaf or not**, and the import is the
+only thing carrying it down — so from 2026-08-08 until this amendment both leaves wrote `bin`/`obj`
+in-tree regardless of the environment variable. It cannot be relocated to a targets file to dodge
+the chain: `BaseIntermediateOutputPath` must be set before `Microsoft.Common.props` reads it, which
+is props-time only. The import is restored in both realms; inheriting `UseProjectReferences` and
+`NorseRefVersion` alongside it is inert by construction, since neither declares a `NorseRef`.
+
+The general rule the miss cost us, worth stating plainly: **the realm-owned exception is about the
+`NorseRef` machinery, never about the chain itself.** A leaf opts out of what the canonical file
+*declares*; it does not opt out of being a realm. Before dropping any import on leaf-status grounds,
+enumerate everything the parent file carries — not just the payload that motivated the question.
+
 ---
 
 ## 3. The two crossings
