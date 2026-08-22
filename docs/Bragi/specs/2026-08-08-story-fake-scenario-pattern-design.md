@@ -190,3 +190,19 @@ This is the behavioral logic Bragi's design-system exemption clause anticipated 
 **Scope check:** One realm's implementation plus one doc line in Asgard; plan-sized. The platform-pattern ambition is carried by doctrine (§4), not by speculative Mímir code — YAGNI holds.
 
 **Ambiguity check:** "Pinned" is operationally defined (§0, §8: bookmarkable URL, renders identically on load). The two pinning mechanisms are named with their costs (§1.2). The spike's pass condition is concrete (§3, §8).
+
+## Correction (2026-08-22): the lifetime reverts to Scoped
+
+§1.1's "Lifetime correction" ruled Singleton for the fake and `Scenario<T>`, reasoning "WASM makes
+scoped effectively singleton anyway — say what you mean." That reasoning assumed the story host
+would always be a standalone WASM app, where each browser tab is its own runtime instance. It does
+not hold once the host is Blazor Interactive Server (`../Platform/specs/2026-08-22-stories-blazor-server-mcp-design.md`):
+under Interactive Server a Singleton is shared across every connected circuit on the process, so
+one visitor pinning a scenario would leak into every other visitor's tab.
+
+`AddNorseStoryFakes()` now registers every fake, its `Scenario<T>`, and
+`RecordingSessionTransition`/`ISessionTransition` as Scoped — Blazor Server's DI scope is already
+the framework's own per-circuit boundary, so this is the direct DI-native equivalent of what the
+Singleton-as-scoped assumption approximated, not a new concept. Doctrine restated: match the
+registration lifetime to the real isolation boundary of the host actually consuming it — never to
+whichever host happens to be consuming it today.
