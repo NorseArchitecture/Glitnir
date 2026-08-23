@@ -123,3 +123,80 @@ Yggdrasil's `CLAUDE.md` project table row and `README.md` entry for `Hosting.Sto
 7. Bifröst's `AppHost.cs` references `Projects.Hosting_Stories`; the dashboard boots the stories resource.
 8. Yggdrasil `CLAUDE.md`/`README.md` and Bragi `CLAUDE.md` reflect the collapsed project name in the same change as the code.
 9. Implementation began only after `feature/principal-at-the-door` landed on Yggdrasil `master`, on an isolated fork/worktree that never touched that branch's uncommitted state.
+
+## 9. Findings (implementation-time, 2026-08-22 — Task 4 spike)
+
+§5.3 and §6 are no longer "unresolved at spec time" — Task 4 decompiled the shipped `BlazingStory`
+1.0.0-preview.91 package (`ilspycmd` against `BlazingStory.dll`) and drove the real ported host
+with Playwright. Full evidence (decompiled snippets, live DOM captures, exact exception traces):
+`../Bifrost/.superpowers/sdd/2026-08-22-stories-blazor-server-mcp/task-4-report.md`.
+
+**§5.3 — the FluentUI attachment point.** `BlazingStoryServerComponent<TIndexPage, TIFramePage>`
+exposes no slot or parameter to wrap — it is a bare route shim (`[Route("/{*urlPath}")]`) that
+picks one of its two type arguments as the root document component based on whether the request
+path is `/iframe.html`. **The attachment point is the type arguments themselves**: `TIndexPage`
+and `TIFramePage` must each be a full, consumer-authored HTML-document component (mirroring
+`PriorArt/BlazorApp.Stories`'s `IndexPage.razor`/`IFramePage.razor`, not BlazingStory's
+internal `Index`/`IFrame` types of the same name). Inside each doc shell, `@rendermode` must land
+on a **parameterless wrapper component**, not directly on `<BlazingStoryApp Assemblies="...">` —
+putting `@rendermode` straight on `BlazingStoryApp` makes ASP.NET Core try to JSON-serialize its
+`Assemblies` parameter (`IEnumerable<Assembly>`) across the SSR→interactive boundary marker, and
+`System.Reflection.Assembly`/`TypeInfo` is not JSON-serializable (`NotSupportedException`, 500 on
+every request — reproduced live before the fix). The wrapper (mirroring the platform's own
+`Hosting.Web.Server/Components/App.razor` pattern — `<NorseFluentDesignTheme @rendermode="..."/>`
+beside `<Routes @rendermode="..."/>`) is where FluentUI theme markup belongs, as a sibling of
+`<BlazingStoryApp>`:
+
+```razor
+@* Components/App.razor *@
+<NorseFluentDesignTheme/>
+<BlazingStoryApp Assemblies="[typeof(AssemblyMarker).Assembly]"/>
+```
+
+**And it must be wired into both `IndexPage.razor` and `IFramePage.razor`** — see §6 below for
+why: `/iframe.html` is a separate top-level document/circuit, not a component nested inside the
+catalog shell's circuit, so a theme provider wired only into the index shell leaves every canvas
+iframe unthemed.
+
+**§6 — canvas structure, confirmed empirically:**
+- **Still iframe-isolated**, identically to WASM mode: live DOM inspection of the running host
+  shows every story canvas as a real `<iframe src="/iframe.html?viewMode=story&id=...">`. This is
+  baked into `BlazingStory.dll` itself (`PreviewFrame` → `PooledIFrame`, JS-managed), not
+  render-mode-specific.
+- **The `data-bs-parent-frame` discriminator survives** (`data-bs-parent-frame="docs"` observed
+  live), unchanged from WASM.
+- **Correction to this design:** the five-pooled/one-active canvas bound §6 called "explicitly
+  retired... a WASM-pool-specific invariant with no server-mode analogue" is **not** WASM-specific
+  — `PooledIFrame.razor.js`'s `maxIframesInPool = 5` pool is the same client-side mechanism
+  regardless of render mode. §6's redesign should carry the pool bound forward (re-verified
+  against the live DOM, not assumed retired) rather than treating it as WASM-only baggage.
+- **Readiness marker for the redesigned smoke:** the `_blazing_story_ready_for_visible` CSS class
+  BlazingStory adds to each iframe's `<html>` once fonts/styles/frame-size settle is unchanged
+  under Interactive Server and is not WASM-boot-specific — it's the marker §6's redesigned smoke
+  should watch for.
+
+**Scenario-sharing check — confirmed a non-issue, not a new leak.** A pooled iframe/circuit *can*
+be reused across different story canvases over its lifetime (`PooledIFrame.razor.js` prefers
+`blazor.navigateTo` client-side navigation over a full reload when reusing a pooled iframe on the
+same origin) — the concern the brief raised is real in principle. Empirically, navigating the
+live host between `Authentication/Login` and `Authentication/Register` (each a Docs page
+rendering two canvases apiece, six canvas-visits total, iframes confirmed reused via persisted
+Playwright element references) produced zero exceptions and zero cross-canvas state bleed —
+verified against the server log (no `Exception`, no `fail:` lines) across the whole session.
+Mechanistically: `ScenarioScope.Repin` only fires when the *same* `ScenarioScope` component
+instance survives a re-render; navigating between two different story canvases is a genuine route
+change, so Blazor's router disposes the outgoing `ScenarioScope` (clean, reference-checked
+no-op `Release`) before the incoming one mounts and calls `Pin` (unconditional supersede, by
+design). BlazingStory does isolate one *live, mounted* canvas's scenario pin per circuit at a
+time, even though the circuit/iframe itself is recycled across canvases — Train 1's
+Scoped-per-circuit fix holds. This depends on Blazor's default router behavior (full disposal of
+the outgoing route's tree before the incoming one mounts), not on anything Bragi or Yggdrasil
+control or test today — worth re-confirming if a future BlazingStory version changes how pooled
+iframes recycle across navigations.
+
+**§5.4 (asset-naming workaround) — not yet resolved, needs Task 5.** The boot-minimal shells built
+for this spike don't reference a `Hosting.Stories`/`Norse.Hosting.Stories` scoped-CSS bundle at
+all (deliberately out of scope — presentation, not boot-plumbing), so no request for any
+`*.styles.css` bundle was observed. Task 5 must add that `<link>` and check the real generated
+bundle filename against `Norse.Hosting.Stories.styles.css` once it exists, per this design's own
+§5.4 instruction — this spike neither confirms nor refutes the mismatch.
