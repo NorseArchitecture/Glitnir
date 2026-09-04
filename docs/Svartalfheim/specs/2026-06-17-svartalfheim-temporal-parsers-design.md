@@ -121,6 +121,38 @@ A representation the runtime can round-trip is still refused when the *value* is
 
 No configuration, no opt-out — fail loud, uniformly.
 
+**Amendment (2026-09-03, HyperUuid/HyperCast ingestion, Task 13):** Narrowed for `DateTimeOffset`'s
+ISO door. HyperCast's `corpus/timestamp.json` requires `0001-01-01T00:00:00Z` and
+`9999-12-31T23:59:59.999999999Z` (the RFC 3339 text of `MinValue`/`MaxValue`) to parse as ordinary
+successes — per direct ruling from Buvy: *"I want HyperCast to be the source of truth for the BCL
+types... we will be cutting the logic out from here."* `DateTimeOffsetParser.ParseIso` no longer
+sentinel-guards; `ParseExact`/`ParseUnixCore` on the same type still do (unaudited against HyperCast
+so far — no corpus file covers them yet). `DateOnly`/`DateTime`/`TimeSpan` and every non-ISO door on
+`DateTimeOffset` are **unchanged and unaudited** — this amendment narrows the table's `DateTimeOffset`
+row for the ISO door specifically, it does not repeal §9 platform-wide. Each remaining door gets the
+same treatment only when its own HyperCast ingestion task actually reconciles it — don't assume
+convergence ahead of that audit. Full narrative: `../plans/2026-09-03-svartalfheim-hyperuuid-hypercast-ingestion.md`, Task 13.
+
+**Amendment (2026-09-03, HyperUuid/HyperCast ingestion, Task 15):** Narrowed for `DateOnly`'s ISO
+door, on the same basis as Task 13's `DateTimeOffset` amendment above. HyperCast's
+`corpus/date.json` requires `0001-01-01` and `9999-12-31` (the ISO text of `DateOnly.MinValue`/
+`MaxValue`) to parse as ordinary successes; the same corpus file distinguishes a well-formed but
+unrepresentable `0000` year as `ParseFailure.OutOfRange`, never a bare `Malformed` collapse.
+`DateOnlyParser.ParseIso` no longer sentinel-guards; `ParseExact` on the same type still does
+(unaudited against HyperCast so far — this task's corpus carries no exact-door vectors). `DateTime`
+and `TimeSpan`'s sentinel guards are **unchanged and unaudited** by this amendment — `DateTimeParser`
+specifically was audited (Task 15) and found to have **no matching HyperCast door at all**:
+HyperCast's only `System.DateTime`-returning door (`Cast.DateTime(span, DateOrder)`) is a zone-less,
+order-declared "local datetime" grammar structurally unrelated to `DateTimeParser`'s zone-mandatory,
+`T`-separator-only, UTC-normalizing ISO grammar (which is instead identical to
+`DateTimeOffsetParser`'s RFC 3339 door — see `DateTimeParser`'s own class doc). `DateTimeParser` is
+therefore left fully unwired and its sentinel guard untouched pending a dedicated follow-up (route
+natively via the already-proven `HyperCast.Cast.Timestamp` + `.UtcDateTime` projection, converging
+the managed grammar to match, with its own test coverage — out of this task's scope, which carried
+no zone-bearing `System.DateTime` corpus vectors of its own). `TimeOnly` remains exempt (no sentinel
+concept). Full narrative: `../plans/2026-09-03-svartalfheim-hyperuuid-hypercast-ingestion.md`,
+Task 15.
+
 ## 10. Gateway integration
 
 Five new `typeof` branches join `Parser.ParseRequired` and `Parser.ParseOptional` — one per concrete temporal type, the model the pathway spec §2.3 fixed. Each sits **before the generic trim**, so the specialist owns its own trimming, and `Unsafe.As`-reinterprets the specialist's `Result<concrete>` to `Result<T>` (sound because `T` is statically the concrete type inside the JIT/AOT-eliminated branch — the established BCL generic-specialization pattern, already proven for the thirteen numeric/`char`/`Guid` branches).
