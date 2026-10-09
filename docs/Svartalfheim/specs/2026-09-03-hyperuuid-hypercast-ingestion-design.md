@@ -1,7 +1,7 @@
 # Svartalfheim — HyperUuid/HyperCast Ingestion Design (`Norse.Primitives`)
 
 **Date:** 2026-09-03
-**Status:** Design — approved, pending plan
+**Status:** Superseded 2026-10-09 by `2026-10-09-hyper-engines-cut-design.md` — the seam was never merged; this document is history
 **Realm:** Svartalfheim (`Norse.Primitives`)
 **Prior art / upstream relationship:** [SkunkWerkx/HyperUuid](https://github.com/SkunkWerkx/HyperUuid) and [SkunkWerkx/HyperCast](https://github.com/SkunkWerkx/HyperCast) — Buvy's own polyglot Rust-core libraries, maintained upstream by the same author as this realm. Not a cold external dependency: HyperUuid's C# binding already ported byte-order-transform patterns from this realm's own `SequentialGuid`/`DeterministicGuid` (its README cites Svartalfheim by name for the SQL Server ordering permutation), and HyperCast's `corpus/*.json` conformance vectors are explicitly seeded from this realm's own `Primitives.Tests` suites ("this project descends from"). Ingestion and upstream contribution run in both directions.
 

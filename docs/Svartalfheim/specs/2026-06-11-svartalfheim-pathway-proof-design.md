@@ -221,3 +221,118 @@ Fix (a `ParseDuration` ordering change, not a grammar change): sniff the leading
 | `IntegerParser.ParseRequired<int>` (`"not-a-number"`) | 42.82 ns | 48 B |
 
 One `Malformed` probe, expected non-zero: the `Failure` span ctor bounds to `MaxInputLength` and then allocates the captured-input string. This is by design (truncation knowledge lives in `Failure`, first-increment law) and doubles as proof the `MemoryDiagnoser` is measuring — the 0 B rows above are real, not a dead benchmark.
+
+## 10. Findings amendment (2026-10-09) — the engines cut, before and after
+
+The engines cut (`2026-10-09-hyper-engines-cut-design.md`) replaces every managed scalar parser and the identifier arithmetic with HyperCast and HyperUuid. By ruling (that spec's §10 item 6), the managed numbers are captured before the first deletion and the engine numbers after the last, on the same machine and configuration, and filed here side by side. Rig: BenchmarkDotNet v0.15.8, `InProcessEmitToolchain` (§8.1), Release; host: Windows 11 24H2, 11th Gen Intel Core i9-11900H, .NET SDK 11.0.100-rc.1.26425.128, .NET 11.0.0-rc.1.26425.128, X64 RyuJIT x86-64-v4. A fourth family, `IdentifierBenchmarks` (v7 generate, v7 fill ×1000, v5 derive, SQL-order round trip — the four doors the superseded seam spec §1 measured), was added to the rig for this purpose and runs unchanged on both sides.
+
+### 10.1 Before — managed, Svartálfheim `master` at `593f41c`
+
+**Dispatch** (`DispatchBenchmarks`; baseline is the direct `BooleanParser` call):
+
+| Method | Mean | Error | StdDev | Ratio | Allocated |
+|---|---:|---:|---:|---:|---:|
+| `DirectSpecialist` | 16.44 ns | 0.351 ns | 0.311 ns | 1.00 | – |
+| `GatewayBool` | 16.68 ns | 0.361 ns | 0.386 ns | 1.01 | – |
+| `GatewayInt` | 38.04 ns | 0.299 ns | 0.250 ns | 2.31 | – |
+
+**Parser allocation sweep** (`ParserAllocationBenchmarks`):
+
+| Method | Mean | Error | StdDev | Allocated |
+|---|---:|---:|---:|---:|
+| `WholeNumber` | 38.19 ns | 0.214 ns | 0.190 ns | – |
+| `Real` | 60.77 ns | 0.225 ns | 0.200 ns | – |
+| `Uuid` | 27.49 ns | 0.150 ns | 0.125 ns | – |
+| `CodePoint` | 14.47 ns | 0.054 ns | 0.048 ns | – |
+| `DateOnlyIso` | 139.30 ns | 2.773 ns | 4.235 ns | – |
+| `DateOnlyExact` | 121.21 ns | 0.854 ns | 0.757 ns | – |
+| `TimeOnlyIso` | 150.05 ns | 1.754 ns | 1.640 ns | – |
+| `TimeOnlyExact` | 240.20 ns | 3.634 ns | 3.399 ns | – |
+| `DateTimeIso` | 283.72 ns | 0.460 ns | 0.385 ns | – |
+| `DateTimeExact` | 268.68 ns | 1.018 ns | 0.850 ns | – |
+| `DateTimeUnix` | 22.23 ns | 0.457 ns | 0.449 ns | – |
+| `DateTimeOffsetIso` | 787.56 ns | 3.657 ns | 3.420 ns | – |
+| `DateTimeOffsetExact` | 269.62 ns | 2.210 ns | 1.846 ns | – |
+| `DateTimeOffsetUnix` | 17.37 ns | 0.028 ns | 0.022 ns | – |
+| `TimeSpanColon` | 99.92 ns | 0.743 ns | 0.659 ns | – |
+| `TimeSpanIso` | 56.03 ns | 0.275 ns | 0.258 ns | – |
+| `TimeSpanExact` | 26.68 ns | 0.060 ns | 0.047 ns | – |
+| `MalformedAllocates` | 44.55 ns | 0.860 ns | 0.920 ns | 48 B |
+
+**Identifiers** (`IdentifierBenchmarks`; baseline is `GenerateV7`):
+
+| Method | Mean | Error | StdDev | Ratio | Allocated |
+|---|---:|---:|---:|---:|---:|
+| `GenerateV7` | 106.23 ns | 1.020 ns | 0.852 ns | 1.00 | – |
+| `FillBatch1000` | 82,597.04 ns | 1,250.660 ns | 1,535.923 ns | 777.60 | – |
+| `DeriveV5` | 296.44 ns | 5.881 ns | 9.987 ns | 2.79 | – |
+| `SqlOrderRoundTrip` | 54.80 ns | 0.305 ns | 0.270 ns | 0.52 | – |
+
+**Reading, before:** the `Exact` and `Unix` rows have no twin after the cut (those doors are deleted, spec §4.5) and are recorded for completeness only. `FillBatch1000` at 82.6 µs is the per-item `RandomNumberGenerator.Fill` loop still on `master` — the September branch's entropy-batching fix never merged with it; 82.6 ns per value against 106 ns for a single generate. `DateTimeOffsetIso` at 788 ns is the four-format `TryParseExact` cascade the September audit named.
+
+**WebAssembly bundle, before** — `Yggdrasil/src/Hosting.Web.Client`, `dotnet publish -c Release` on Yggdrasil `master` in dev mode (no native linking yet; `dotnet.native.wasm` is the SDK's stock runtime):
+
+| Measure | Before |
+|---|---:|
+| `wwwroot/_framework` total (every file, compressed variants included) | 40,173,965 B |
+| `wwwroot/_framework` file count | 427 |
+| `dotnet.native.*.wasm` | 3,149,679 B |
+| `dotnet.native.*.js` | 121,713 B |
+
+### 10.2 After — the engines, Svartálfheim `feature/hyper-engines-cut` (same machine, same rig, same session)
+
+**Dispatch** (`DispatchBenchmarks`; baseline is now the direct engine call `Cast.Scalar<bool>(span, provider)` — the gateway's tax over the engine is the row pair's difference):
+
+| Method | Mean | Error | StdDev | Ratio | Allocated |
+|---|---:|---:|---:|---:|---:|
+| `DirectEngineBool` | 33.44 ns | 0.278 ns | 0.260 ns | 1.00 | – |
+| `GatewayBool` | 42.29 ns | 0.668 ns | 0.592 ns | 1.26 | – |
+| `DirectEngineInt` | 58.80 ns | 0.500 ns | 0.390 ns | 1.76 | – |
+| `GatewayInt` | 68.63 ns | 1.398 ns | 1.768 ns | 2.05 | – |
+
+**Parser allocation sweep** (`ParserAllocationBenchmarks`, every row through `Parser.ParseRequired<T>`):
+
+| Method | Mean | Error | StdDev | Allocated | Before (managed) |
+|---|---:|---:|---:|---:|---:|
+| `WholeNumber` | 68.98 ns | 0.495 ns | 0.413 ns | – | 38.19 ns |
+| `Real` | 86.09 ns | 1.097 ns | 0.916 ns | – | 60.77 ns |
+| `Uuid` | 68.92 ns | 1.340 ns | 1.376 ns | – | 27.49 ns |
+| `CodePoint` | 53.56 ns | 0.460 ns | 0.384 ns | – | 14.47 ns |
+| `DateOnlyIso` | 53.19 ns | 0.943 ns | 0.836 ns | – | 139.30 ns |
+| `TimeOnlyIso` | 55.47 ns | 1.071 ns | 1.146 ns | – | 150.05 ns |
+| `DateTimeIso` | 85.54 ns | 0.363 ns | 0.304 ns | – | 283.72 ns |
+| `DateTimeOffsetIso` | 88.61 ns | 0.178 ns | 0.158 ns | – | 787.56 ns |
+| `TimeSpanColon` | 62.86 ns | 0.167 ns | 0.139 ns | – | 99.92 ns |
+| `TimeSpanIso` | 61.35 ns | 1.065 ns | 0.996 ns | – | 56.03 ns |
+| `MalformedAllocates` | 139.93 ns | 2.759 ns | 3.389 ns | 48 B | 44.55 ns / 48 B |
+| `OutOfRangeAllocates` | 68.51 ns | 1.195 ns | 1.118 ns | 32 B | — (new door) |
+
+**Identifiers** (`IdentifierBenchmarks`; baseline is `GenerateV7`):
+
+| Method | Mean | Error | StdDev | Ratio | Allocated | Before (managed) |
+|---|---:|---:|---:|---:|---:|---:|
+| `GenerateV7` | 93.27 ns | 0.866 ns | 0.676 ns | 1.00 | – | 106.23 ns |
+| `FillBatch1000` | 26,110.67 ns | 355.121 ns | 296.542 ns | 279.96 | – | 82,597.04 ns |
+| `DeriveV5` | 63.82 ns | 0.944 ns | 0.837 ns | 0.68 | – | 296.44 ns |
+| `SqlOrderRoundTrip` | 61.09 ns | 0.399 ns | 0.311 ns | 0.66 | – | 54.80 ns |
+
+**WebAssembly bundle, after** — same project, `dotnet publish -c Release` on Yggdrasil `feature/hyper-engines-cut`, `Hosting.Web.Client.csproj` opted into `WasmBuildNative=true`, `wasm-tools` installed by `dotnet workload restore` (Emscripten 6.0.2, runtime pack `11.0.0-rc.1.26425.128`). The SDK relinked `dotnet.native.wasm` with `libhypercast.a` and `libhyperuuid.a` (emcc + wasm-opt in the log, runtime hash changed); the relinked runtime exports every `cast_*` door and the `uuid_*` doors the bindings call:
+
+| Measure | Before | After | Delta |
+|---|---|---|---|
+| `wwwroot/_framework` total (every file, compressed variants included) | 40,173,965 B | 40,349,349 B | +175,384 B |
+| `wwwroot/_framework` file count | 427 | 430 | +3 (`HyperUuid.Managed.wasm` and its `.br`/`.gz`) |
+| `dotnet.native.*.wasm` | 3,149,679 B | 3,216,260 B | +66,581 B |
+| `dotnet.native.*.wasm.br` | 1,004,583 B | 1,006,465 B | +1,882 B |
+| `dotnet.native.*.js` | 121,713 B | 199,448 B | +77,735 B |
+| `dotnet.*.js` (loader) | 319,273 B | 397,008 B | +77,735 B |
+| `Norse.Primitives.*.wasm` | 18,201 B | 15,641 B | −2,560 B |
+| `HyperUuid.Managed.*.wasm` | — | 7,449 B | +7,449 B |
+| `HyperCast.Managed.*.wasm` | — | trimmed | 0 B |
+| Sum of every `.br` file (what a browser fetches) | 6,984,857 B | 6,997,059 B | +12,202 B |
+
+**Reading, WebAssembly.** The engines cost 66.6 KB of raw runtime and 1.9 KB over the wire — the Rust doors compress well and the stock runtime already carried the Emscripten substrate they ride on. The two JavaScript rows are not engine code: a locally relinked runtime emits the Emscripten glue unminified (`dotnet.native.js` goes from 4 lines to 5,515), and the loader shows the identical delta, so it carries a copy of the same glue — each grows by 77,735 B and compresses back to a +13 KB apiece. The managed side moved the other way: `Norse.Primitives.wasm` lost 2.5 KB of specialists, `HyperUuid.Managed` arrived at 7.4 KB, and `HyperCast.Managed` was trimmed out entirely because no client code path reaches the `Parser` gateway today — yet `libhypercast.a` was linked regardless, since `NativeFileReference` is unconditional. Net: the bundle is not smaller after the cut; it is 12 KB larger on the wire and 175 KB larger on disk, nearly all of it the unminified glue a local relink emits on this SDK band — whether a later band minifies a relinked runtime the way the stock one ships is not checked here. Two upstream notes go to the ledger: the archives ship under `runtimes/browser-wasm/nativeassets/net10.0/` and linked cleanly under the .NET 11 toolchain, and `uuid_variant` is declared in `EmccExportedFunction` and present in the archive but absent from the relinked runtime's exports (the other 43 doors are present) — unexplained here, worth an upstream check before any consumer calls it from the browser.
+
+**Reading, after.** Allocation: every success row is still 0 B across the engine crossing — the inline union survives the P/Invoke boundary, and the two failure probes allocate only the bounded echo (48 B / 32 B). Latency is not uniform, and the record says so plainly: the temporal doors are 2.6×–8.9× faster on the engine (`DateTimeOffsetIso` 788 → 89 ns, `DateTimeIso` 284 → 86 ns, `DateOnlyIso` 139 → 53 ns), while the short-input doors are slower by a roughly constant crossing cost — `WholeNumber` +31 ns, `Uuid` +41 ns, `CodePoint` +39 ns, `Real` +25 ns — consistent with a fixed per-call P/Invoke plus `NumFormat` bridge overhead of ~30–40 ns on this Windows host that the managed specialists never paid; `TimeSpanIso` is flat. The gateway's own tax over a direct engine call is ~9–10 ns (`GatewayBool` 42.3 vs `DirectEngineBool` 33.4; `GatewayInt` 68.6 vs `DirectEngineInt` 58.8), down from the ~40 ns the September seam record measured. Identifiers: `FillBatch1000` 3.2× faster (the per-item entropy loop is gone), `DeriveV5` 4.6× faster, `GenerateV7` 1.14× faster, `SqlOrderRoundTrip` 1.11× slower (two crossings for a permutation the managed code did in registers). The `MalformedAllocates` row tripled (44.6 → 139.9 ns): the engine's fault path is costlier than the managed reject, a fixed cost on a path that is by definition not hot.
+
+**Findings for upstream (filed in the plan's ledger):** (1) the constant ~30–40 ns crossing cost on short inputs is the first-consumer number HyperCast's README predicts as "the crossing tax, paid honestly"; whether the `IFormatProvider` bridge (`NumberFormatInfo.GetInstance` + `NumFormat.From` per call) is a measurable share of it is a one-row benchmark upstream can add (`Cast.Scalar<int>(span, NumFormat.Invariant)` beside the provider overload); (2) the fault path's cost is worth a look upstream for the same reason. Neither changes the cut: the platform's live call sites are boundary parses, not tight loops, and the doors that dominate real ingress (timestamps, dates) got faster.
