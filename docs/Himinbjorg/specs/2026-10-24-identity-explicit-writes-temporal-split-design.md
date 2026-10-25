@@ -343,6 +343,8 @@ Concurrent `ShredAsync` calls for the same subject converge **only if `DestroyAs
 
 Retry-until-`Ok` is the caller's obligation, recorded as the future DSAR machinery's contract (#55).
 
+An interactive self-service caller can't meet that obligation by coming back, as Himinbjörg PR #76's review found. Once the key is destroyed, the account can't be materialized (§5), and the session dies at its next revalidation. So `DeletePersonalData` retries in the same request, through `ErasureService.ShredWithRetriesAsync`: three runs, repeated only on `Fault` or `Indeterminate` (ruled 2026-10-25). A failure that persists is logged and left to an operator. A durable sweeper that finishes erasures stranded behind a destroyed key belongs to the DSAR machinery (#55) and isn't built here.
+
 ### 7.4 What a deleted subject's history retains
 
 The final version of the `users`, `user_claims` and `user_roles` rows: ciphertext under the destroyed key, booleans, role ids, timestamps and our own opaque user id. No password hash, stamp, blind index or third-party identifier survives. Who may read history remains the Norns §7.3 grants story.
