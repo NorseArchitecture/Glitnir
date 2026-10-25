@@ -40,6 +40,7 @@
   - Shouldly, NSubstitute and `Xunit` are global via `Directory.Test.props`.
   - Test classes are `public sealed`; methods are bare `void`/`async Task`, with sentence-shaped underscore names.
   - **VSTest `--filter` does not work:** use `dotnet test tests/<Project> -- --filter-class "*.<ClassName>"`.
+- **SQL Server container guard (ruled 2026-10-25):** every SQL Server Testcontainers test skips on **Windows on ARM only** (`OperatingSystem.IsWindows() && RuntimeInformation.ProcessArchitecture == Architecture.Arm64`), using Midgard's `[Fact(SkipUnless = …, Skip = …)]` shape with a reason naming the platform. The 2025 image dies under QEMU there; it runs on Apple silicon under Rosetta (`--platform linux/amd64`), and x64 CI always runs it. Midgard's guard was widened to match on 2026-10-25 (test-only, to Midgard `master`): its SQL Server suite now runs on Apple silicon, 37 passed and 0 skipped.
 - **Never assert on a migration name.** Container facts assert on the catalog: `pg_class`/`pg_trigger`/`pg_constraint`; `sys.tables.temporal_type`/`sys.periods`/`sys.check_constraints`.
 - **Warnings are errors, IDE0055 included.** Repeated-hit protocol per house rules.
 - **Every task states its prerequisites.** Only tests whose prerequisites already exist are written in that task. A task's checkpoint is "the whole solution builds, and every test that existed at the start, plus the task's new tests, is green", unless the task names a test it deliberately flips.
@@ -379,9 +380,21 @@ Phase 4 runs as executable slices: **adopt the packages → fixtures → erasure
 - [ ] Rewrite `ErasureService.ShredAsync` per §7.1: probe; an unconditional `DestroyAsync` unless `Missing`; an unconditional idempotent transaction (OpenIddict tokens and authorizations by subject, then the `users` row, through a **raw `DELETE`**: G1 found `ExecuteDelete` is refused for split entities, and the raw delete cascades to every child table); `Outcome<ErasureReceipt>`. Rewrite the doc comment. Re-point `DeletePersonalData.razor` at `ShredAsync`. Delete the obsolete darken-ceremony tests, replacing each with its hard-delete counterpart.
 - [ ] Checkpoint green. Stage; stop.
 
+### Task 3.6: Fragment-scoped CHECK constraints (found in Task 4.4; ruled 2026-10-25)
+
+**Prerequisites:** Phase 3 published (v0.0.17). Lands on Urðarbrunnr's `feature/fragment-check-constraints` as its own patch release (the nullable-to-required guard had already shipped in v0.0.18 via PR #68).
+
+- [ ] **Failing tests**, through EF's real differ and generator, on **both providers**:
+  - `Fragment_check_constraint_is_emitted_on_the_fragment_table_not_the_principal`;
+  - `Adding_a_fragment_check_constraint_emits_ADD_CONSTRAINT_on_the_fragment`, and removing it emits `DROP CONSTRAINT`;
+  - the model snapshot carries the annotation, so a regenerated migration reproduces it;
+  - container: the constraint exists in the catalog on the fragment table and rejects a violating direct write.
+- [ ] Implement the seam (a fluent extension on the split-table builder that stamps the fragment's mapping; relational annotation projection onto the fragment table; both generators emit it), following the `TemporalOnPrincipalTableOnly` pattern. Update the Urðarbrunnr README.md/CLAUDE.md pair. File an upstream EF issue draft in the task summary (not filed).
+- [ ] Green. Stage; stop. **Ship gate:** with the nullable guard, one patch release.
+
 ### Task 4.4: Email is the username, then model law and migrations (one slice)
 
-**Prerequisites:** Task 4.3, and Urðarbrunnr Task 3.5 (local workspace crossing; the published package only gates the PR). The manager behavior lands **before** the `CHECK` that requires it, in the same slice, against the **old** store. The stock manager's `SetEmailAsync` doesn't touch the username, so `TemporalIdentityVersioningTests.An_email_change_through_the_user_manager_writes_a_closed_version_into_users_history` (which calls `SetEmailAsync` alone) would violate the constraint without it.
+**Prerequisites:** Task 4.3; Urðarbrunnr Task 3.6 (local workspace crossing until published); and Urðarbrunnr Task 3.5 (local workspace crossing; the published package only gates the PR). The manager behavior lands **before** the `CHECK` that requires it, in the same slice, against the **old** store. The stock manager's `SetEmailAsync` doesn't touch the username, so `TemporalIdentityVersioningTests.An_email_change_through_the_user_manager_writes_a_closed_version_into_users_history` (which calls `SetEmailAsync` alone) would violate the constraint without it.
 
 - [ ] **Failing manager tests** (old store, both providers; store-agnostic by construction, because they override at the manager and finish with one `UpdateUserAsync`):
   - `SetEmail_sets_username_and_both_hashes_in_one_operation` (one `users_history` version, equal hashes);
@@ -605,7 +618,7 @@ Phase 4 runs as executable slices: **adopt the packages → fixtures → erasure
 
 - [ ] Pointer bumps for Asgard, Midgard, Urðarbrunnr and Himinbjörg, staged together.
 - [ ] The Bifröst CLAUDE.md/README.md pair: a state-of-the-union entry for this train.
-- [ ] File the Task 1.3 inventory's remaining other-realm `ErrorCategory` sites as follow-on issues.
+- [x] Midgard's `SqlServerContainerFixture.IsSupportedArchitecture` widened to the Windows-on-ARM-only skip (done 2026-10-25, ahead of this phase). The Task 1.3 inventory left no other-realm `ErrorCategory` follow-ons.
 - [ ] Stage; stop.
 
 ## Self-review
