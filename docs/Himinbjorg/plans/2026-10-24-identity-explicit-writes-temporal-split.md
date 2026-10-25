@@ -462,7 +462,7 @@ Phase 4 runs as executable slices: **adopt the packages → fixtures → erasure
 - [ ] Implement:
   - the plaintext diff (§4.2);
   - the credential semantics (§4.4);
-  - the flush (§4.3): one explicit transaction under the provider's retrying strategy built with `maxRetryCount: 0` (G1: EF's `NonRetryingExecutionStrategy` refuses user transactions on a retry-configured context), the `users` statement (`ExecuteUpdate`) only if a column changed, the credentials statement (**raw SQL** in `ProviderStatements`, ruled), commit, then the new stamp and a refreshed baseline;
+  - the flush (§4.3): one explicit transaction under the store's provider-neutral zero-retry `ExecutionStrategy` subclass from Task 4.5 (ruled 2026-10-25; G1: EF's `NonRetryingExecutionStrategy` refuses user transactions on a retry-configured context), the `users` statement (`ExecuteUpdate`) only if a column changed, the credentials statement (**raw SQL** in `ProviderStatements`, ruled), commit, then the new stamp and a refreshed baseline;
   - the definite-failure restore (§4.8).
 - [ ] **V2:** `Flush_outside_a_crypto_scope_throws_from_the_protector`. Widen `NorseUserManager`'s scope if any write path test fails for lack of it.
 - [ ] Checkpoint green. Stage; stop.
@@ -596,7 +596,29 @@ Phase 4 runs as executable slices: **adopt the packages → fixtures → erasure
   | enable 2FA (`EnableAuthenticator.razor` writes `TwoFactorEnabled`) | **+1** | authenticator key token upserted |
   | redeem a recovery code | **0** | token value shrinks by one code |
   | no-op save | **0** | none |
-- [ ] Record the observed table in the task summary. Nothing is staged in Bifröst here.
+- [x] Record the observed table in the task summary. Nothing is staged in Bifröst here.
+
+**Observed (2026-10-25, Postgres, against volumes wiped beforehand; accepted by Buvy as passing):** `InitialCreate` built `norse_identity` from scratch in about 21 s, and the catalog matches §3.1. The steps driven:
+
+| Step | Delta | Result |
+|---|---|---|
+| register | 0 | pass |
+| wrong password | 0, `access_failed_count` +1 through the raw increment | pass |
+| password change | 0, the credentials CAS rotated the hash and stamp | pass |
+| enable 2FA | +1, only the changed column rewritten | pass |
+| no-op save | 0 | pass, but the stock page skips the save, so the store's empty diff is proven by the container suites |
+
+Two steps were **not driven**, because the server-rendered UI blocked them:
+- **email change:** `IdentityNoOpEmailSender` discards the confirmation link;
+- **recovery-code redemption:** a password login for a 2FA user faults with "OnStarting cannot be set because the response has already started" in `SignInManager.IsTwoFactorClientRememberedAsync`, inside an interactive-server circuit.
+
+Both are covered by the container suites on both providers.
+
+UI findings handed to the Heimdall gRPC port (#48 onward), not fixed here:
+1. the 2FA login fault above;
+2. the no-op sender has no development link sink;
+3. the WebAssembly client fails to boot on Chrome 156 ("module uses a mix of legacy and new exception handling instructions", .NET 11 RC2); this is a platform issue, worth its own ticket. As a knock-on, statically rendered Heimdall Fluent inputs carry no `name`, so the forms post empty;
+4. logout from `Manage/EnableAuthenticator` lands on `/Account/InvalidUser`.
 
 ### Task 4.15: Docs and ship
 
@@ -608,7 +630,7 @@ Phase 4 runs as executable slices: **adopt the packages → fixtures → erasure
   - the temporal (7) and non-temporal lists;
   - "Crypto-shred, not tombstone" → hard delete, key first;
   - the store, Outcome-surface and framework-adapter facts;
-  - the `InitialCreate` memorialization sentence.
+  - the `InitialCreate` memorialization sentence: the squash cycle **continues** past this train, and V1 is memorialized only once the Heimdall gRPC conversion of the server components is complete, proven end to end with MAUI-renderable components, and Buvy is happy with the schema (ruled 2026-10-25; it replaces the stale preview-7 trigger). Each squash means wiping the local `norse-pg-primary`/replica volumes before the next Bifröst standup.
 - [ ] Close #47's checklist in the PR description against spec §10.
 - [ ] Stage; stop. **Ship gate (Himinbjörg):** PR merged, CI green, tagged, published.
 
@@ -616,8 +638,8 @@ Phase 4 runs as executable slices: **adopt the packages → fixtures → erasure
 
 ## Phase 5 — Bifröst
 
-- [ ] Pointer bumps for Asgard, Midgard, Urðarbrunnr and Himinbjörg, staged together.
-- [ ] The Bifröst CLAUDE.md/README.md pair: a state-of-the-union entry for this train.
+- [x] Pointer bumps for Asgard, Midgard, Urðarbrunnr and Himinbjörg: not a task. Ginnungagap's `update-bifrost.yml` bumps each pointer on GitHub as each realm releases.
+- [x] The Bifröst CLAUDE.md/README.md pair: a state-of-the-union entry for this train (staged 2026-10-25; commit with the Himinbjörg ship).
 - [x] Midgard's `SqlServerContainerFixture.IsSupportedArchitecture` widened to the Windows-on-ARM-only skip (done 2026-10-25, ahead of this phase). The Task 1.3 inventory left no other-realm `ErrorCategory` follow-ons.
 - [ ] Stage; stop.
 
