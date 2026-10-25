@@ -8,9 +8,9 @@
 
 **Tech Stack:** .NET 11 RC2 (`11.0.100-rc.2.26504.105`), C# 15, EF Core 11 RC2, Npgsql EF 11 RC2, Microsoft.Data.SqlClient, ASP.NET Core Identity 11 RC2 (`Version3` schema), OpenIddict 7.7.x, xUnit v3 on MTP v2, Shouldly, NSubstitute, Testcontainers. The images are `postgres:19rc1` and **`mcr.microsoft.com/mssql/server:2025-latest`** (SQL Server 2025 is the engine floor: the provider forces compatibility level 2025, and the identity schema uses native `json`).
 
-**Spec:** `../specs/2026-10-24-identity-explicit-writes-temporal-split-design.md` (r8). Every §-reference below is to that spec unless marked otherwise.
+**Spec:** `../specs/2026-10-24-identity-explicit-writes-temporal-split-design.md` (r9). Every §-reference below is to that spec unless marked otherwise.
 
-**Plan revision:** r3. It answers the plan reviews (PL1–PL8, then PL3's residue and the receipt clarification), recorded at the end.
+**Plan revision:** r4 (r3 plus the Phase 0 verdict, approved 2026-10-24: Task 3.3 and the new Task 3.5 carry A2, B and the chassis-owned hash function; Task 4.4 carries A1). It answers the plan reviews (PL1–PL8, then PL3's residue and the receipt clarification), recorded at the end.
 
 ## Global Constraints
 
@@ -57,7 +57,7 @@
 | 5 | Bifröst | Phase 4 shipped |
 
 **Re-plan triggers:**
-- G1 fails → raw-SQL statements (Tasks 4.6–4.9 change shape);
+- G1 fails → raw-SQL statements (Tasks 4.6–4.9 change shape). **Fired in part, ruled 2026-10-24:** every `user_credentials` statement, the erasure `DELETE` and the increment are raw SQL in `ProviderStatements`; only the `users` statement stays `ExecuteUpdate` (spec §12 G1);
 - G6 fails → the claims "unresolved" fallback (Task 4.4 drops the hash column; Task 4.8 changes);
 - V7 fails → the passkey guard's premise breaks;
 - **V8 finds an unsupported or unchecked primitive on a supported platform** → stop. That platform is declared unsupported, or Phase 2 is re-planned. It is never given an unchecked fallback.
@@ -176,7 +176,7 @@ Himinbjorg/
 **Prerequisites:** none. **Files:** `Asgard/src/Abstractions.Contracts/ErrorCategory.cs`, its test project.
 
 - [ ] **Failing test:** `Indeterminate_is_twelve_and_every_member_is_explicit`. It asserts the value is 12, the full member list is as expected, and `0..12` is contiguous.
-- [ ] Add the member: `/// <summary>The operation may or may not have taken effect; re-read before acting.</summary>`, plus a `<remarks>` naming commit-acknowledgement loss. If `Outcome`'s wire contract enumerates `ErrorCategory` explicitly (`[ProtoEnum]`/`DataContract`), add the member there and extend the existing round-trip test.
+- [ ] Add the member: `/// <summary>The operation may or may not have taken effect; re-read before acting.</summary>`, plus a `<remarks>` naming commit-acknowledgement loss. **Also the `TransportDispositions.For` arm**, `Indeterminate => new(500, 4, true)` (spec ruling). It is in the same assembly and has no default arm by design, so the enum can't compile without it; a failing `TransportDispositionsTests` case pins it first. If `Outcome`'s wire contract enumerates `ErrorCategory` explicitly (`[ProtoEnum]`/`DataContract`), add the member there and extend the existing round-trip test.
 - [ ] Green. Stage; stop.
 
 ### Task 1.2: `ISubjectKeyStore.DestroyAsync` linearizability contract (docs)
@@ -210,7 +210,7 @@ Himinbjorg/
 
 ### Task 2.2: Checked per-subject lock and startup self-test
 
-**Prerequisites:** Task 2.1 verdict green. **Files:** `UnixFileLock.cs` (`[LibraryImport("libc", SetLastError = true)] static partial int flock(SafeFileHandle fd, int operation);`), `SubjectDestroyLock.cs`, `DevelopmentSubjectKeyStore.cs`, tests under `Infrastructure.Backend.Tests/Keys/`.
+**Prerequisites:** Task 2.1 verdict green for macOS and Linux (Windows is verified on this task's CI leg). **Descriptor ruling (2026-10-24, from V8):** on Unix the lock descriptor comes from libc `open(path, O_RDWR | O_CLOEXEC)`, never from a `FileStream`, because the runtime takes its own unchecked `flock` on every `FileStream` open. The file is ensured to exist first by a .NET open-or-create disposed at once (an `IOException` there means it exists and is held). `O_CLOEXEC` is `0x1000000` on macOS and `0x80000` on Linux. **Files:** `UnixFileLock.cs` (`[LibraryImport("libc", SetLastError = true)]` for the two-argument `open(string path, int flags)` returning `SafeFileHandle`, and `flock(SafeFileHandle fd, int operation)`), `SubjectDestroyLock.cs`, `DevelopmentSubjectKeyStore.cs`, tests under `Infrastructure.Backend.Tests/Keys/`.
 
 - [ ] **Failing tests:**
   - `Lock_held_by_another_handle_in_process_blocks_until_exhaustion`;
@@ -220,13 +220,13 @@ Himinbjorg/
   - `Constructor_succeeds_on_a_local_filesystem`.
 - [ ] Implement `SubjectDestroyLock.AcquireAsync(root, subjectId, cancellationToken)`:
   - a per-subject in-process `SemaphoreSlim` first (ordering only);
-  - then open `{subjectId}.destroy.lock` and take the platform primitive (`flock` with `LOCK_EX | LOCK_NB` on `OperatingSystem.IsMacOS() || IsLinux()`, `FileStream.Lock` on Windows), checking the result on every call;
+  - then ensure `{subjectId}.destroy.lock` exists and take the platform primitive: on `OperatingSystem.IsMacOS() || IsLinux()`, native `open` then `flock` with `LOCK_EX | LOCK_NB`; on Windows, `FileStream` then `FileStream.Lock`. Check the result on every call;
   - bounded retry with backoff; `TimeoutException` on exhaustion;
   - any primitive failure means "not held";
   - return an `IAsyncDisposable` that releases the file lock, then the semaphore;
   - unsupported operating systems throw `PlatformNotSupportedException` from the constructor.
 - [ ] Implement the constructor self-test: a probe file, locked through handle A, must refuse handle B. On failure, throw `InvalidOperationException` naming the root and the supported filesystems.
-- [ ] Green on macOS locally and on the Linux and Windows CI legs. Stage; stop.
+- [ ] Green on macOS locally and on Linux (the `mcr.microsoft.com/dotnet/sdk:11.0.100-rc.2` container locally, then the CI leg). Windows is proven on its CI leg, which also runs the retained V8 probe's Windows half; until it's green, Windows support is unverified. Stage; stop.
 
 ### Task 2.3: Linearizable `DestroyAsync`
 
@@ -246,7 +246,20 @@ Himinbjorg/
   - a pending receipt → delete the key if present, promote, return;
   - the key → mint, write the pending file atomically (temp file, flush, `File.Move(temp, pending, overwrite: false)`), delete the key, promote, return;
   - otherwise → `KeyMissingException`.
-- [ ] The existing `DevelopmentSubjectKeyStore` tests stay green unchanged. Stage; stop. **Ship gate (Midgard):** PR merged, CI green on all three operating systems, tagged, published.
+- [ ] **The lock-free readers (found in review, ruled into this task 2026-10-24):**
+  - `GetAsync`/`GetOrCreateAsync` check **key → pending → receipt**, never receipt before pending. Promotion makes the receipt exist before the pending file disappears, so a reader can't fall between them; the old order let `GetOrCreateAsync` re-key an erased subject. A deterministic reader-checkpoint seam promotes between the checks, and the tests assert `KeyDestroyedException`, no new key file, and `Destroyed`;
+  - `GetOrCreateAsync`'s first mint runs **under the subject's lock** (re-checking key, pending and receipt inside it), then publishes through a write-through temp file and a move. A lock-free `File.Move(overwrite: false)` was tried first and failed its own concurrency test: on Unix, .NET's no-overwrite move is an existence check followed by `rename(2)`, not an atomic no-overwrite, so it can't decide a race. The existing-key read stays lock-free, and `GetOrCreateAsync` can now throw `TimeoutException` on lock exhaustion (an infrastructure failure, nothing minted). This bug predated the plan: `File.WriteAllBytesAsync` let a second concurrent mint overwrite the first. Tests: `Concurrent_first_GetOrCreate_in_process_returns_one_key` and `…_across_processes_returns_one_key`.
+- [ ] The existing `DevelopmentSubjectKeyStore` tests stay green unchanged. Stage; stop.
+
+### Task 2.4: `Indeterminate` at Midgard's transport and telemetry edges
+
+**Prerequisites:** Asgard published with `ErrorCategory.Indeterminate` (Phase 1). These are the two Midgard gaps the Task 1.3 inventory found (ruled into this train 2026-10-24).
+
+- [ ] **Failing tests:**
+  - `Indeterminate_problem_rich_status_carries_DeadlineExceeded` (`ProblemExtensions.ToRpcException`: today `MapToGoogleRpcCode` has no `DeadlineExceeded` arm, so the `google.rpc.Status` trailer says `Unknown` (2) while the outer status says 4);
+  - `Indeterminate_failure_logs_at_warning_with_correlation_id` (`TelemetryBehavior`: today only `Fault` gets the Warning-level, correlation-id log).
+- [ ] Add `StatusCode.DeadlineExceeded => Code.DeadlineExceeded` to `MapToGoogleRpcCode`, and route `Indeterminate` through `TelemetryBehavior`'s Fault-level logging.
+- [ ] Green. Stage; stop. **Ship gate (Midgard):** PR merged, CI green on all three operating systems, tagged, published.
 
 ---
 
@@ -287,6 +300,7 @@ Himinbjorg/
   - `Removing_the_opt_in_emits_disable`;
   - fragment column changes emit plain DDL;
   - one named-diagnostic test per rejected operation: PK change, rename, schema move, computed or identity column on the principal, split or unsplit within one migration.
+- [ ] **G5's confirmed ordering** (spec §6.2, r9): enable names the period defaults `DF_{Table}_SystemPeriodStart`/`End`; disable drops them with `DROP CONSTRAINT IF EXISTS` before the period columns, in one batch; the computed-column rejection names the manual `OFF`-in-its-own-batch sequence. Tests: `Disable_after_enable_drops_the_period_defaults` (an enabled, not created, table disables cleanly), plus the diagnostic text.
 - [ ] Implement, following the PostgreSQL generator's structure and diagnostics (chassis spec §3.3–3.4). Read the PostgreSQL disable path and mirror its history handling; don't re-derive it.
 - [ ] Green. Stage; stop.
 
@@ -302,7 +316,19 @@ Himinbjorg/
   - one test per §6.2 supported operation, applied through generated migrations with history written before and read after;
   - `Enable_on_populated_table_opens_existing_rows_at_enable_time`;
   - `Disable_then_drop_tears_down_cleanly`.
-- [ ] Implement only what the failures demand. Update the Urðarbrunnr README.md/CLAUDE.md pair (the opt-in, the lifecycle, the fixture). Stage; stop. **Ship gate (Urðarbrunnr):** PR merged, CI green, tagged, published.
+- [ ] Implement only what the failures demand. Update the Urðarbrunnr README.md/CLAUDE.md pair (the opt-in, the lifecycle, the fixture). Stage; stop.
+
+### Task 3.5: PostgreSQL generated columns in the chassis (A2) and `norse_utf8_sha256`
+
+**Prerequisites:** Task 3.4. **Files:** the PostgreSQL chassis's trigger emitter (`TemporalSqlEmitter`) and `NorseNpgsqlMigrationsSqlGenerator`, with their tests (unit and container).
+
+- [ ] **Failing tests:**
+  - `No_op_comparison_excludes_stored_generated_columns` (emitted trigger SQL);
+  - `History_insert_copies_generated_columns_from_OLD`;
+  - container: `No_op_update_on_a_table_with_a_generated_column_writes_no_history_row`, plus `Generated_column_value_reaches_history_on_a_real_update`;
+  - `Computed_column_naming_norse_utf8_sha256_emits_the_function_first` (idempotent `CREATE OR REPLACE FUNCTION`, ahead of the table); container: the function exists and is `IMMUTABLE`.
+- [ ] Implement per chassis spec §3.2/§3.4 (amended) and spec §4.6 (r9). The function is emitted only when a computed column's SQL names it.
+- [ ] Green. Update the Urðarbrunnr README.md/CLAUDE.md pair. Stage; stop. **Ship gate (Urðarbrunnr):** PR merged, CI green, tagged, published.
 
 ---
 
@@ -319,13 +345,13 @@ Phase 4 runs as executable slices: **adopt the packages → fixtures → erasure
   - add the Himinbjörg `ErrorCategory.Indeterminate` arms the Task 1.3 inventory listed, each with a failing test first.
 - [ ] The SQL Server model now realizes system-versioning, so **regenerate both providers' `InitialCreate`** (Himinbjörg CLAUDE.md procedure) to clear EF's pending-model-changes check. Postgres should produce an unchanged diff; review both.
 - [ ] `NorseIdentityTemporalModelTests.Sql_server_realizes_the_stamp_as_engine_native_system_versioning` is **rewritten here** to assert the opt-in realization: hidden periods in the migration SQL, and `IsTemporal()` false.
-- [ ] Checkpoint: `dotnet build Himinbjorg.slnx` succeeds. `dotnet test` is green **except exactly the three known pre-existing failures** (`NorseUserRoleConfigureTests`, `NorseRoleConfigureTests`, `NorseUserConfigureTests`). They're carried red by name into Task 4.2, which clears them. Any other red test, or a change in how those three fail, stops the task. Stage; stop.
+- [ ] Checkpoint: `dotnet build Himinbjorg.slnx` succeeds and `dotnet test` is **fully green**, including the rewritten SQL Server temporal test (it was the fourth known failure, red only because of the park). The three Configure-test failures were triaged ahead of this task (see Task 4.2). Stage; stop.
 
 ### Task 4.2: Triage and fixtures
 
 **Prerequisites:** Task 4.1.
 
-- [ ] **Triage the three pre-existing failures carried from Task 4.1** (`NorseUserRoleConfigureTests`, `NorseRoleConfigureTests`, `NorseUserConfigureTests`): fix each, or write up a re-ruling for Buvy (stop if a ruling is needed). From this checkpoint on, nothing is red.
+- [x] **Triage of the three pre-existing failures** (`NorseUserRoleConfigureTests`, `NorseRoleConfigureTests`, `NorseUserConfigureTests`): **done ahead of Task 4.1** (2026-10-24, staged on `feature/access-count-breakout`). Root cause: commit `6eb9ade` removed hand-written `.IsRequired()` per house rules, and those tests built the model with a bare `ModelBuilder()`, which runs no conventions. The model was right. The three relationship tests moved into `NorseIdentityModelTests` against the real per-provider model, with no assertion weakened; no ruling needed.
 - [ ] **`SqlServerIdentityFixture`**: the twin of `PostgresIdentityFixture` (same API, its own dev-keys temp root) on `mssql/server:2025-latest`. On startup it asserts `ProductMajorVersion >= 17` and that the **complete identity migration** applies, including the passkey table's native `json` column.
 - [ ] **Provider-parameterized suites:** an abstract base suite with two `public sealed` derived classes bound to each fixture's collection. Promote `TemporalIdentityVersioningTests` to that shape first; its pinned `A_failed_password_attempt_currently_versions_users` must pass on **both** providers with the current store, which proves the fixture.
 - [ ] **Fixture options:**
@@ -350,12 +376,12 @@ Phase 4 runs as executable slices: **adopt the packages → fixtures → erasure
   - `Lock_exhaustion_maps_to_Fault_not_an_exception`.
   
   The indeterminate-commit erasure case waits for Task 4.9's seam and is added there.
-- [ ] Rewrite `ErasureService.ShredAsync` per §7.1: probe; an unconditional `DestroyAsync` unless `Missing`; an unconditional idempotent transaction (OpenIddict tokens and authorizations by subject, then the `users` row); `Outcome<ErasureReceipt>`. Rewrite the doc comment. Re-point `DeletePersonalData.razor` at `ShredAsync`. Delete the obsolete darken-ceremony tests, replacing each with its hard-delete counterpart.
+- [ ] Rewrite `ErasureService.ShredAsync` per §7.1: probe; an unconditional `DestroyAsync` unless `Missing`; an unconditional idempotent transaction (OpenIddict tokens and authorizations by subject, then the `users` row, through a **raw `DELETE`**: G1 found `ExecuteDelete` is refused for split entities, and the raw delete cascades to every child table); `Outcome<ErasureReceipt>`. Rewrite the doc comment. Re-point `DeletePersonalData.razor` at `ShredAsync`. Delete the obsolete darken-ceremony tests, replacing each with its hard-delete counterpart.
 - [ ] Checkpoint green. Stage; stop.
 
 ### Task 4.4: Email is the username, then model law and migrations (one slice)
 
-**Prerequisites:** Task 4.3. The manager behavior lands **before** the `CHECK` that requires it, in the same slice, against the **old** store. The stock manager's `SetEmailAsync` doesn't touch the username, so `TemporalIdentityVersioningTests.An_email_change_through_the_user_manager_writes_a_closed_version_into_users_history` (which calls `SetEmailAsync` alone) would violate the constraint without it.
+**Prerequisites:** Task 4.3, and Urðarbrunnr Task 3.5 (local workspace crossing; the published package only gates the PR). The manager behavior lands **before** the `CHECK` that requires it, in the same slice, against the **old** store. The stock manager's `SetEmailAsync` doesn't touch the username, so `TemporalIdentityVersioningTests.An_email_change_through_the_user_manager_writes_a_closed_version_into_users_history` (which calls `SetEmailAsync` alone) would violate the constraint without it.
 
 - [ ] **Failing manager tests** (old store, both providers; store-agnostic by construction, because they override at the manager and finish with one `UpdateUserAsync`):
   - `SetEmail_sets_username_and_both_hashes_in_one_operation` (one `users_history` version, equal hashes);
@@ -369,7 +395,8 @@ Phase 4 runs as executable slices: **adopt the packages → fixtures → erasure
   - the unique index on `NormalizedUserName` on the fragment, unfiltered;
   - the `CHECK (normalized_email = normalized_user_name)`;
   - `NorseUserLogin` non-temporal, and the temporal set is exactly 7 tables;
-  - the `claim_value_hash` shadow property (per G6), with its unique index;
+  - the `claim_value_hash` shadow property (`byte[]`, `IsRequired()`), with provider-specific computed SQL (PostgreSQL `norse_utf8_sha256(claim_value)` stored; SQL Server `CAST(HASHBYTES('SHA2_256', [ClaimValue]) AS binary(32))` persisted) and its unfiltered unique index (A1, spec §4.6 r9);
+  - `ClaimValue` required (§14 exemption b);
   - the fragment FK cascading (per G3).
 - [ ] Implement the model changes (spec §3, §3.1, §4.6, with the §14 exemption comments). Remove the filtered index and its comment block from `NorseIdentityDbContext`.
 - [ ] **Regenerate both providers' `InitialCreate` in this same task** and review the DDL diffs against spec §8. The fixture applies checked-in migrations, so every later task runs against the real target schema.
@@ -422,7 +449,7 @@ Phase 4 runs as executable slices: **adopt the packages → fixtures → erasure
 - [ ] Implement:
   - the plaintext diff (§4.2);
   - the credential semantics (§4.4);
-  - the flush (§4.3): one explicit transaction, a forced non-retrying strategy, the `users` statement only if a column changed, the credentials statement, commit, then the new stamp and a refreshed baseline;
+  - the flush (§4.3): one explicit transaction under the provider's retrying strategy built with `maxRetryCount: 0` (G1: EF's `NonRetryingExecutionStrategy` refuses user transactions on a retry-configured context), the `users` statement (`ExecuteUpdate`) only if a column changed, the credentials statement (**raw SQL** in `ProviderStatements`, ruled), commit, then the new stamp and a refreshed baseline;
   - the definite-failure restore (§4.8).
 - [ ] **V2:** `Flush_outside_a_crypto_scope_throws_from_the_protector`. Widen `NorseUserManager`'s scope if any write path test fails for lack of it.
 - [ ] Checkpoint green. Stage; stop.
@@ -439,7 +466,7 @@ Phase 4 runs as executable slices: **adopt the packages → fixtures → erasure
   - `Concurrent_redemption_of_one_code_exactly_one_succeeds`;
   - `Concurrent_redemption_of_different_codes_neither_resurrects`;
   - `Redemption_retry_exhaustion_throws`.
-- [ ] Implement `IncrementAccessFailedCountAsync` and each `RedeemCodeAsync` CAS attempt as **one statement inside its own explicit transaction** (`BeginTransactionAsync` → statement → `CommitAsync`). That gives both operations an observable commit boundary for Task 4.9's seam. The returned count updates the instance and its baseline.
+- [ ] Implement `IncrementAccessFailedCountAsync` and each `RedeemCodeAsync` CAS attempt as **one raw statement inside its own explicit transaction** (the increment via `RETURNING`/`OUTPUT` through an uncomposed `SqlQuery<int>(…).ToListAsync()`: G1 found composition such as `Single()` breaks it) (`BeginTransactionAsync` → statement → `CommitAsync`). That gives both operations an observable commit boundary for Task 4.9's seam. The returned count updates the instance and its baseline.
 - [ ] Checkpoint green. Stage; stop.
 
 ### Task 4.8: Explicit store — child rows, upserts, passkeys
@@ -461,7 +488,7 @@ Phase 4 runs as executable slices: **adopt the packages → fixtures → erasure
   - `Child_intent_then_validation_failure_commits_nothing`.
   
   The last one requires Task 4.10's abandon hook, so it is written in 4.10, not here.
-- [ ] Implement the §4.6 intents and statements.
+- [ ] Implement the §4.6 intents and statements, using G4's proven upsert SQL. On PostgreSQL a unique violation aborts the transaction (G4), so on an enrollment conflict the store **rolls back first**, then reads the existing row to tell an identical replay from a foreign credential.
 - [ ] Checkpoint green. Stage; stop.
 
 ### Task 4.9: Commit outcome contract

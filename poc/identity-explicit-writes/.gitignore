@@ -1,0 +1,4 @@
+src/Spike/bin/
+src/Spike/obj/
+artifacts/
+.tools/

@@ -1,0 +1,30 @@
+services:
+  postgres:
+    image: postgres:19rc1
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: spike
+    ports:
+      - "54339:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2025-latest
+    # No arm64 build exists; Apple silicon hosts run it under amd64 emulation.
+    platform: linux/amd64
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Developer
+      MSSQL_SA_PASSWORD: "Spike!Passw0rd"
+    ports:
+      - "14333:1433"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'Spike!Passw0rd' -Q 'SELECT 1' -b -o /dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 20s

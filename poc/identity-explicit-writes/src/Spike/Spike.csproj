@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFramework>net11.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<LangVersion>preview</LangVersion>
+		<!-- Inside a Bifröst checkout the root Directory.Build.* is inherited; false keeps its NorseRef/analyzer machinery inert. -->
+		<UseProjectReferences>false</UseProjectReferences>
+		<!-- Pinned so a Bifröst checkout (which injects Norse.$(MSBuildProjectName)) and a bare Glitnir clone build the same thing. -->
+		<AssemblyName>Spike</AssemblyName>
+		<RootNamespace>Spike</RootNamespace>
+		<EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<EmbeddedResource Include="Ddl/*.sql" LogicalName="Ddl.%(Filename)%(Extension)" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="11.0.0-rc.2.26504.105" />
+		<PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="11.0.0-rc.2" />
+		<!-- Transitive via Microsoft.Data.SqlClient at 9.0.18 (GHSA-846f-f764-76mx); same lift Urðarbrunnr's SqlServer project applies. -->
+		<PackageReference Include="System.Security.Cryptography.Pkcs" Version="11.0.0-rc.2.26504.105" />
+	</ItemGroup>
+
+</Project>
