@@ -184,6 +184,8 @@ Ciphertext columns are base64 text, not `bytea` — the Identity protector seam 
 
 ### 4.2 Erasure mechanics and re-registration
 
+> **Amended 2026-10-24** (`../../Himinbjorg/specs/2026-10-24-identity-explicit-writes-temporal-split-design.md` §3, §7): erasure is a hard `DELETE`, key destroyed **first**. The darken-in-place ceremony, nullable `NormalizedUserName`, the SQL Server filtered index, and the honest-residue addendum below are superseded: the lookup hashes now live on non-temporal `user_credentials`, so no HMAC survives in history.
+
 The shred ceremony is three acts, the database acts committing before or atomically with the key destruction: **null the current-row lookup hashes**, **rotate the security stamp**, **destroy the per-subject wrapping key** (receipt to Syn). Payload ciphertext stays in place, dark — the documented posture. The stamp rotation is what arms §4.4's session-kill claim: without it, `SecurityStampValidator` revalidation would keep succeeding and a dead user's open browser tab would outlive the person until cookie expiry. With it, every live session is dead within one revalidation interval of shred — and that interval is thereby part of the shred-latency SLA conversation.
 
 **Re-registration works because of the nulling, not key movement.** The lookup keyring is service-level and unchanged by erasure; `HMAC(lookup_key, email)` is identical for the erased registration and tomorrow's re-registration — determinism is the point of the blind index. The old row's hashes are null, so the fresh row inserts cleanly and `FindByEmailAsync` finds exactly one match.
@@ -195,6 +197,8 @@ Schema consequences:
 - **Honest-residue addendum for the doctrine:** temporal history keeps old HMACs, and since the keyring is unchanged, a re-registered email's new hash *equals* the erased user's historical hashes — history access permits inferring "this email belonged to someone who erased." Within the ratified pseudonymous-residue posture; keyring rotation is the documented remedy.
 
 ### 4.3 Temporal posture: everything, with the lockout columns split out
+
+> **Amended 2026-10-24** (`../../Himinbjorg/specs/2026-10-24-identity-explicit-writes-temporal-split-design.md` §3, §6): the side table is `user_credentials` and also carries `PasswordHash`, `SecurityStamp`, `NormalizedEmail`, `NormalizedUserName`. "EF routes the columns" no longer holds: the platform's NoTracking law means the store writes each table explicitly. `user_logins` is non-temporal. SQL Server keeps `users` temporal through `TemporalOnPrincipalTableOnly()`.
 
 The temporal hostage-taker on the users table is two columns of rate-limiter state — `AccessFailedCount`, `LockoutEnd` — which are operational telemetry, not identity record. **EF entity splitting** maps exactly those columns to a non-temporal side table (`user_lockout`, same PK) while the entity stays whole: `UserManager`/`SignInManager` read and write the properties unchanged; EF routes the columns. Users table goes temporal; wrong-password churn never mints a history row; a failed-attempt counter was never "who this person is changed."
 
