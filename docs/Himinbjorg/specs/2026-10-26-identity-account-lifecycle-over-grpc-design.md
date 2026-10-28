@@ -4,7 +4,7 @@
 **Closes:** [Himinbjorg#48](https://github.com/NorseArchitecture/Himinbjorg/issues/48).
 **Depends on nothing open.** **Depended on by:** the OpenIddict authorization-code + PKCE spec ([Himinbjorg#50](https://github.com/NorseArchitecture/Himinbjorg/issues/50), [#52](https://github.com/NorseArchitecture/Himinbjorg/issues/52)) and the MAUI head spec, both unwritten; see §3.
 **Amends:** `../../Heimdall/specs/2026-07-13-authn-identity-split-design.md` §3.2 (the `IAccountService` shape proposed there is superseded by §4); `../../Platform/specs/2026-06-07-auth-design.md` §6 (`IAccountApi` is never built; this is its realization); `2026-10-24-identity-explicit-writes-temporal-split-design.md` §4.12 (the `Components/` IL-scan exemption ends with Train 3); `../../Asgard/specs/2026-08-11-session-transition-seam-design.md` §9 (registration-forces-verification stays parked, §11).
-**Revision:** r3, 2026-10-26 — r1 was the brainstorm verdict; rulings 1–12 were each approved in-session before it was written. r2 answers the first review pass (four findings, verified against the installed `Microsoft.AspNetCore.App 11.0.0-rc.3.26522.148` and `NorseUserStore`): the two-factor challenge carries and validates the security stamp (§5.3), passkey attestation is bound to the principal completing it (§5.5), recovery-code generation preserves the store's commit outcome instead of collapsing it to `Fault` (§5.2), and removing the last usable sign-in method is refused under a row lock (§5.9). r3 answers the second pass: the lossless recovery-code path reaches `NorseUserManager` through an `IRecoveryCodeReplacement` interface declared in `Identity.Outcomes`, because `Identity.Web.Server` already references `Identity.Outcomes` and the view's receiver is `UserManager<NorseUser>` (§5.2).
+**Revision:** r3, 2026-10-26 — r1 was the brainstorm verdict; rulings 1–12 were each approved in-session before it was written. r2 answers the first review pass (four findings, verified against the installed `Microsoft.AspNetCore.App 11.0.0-rc.3.26522.148` and `NorseUserStore`): the two-factor challenge carries and validates the security stamp (§5.3), passkey attestation is bound to the principal completing it (§5.5), recovery-code generation preserves the store's commit outcome instead of collapsing it to `Fault` (§5.2), and removing the last usable sign-in method is refused under a row lock (§5.9). r3 answers the second pass: the lossless recovery-code path reaches `NorseUserManager` through an `IRecoveryCodeReplacement` interface declared in `Identity.Outcomes`, because `Identity.Web.Server` already references `Identity.Outcomes` and the view's receiver is `UserManager<NorseUser>` (§5.2). **Amended 2026-10-28 (Train 3):** amendments A1–A10 of `../plans/2026-10-27-identity-account-lifecycle-train-3.md` are marked inline below, and §15 records Train 3 as built.
 
 ## 1. Context
 
@@ -18,10 +18,10 @@ The 2026-07-13 split spec sketched an `IAccountService` for all of this but neve
 
 1. **Decomposition.** The original ask — all Identity over gRPC *and* a component library for WASM, WebSocket, and MAUI — is three sub-projects: **(A)** the account lifecycle over gRPC (this spec), **(B)** OpenIddict authorization code + PKCE with bearer validation on the gRPC lane, **(C)** the MAUI head. A ships first; B and C get their own specs.
 2. **MAUI sign-in stays the 06-07 §4.2 ruling**: system-browser Authorization Code + PKCE, Login / Register / two-factor web-rendered during the hop, every account-management component native. "Stay signed in" persists the refresh token in `SecureStorage` (Keychain, Android Keystore, DPAPI); the access token lives in memory. Belongs to B/C; recorded here so A's component shapes do not fight it.
-3. **Two contract tiers.** Anonymous-tier operations join `IAuthenticationService` under `AuthNPolicies.Public`. Self-service operations go on a new `IAccountService` under `AuthNPolicies.Account`, which requires a non-anonymous principal (§4.4).
+3. **Two contract tiers.** Anonymous-tier operations join `IAuthenticationService` under `AuthNPolicies.Public`. Self-service operations go on a new `IAccountService` under `AuthNPolicies.Account`, which requires a non-anonymous principal (§4.4). *(Amended 2026-10-28 (Train 3, T3-20): each tier is still one policy, now spread across several contracts. Train 3 adds `ITwoFactorService` and `IPasskeyService` under `AuthNPolicies.Account` and `ISignInMethodsService` under `AuthNPolicies.Public`, and `IAccountService` keeps its eight Train 2 operations. Growing `IAccountService` would have broken the floating `master` builds of Himinbjörg and Bragi between Heimdall's publish and their merges.)*
 4. **The two-factor challenge crosses the wire as a data-protected token**, not a cookie. Login's `RequiresTwoFactor` outcome carries it; the two-factor and recovery-code sign-ins present it with the code. The `TwoFactorUserId` cookie is never written again. Only the remember-this-machine cookie survives, and it rides the deferral (§5.3–§5.4).
 5. **External login**: the OAuth redirect endpoints stay HTTP in Himinbjörg (already hidden from OpenAPI); the `Manage/ExternalLogins` list and remove convert to gRPC. Nothing is deleted that a provider could later need; nothing is ported that nothing renders.
-6. **Three trains by tier** (§9), one fork per realm, serial within a realm. Asgard and Midgard prerequisites front-load into Train 1 so Trains 2 and 3 are pure Heimdall → Himinbjörg → Bragi → Yggdrasil.
+6. **Three trains by tier** (§9), one fork per realm, serial within a realm. Asgard and Midgard prerequisites front-load into Train 1 so Trains 2 and 3 are pure Heimdall → Himinbjörg → Bragi → Yggdrasil. *(Amended 2026-10-28 (Train 3, T3-19): Train 3 ran an Asgard phase (`OutcomeComponentBase.CanAct`) and a Midgard phase (an identity principal's failed page navigation goes to AccessDenied) in front of Heimdall, because dockets 3 and 4 are upstream-shaped. §9 item 3 records the development and release orders.)*
 7. **Registration behavior is unchanged** (parity). Flipping `RequireConfirmedAccount` and real email delivery wait for the messaging realm (§11).
 8. **Story authentication is scenario-driven**: a `FakeAuthenticationStateProvider` yields a fixed principal when the active scenario says signed-in; `FakeAccountService` and `FakeIdentityService` are stateless and keyed off scenario enums (§7).
 9. **Manage reads are page-per-operation plus one `GetAccountStatus` query** that feeds the status pages; email and phone come from the existing `IIdentityService.GetMyPersonalData`.
@@ -65,6 +65,8 @@ Every record is `[DataContract] sealed record` with `[DataMember(Order = n)]`. E
 
 ### 4.3 `IAccountService` (new; `[ServiceContract(Name = "grpc.account.v1.AccountService")]`; policy `AuthNPolicies.Account`)
 
+*Amended 2026-10-28 (Train 3, T3-20): the policy names the tier, not the contract. `AuthNPolicies.Account` now covers `IAccountService`, `ITwoFactorService` and `IPasskeyService`; the Train 3 rows below moved to those contracts (see the note after the table).*
+
 **Train 2**
 
 | Operation | Request | Returns |
@@ -93,6 +95,12 @@ Every record is `[DataContract] sealed record` with `[DataMember(Order = n)]`. E
 | `AddPasskey` | `{ CredentialJson, AttestationState }` | `PasskeyEntry` (so the client can route to rename) |
 | `RenamePasskey` | `{ CredentialId, Name }` | `BoolResponse` |
 | `RemovePasskey` | `{ CredentialId }` | `BoolResponse` |
+
+*Amended 2026-10-28 (Train 3, T3-20, T3-10, T3-2): the Train 3 rows moved to three new contracts (seven, six and three operations), and `IAccountService` stays at eight.*
+- *`ITwoFactorService` (`grpc.twofactor.v1.TwoFactorService`, `AuthNPolicies.Account`): `GetAuthenticatorSetup`; `EnableAuthenticator` → `NavigationResult`; `RevealRecoveryCodes { Handoff }` → `RecoveryCodesResponse` (new); `ResetAuthenticator`; `DisableTwoFactor` → `NavigationResult`; `GenerateRecoveryCodes`; `ForgetTwoFactorClient`.*
+- *`IPasskeyService` (`grpc.passkey.v1.PasskeyService`, `AuthNPolicies.Account`): `GetPasskeys`; `GetPasskey { CredentialId }` → `PasskeyEntry` (new); `GetPasskeyCreationOptions`; `AddPasskey` → `NavigationResult`; `RenamePasskey` → `NavigationResult`; `RemovePasskey` → `BoolResponse`.*
+- *`ISignInMethodsService` (`grpc.signinmethods.v1.SignInMethodsService`, `AuthNPolicies.Public`, all new): `GetSignInMethods { ReturnUrl }` → `SignInMethodsResponse { PasswordSignInUrl, PasskeySignInUrl, Providers[] { DisplayName, StartUrl } }`; `GetPasskeyRequestOptions` → `{ OptionsJson, AssertionState }`; `PasskeySignIn { CredentialJson, AssertionState, RememberMe, ReturnUrl }` → `NavigationResult`.*
+- *`PasskeyEntry` carries a server-built `RenameUrl`, because the client authors no flow URL (T3-10). `LoginRequest` gains `ReturnUrl` (Order 4, T3-2).*
 
 ### 4.4 Policy: the anonymous principal is authenticated
 
@@ -124,6 +132,8 @@ The lossless path crosses an assembly boundary: `UserManagerOutcomeView` lives i
 
 `SignInManagerOutcomeView` (`Identity.Web.Server`) gains `TwoFactorChallengeSignInAsync`, `RecoveryCodeChallengeSignInAsync`, `ExternalLoginSignInAsync`, `MakePasskeyCreationOptionsAsync`, `PerformPasskeyAttestationAsync`. Attestation-failure mapping lives here, not in `Identity.Outcomes`, which is non-web and cannot see `Microsoft.AspNetCore.Identity`. `IdentityOutcomeMap` gains exactly one row, `NorseIdentityErrorCodes.LastSignInMethod → Conflict` (§5.9); `Every_IdentityErrorDescriber_code_has_an_explicit_mapping` stays green untouched.
 
+*Amended 2026-10-28 (Train 3, T3-13, T3-15, T3-18): the views also gained a passwordless `CreateAsync(user)` for external registration, `ProvisionAuthenticatorKeyAsync`, `ExternalLoginSignInAsync`, and the passkey views over T3-15's manager methods. `ProvisionAuthenticatorKeyAsync` provisions a missing authenticator key losslessly through `IAuthenticatorKeyProvisioning` without rotating the stamp. It is a conditional write that stores the key only where it is still null and answers the stored key, so two first setups in two tabs answer the same key. Both challenge redemptions return the landing carried inside the challenge token.*
+
 Read-only manager calls (`HasPasswordAsync`, `CheckPasswordAsync`, `IsEmailConfirmedAsync`, `GetTwoFactorEnabledAsync`, `GetAuthenticatorKeyAsync`, `CountRecoveryCodesAsync`, `GetLoginsAsync`, `GetPasskeysAsync`, `VerifyTwoFactorTokenAsync`, `Generate*TokenAsync`, …) stay raw: they operate on an already-materialized instance and need no `KeyDestroyedException` fold.
 
 ### 5.3 `NorseSignInManager`: the two-factor challenge
@@ -139,6 +149,11 @@ Read-only manager calls (`HasPasswordAsync`, `CheckPasswordAsync`, `IsEmailConfi
 
 The `SignInManager` internals this reproduces (`DoTwoFactorSignInAsync`, `StoreRememberClient`) must be re-verified by decompile against the installed `Microsoft.AspNetCore.App 11.0.0-rc.3` before coding — the ritual `NorseSignInManager.cs` already records.
 
+*Amended 2026-10-28 (Train 3, T3-15, T3-18, T3-21):*
+- *`NorseSignInManager` holds three time-limited protectors, for the two-factor challenge, the passkey attestation and the passkey assertion, plus the one-shot recovery-codes handoff (T3-12). The passkey manager methods carry T3-15's names, distinct from the base.*
+- *The challenge payload is now `v2|userId|stamp|1/0|provider|returnUrl` (split count 6), so the landing crosses the challenge. A v1 token is refused like an expired one.*
+- *External login requires the second factor. The `/Account/ExternalLogin` callback signs in with `bypassTwoFactor: false` and clears the external cookie before the challenge redirect. `NorseSignInManager.ExternalLoginSignInAsync` throws `InvalidOperationException` if it is ever passed `true`, so no path can regrow the scaffold's bypass.*
+
 ### 5.4 Remember-this-machine and deferred completion
 
 `RememberTwoFactorClientAsync` and `ForgetTwoFactorClientAsync` are the two raw cookie writes left after the `TwoFactorUserId` cookie dies. Both are overridden: when the response has not started they write directly; otherwise they stash under `IdentityConstants.TwoFactorRememberMeScheme` through `IDeferredSignIn`. `RefreshSignInAsync` needs no override — the base authenticates the identity cookie (present on both lanes) and calls the virtual `SignInWithClaimsAsync`; a test pins that it reaches the stash. Operations that rotate the security stamp (`SetPhoneNumber`, `ChangePassword`, `SetPassword`, `RemoveExternalLogin`, `ConfirmEmailChange`, `ResetAuthenticator`) refresh the sign-in and return `NavigationResult`; without the refresh, revalidation signs the user out within thirty minutes.
@@ -147,7 +162,14 @@ A two-factor login with "remember this machine" on a circuit stashes two sign-in
 
 ### 5.5 Passkeys
 
-`IPasskeyHandler<NorseUser>` is public in the installed Identity: `MakeCreationOptionsAsync(PasskeyUserEntity, HttpContext)` → `{ CreationOptionsJson, AttestationState }` and `PerformAttestationAsync(PasskeyAttestationContext)`. `NorseSignInManager.MakePasskeyCreationOptionsAsync(user)` calls the handler and protects `AttestationState` with the second protector; `PerformPasskeyAttestationAsync(credentialJson, protectedState)` unprotects and completes. **The ceremony is bound to the account completing it.** The framework's attestation state carries the `UserEntity` the options were made for and `PerformAttestationAsync` hands it back beside the credential, but nothing in the framework compares it with the caller; the scaffold's `AddOrUpdatePasskeyAsync(currentUser, result.Passkey)` would attach a credential minted under A's user handle to B whenever B submits A's untampered ceremony. `AddPasskeyHandler` therefore requires `result.UserEntity.Id` to equal the principal-derived user id before `AddOrUpdatePasskeyAsync`, answering `Forbidden` otherwise. This bypasses the base `MakePasskeyCreationOptionsAsync` / `PerformPasskeyAttestationAsync`, which persist the state in a private data-protected cookie between the two requests — stateless on the server, consistent with ruling 4. The `/Account/PasskeyCreationOptions` and `/Account/PasskeyRequestOptions` endpoints are deleted (the second is used by nothing). Passkey *login* (`PasskeySignInAsync`) is not in scope; `passkeys.js` keeps a `request` export for that follow-on.
+`IPasskeyHandler<NorseUser>` is public in the installed Identity: `MakeCreationOptionsAsync(PasskeyUserEntity, HttpContext)` → `{ CreationOptionsJson, AttestationState }` and `PerformAttestationAsync(PasskeyAttestationContext)`. `NorseSignInManager.MakePasskeyCreationOptionsAsync(user)` calls the handler and protects `AttestationState` with the second protector; `PerformPasskeyAttestationAsync(credentialJson, protectedState)` unprotects and completes. **The ceremony is bound to the account completing it.** The framework's attestation state carries the `UserEntity` the options were made for and `PerformAttestationAsync` hands it back beside the credential, but nothing in the framework compares it with the caller; the scaffold's `AddOrUpdatePasskeyAsync(currentUser, result.Passkey)` would attach a credential minted under A's user handle to B whenever B submits A's untampered ceremony. `AddPasskeyHandler` therefore requires `result.UserEntity.Id` to equal the principal-derived user id before `AddOrUpdatePasskeyAsync`, answering `Forbidden` otherwise. This bypasses the base `MakePasskeyCreationOptionsAsync` / `PerformPasskeyAttestationAsync`, which persist the state in a private data-protected cookie between the two requests — stateless on the server, consistent with ruling 4. The `/Account/PasskeyCreationOptions` and `/Account/PasskeyRequestOptions` endpoints are deleted (the second is used by nothing). ~~Passkey *login* (`PasskeySignInAsync`) is not in scope; `passkeys.js` keeps a `request` export for that follow-on.~~
+
+*Amended 2026-10-28 (Train 3, T3-15, T3-31, T3-32, T3-33, T3-16):*
+- *Passkey sign-in is in scope and shipped. Registration runs through `CreatePasskeyOptionsAsync`/`AttestPasskeyAsync`, and sign-in through `CreatePasskeyRequestOptionsAsync`/`PasskeyAssertionSignInAsync`. The IL scan bans the five base passkey members by name.*
+- *`IdentityPasskeyOptions.UserVerificationRequirement = "required"`. Passkey sign-in uses `bypassTwoFactor: true`, because a user-verifying passkey is possession plus inherence and so counts as MFA. That is the value the framework's own `PasskeySignInAsync` passes (the 4.6 decompile, §15).*
+- *The assertion is one-shot. Its unprotected state is consumed in the `consumed_passkey_challenges` ledger, by a set-based conditional insert, before the handler runs. The ledger is non-temporal runtime state, like `verification_cursors`.*
+- *Attestation is not one-shot, and a replay is **refused, not re-saved** (this corrects T3-32's "re-saves"). The framework handler fails a credential that is already registered with `CredentialAlreadyRegistered`, which reaches the caller as `Validation`. An untampered ceremony first submitted by another account is still refused by the `UserEntity.Id` binding.*
+- *The server enforces the cap of 100 passkeys (`Conflict`), and the client hides Add at the cap.*
 
 ### 5.6 Erasure front door
 
@@ -163,6 +185,13 @@ Already hidden: `MapAdditionalIdentityEndpoints` returns `accountGroup.ExcludeFr
 - `/connect/token`, `/_auth/complete` — unchanged.
 
 Deleted: both passkey endpoints and `POST /Account/Logout` (once `Yggdrasil/src/Hosting.Web.Components/Layout/NavMenu.razor` switches to Heimdall's `Logout.razor`, which already calls `IAuthenticationService.Logout`). `IdentityComponentsEndpointRouteBuilderExtensions` becomes `ExternalLoginEndpointRouteBuilderExtensions.MapNorseExternalLoginEndpoints()`.
+
+*Amended 2026-10-28 (Train 3, T3-34, T3-29, T3-18):*
+- *The surviving non-gRPC surface is the fail-closed `GET /Account/PerformExternalLogin`, the fail-closed `LinkExternalLogin` GET pair and the `/Account/ExternalLogin` callback page, plus the unchanged `/connect/token` and `/_auth/complete`. The POST start and `TemporaryFluentButtonFix` are gone.*
+- *Both GET starts proceed only for `Sec-Fetch-Site: same-origin` or `none`. Anything else, an absent header included, challenges nothing, so a browser without Fetch Metadata cannot start external sign-in.*
+- *`ReturnUrls.Resolve` refuses every external-login route as a landing. The routes come from one set of constants, and a fact enumerates every GET the mapping registers, so no same-origin hop can launder a cross-site start.*
+- *Providers are configuration-driven OIDC schemes, one per `Identity:ExternalProviders:{Name}` section. The per-scheme `OnTokenValidated` reads the provider-verified email from the validated id token's `email`/`email_verified` into `AuthenticationProperties` (`Norse.Identity.VerifiedEmail`), never into a claim. This corrects the plan's Task 4.8 mapping of `email` to `ClaimTypes.Email`: ClaimActions run only over user-info, which is never fetched, and NORSE070 bans `JsonElement`. The same event binds the provider key from the token's single `sub` (`BindProviderKey`).*
+- *External registration accepts only that verified email. Without one it renders a fixed refusal and creates nothing.*
 
 ### 5.8 Pages retired without a port
 
@@ -195,6 +224,13 @@ Pages that load state and then submit (profile, Email, ChangePassword, SetPasswo
 | Stays on the page | `BoolResponse` / payload | in-place status or rendered payload |
 
 The post-reload message for the refresh family is `?status=<key>` on the server-authored `NextUrl` (`password-changed`, `password-set`, `phone-updated`, `email-changed`, `external-login-removed`, `authenticator-reset`); `Heimdall/src/AuthN.Components/Shared/ManageStatus.cs` maps key to text. The server remains the only author of URLs.
+
+*Amended 2026-10-28 (Train 3, T3-10, T3-11, T3-12): the Train 3 continuations are:*
+- *`ISessionTransition.Begin(result)`: `EnableAuthenticator`, `ResetAuthenticator`, `DisableTwoFactor`, `ForgetTwoFactorClient`, `PasskeySignIn`. `DisableTwoFactor` moves up from the second row, because every stamp-rotating Train 3 operation now refreshes the sign-in.*
+- *Soft `NavigateTo(result.NextUrl)`: `AddPasskey`, `RenamePasskey`.*
+- *In place: `GetAuthenticatorSetup`, `GenerateRecoveryCodes`, `RevealRecoveryCodes`, `GetPasskeys`, `GetPasskey`, `RemovePasskey`, `GetPasskeyRequestOptions`, `GetPasskeyCreationOptions`, `GetSignInMethods`.*
+- *A full page load: each provider's `StartUrl` (an HTTP endpoint).*
+- *New status keys: `authenticator-verified`, `two-factor-disabled`, `browser-forgotten`, `passkey-updated`, `external-login-failed` and `recovery-codes-failed`. `authenticator-reset` is now emitted.*
 
 ### 6.4 Placement and authorization
 
@@ -235,7 +271,7 @@ Each hop is the usual gate: PR merged, CI green, tagged, published. One fork per
 
 1. **Prerequisites + anonymous tier + plumbing.** Asgard (`NorseRoles.Anonymous`) → Midgard (alias; client-side policy emitter) → Heimdall (seven `IAuthenticationService` operations, records, validators; `AuthNPolicies.Account` declared; `IdentityPolicies.Self` hardened; `ForgotPassword`, `TwoFactorForm`, `RecoveryCodeForm`, `ResetPasswordForm`, `ConfirmEmailPanel`, `ConfirmEmailChangePanel`, `ResendEmailConfirmation` and their shims) → Himinbjörg (view methods, `NorseSignInManager` challenge and deferral overrides, `DeferredCompletion`, seven handlers, `LoginHandler` challenge URL, deletion of the seven scaffold pages plus `InvalidUser` and `RegisterConfirmation`) → Bragi → Yggdrasil (bumps, client `AddNorsePolicies()`).
 2. **Account core.** Heimdall (`IAccountService` Train 2 operations, `ManageLayout` / `ManageNavMenu`, `Manage/_Imports`, profile, Email, ChangePassword, SetPassword, ExternalLogins, DeletePersonalData, `ManageStatus`, `PersonalData` move) → Himinbjörg (`Account/` handlers, `AccountService`, erasure front door, Manage page deletions, the `LinkExternalLogin` GET pair) → Bragi (`FakeAccountService`, `FakeIdentityService`, `FakeAuthenticationStateProvider`, `StoryShellLayout`, stories) → Yggdrasil.
-3. **Two-factor + passkeys + retirement.** Heimdall (Train 3 operations, `passkeys.js`, TwoFactorAuthentication, EnableAuthenticator / `VerifyAuthenticatorForm`, ResetAuthenticator, Disable2fa, GenerateRecoveryCodes, Passkeys, RenamePasskey) → Himinbjörg (handlers, passkey pair, `ExternalLogin` callback relocated, `Components/` deleted with both passkey endpoints and `POST /Account/Logout`, IL-scan exemption removed, `ci.yml minimum_coverage` ratcheted, README / CLAUDE.md pair) → Bragi → Yggdrasil (`App.razor` script, `NavMenu` logout, endpoint rename, CLAUDE.md row).
+3. **Two-factor + passkeys + retirement.** Heimdall (Train 3 operations, `passkeys.js`, TwoFactorAuthentication, EnableAuthenticator / `VerifyAuthenticatorForm`, ResetAuthenticator, Disable2fa, GenerateRecoveryCodes, Passkeys, RenamePasskey) → Himinbjörg (handlers, passkey pair, `ExternalLogin` callback relocated, `Components/` deleted with both passkey endpoints and `POST /Account/Logout`, IL-scan exemption removed, `ci.yml minimum_coverage` ratcheted, README / CLAUDE.md pair) → Bragi → Yggdrasil (`App.razor` script, `NavMenu` logout, endpoint rename, CLAUDE.md row). *(Amended 2026-10-28 (Train 3, T3-19): the **development** order is Asgard → Midgard → Heimdall → Himinbjörg → Bragi → Yggdrasil. The **release** order is Asgard, Midgard, then Heimdall → Bragi → Himinbjörg, then Yggdrasil. Login now injects `ISignInMethodsService`, so Bragi's floating `master` is red from Heimdall's publish until Bragi's Train 3 PR merges, an accepted window. Himinbjörg squashes `InitialCreate` once; wipe the local Postgres volumes after pulling it.)*
 
 ## 10. Testing
 
@@ -256,6 +292,12 @@ Tests first, every task (house rule). Shapes by layer:
 - **Passkey login, MAUI passkeys, and `ValidateOrigin` / `ServerDomain`** for non-browser clients are follow-ons.
 - **The authenticator issuer literal** (`Microsoft.AspNetCore.Identity.UI`) is what existing authenticator entries display; renaming it is a UX decision, not parity.
 - **The periodic verification job** house law §2.2 asks for on the last-sign-in-method invariant (§5.9) does not exist yet; the query is written as a test fact here and promoted to a job when the platform has a worker to run it.
+
+*Amended 2026-10-28 (Train 3):*
+- *Closed: `returnUrl` is honored (T3-2). Every stamp-rotating Train 3 operation refreshes the sign-in, and new recovery codes survive the reload in a one-shot handoff (T3-12, T3-35). Passkey login shipped (T3-31 to T3-33). The authenticator issuer is required configuration, `Identity:Authenticator:Issuer` (T3-27). The verification job exists: "a worker to run it" becomes "the web host runs it" (T3-28).*
+- *Out of scope: email delivery, `RequireConfirmedAccount` and `RegisterConfirmation` (the messaging realm); the tracking-consent gate (removing it is a no-op, since no realm calls `UseCookiePolicy`); MAUI and non-browser passkeys, `ValidateOrigin`/`ServerDomain` (sub-project C).*
+- *Parked: throttling of ChangePassword, DeletePersonalData and ChangeEmail confirmations, until the platform rate-limits its whole API footprint (T3-1, Buvy).*
+- *Moved: step-up re-authentication to Train 4 (T3-37); the local walk of external register, sign-in and the second factor after the provider to Train 5 (T3-36).*
 
 ## 12. Alternatives rejected
 
@@ -318,3 +360,106 @@ Train 2 built the account core as §9 lists it. The end-to-end walk found the la
   - The old login then fails, and `users` and `user_credentials` hold no row for the subject. The dev key store keeps a destroy receipt where the subject's key was, so the `users_history` versions left behind are ciphertext with no key.
 - **Signed-out `/Account/Manage`:** passed after Ruling 44. Both the no-cookie and the anonymous-cookie visitor get a 302 to `/Account/Login?ReturnUrl=%2FAccount%2FManage`; the same request with `Accept: application/json` keeps the bare 403.
 - **Logout from a Manage page:** passed after Ruling 44. `POST /Account/Logout` redirects back to the page it was posted from, which now challenges to `/Account/Login?ReturnUrl=…` instead of rendering the browser's error page. Who owns the logout endpoint is Train 3's question (§9).
+
+## 15. Train 3 as built (2026-10-28)
+
+Train 3 built two-factor management, passkey management, passkey sign-in and the scaffold retirement as §9 item 3 lists it, as amended (A1–A10, marked inline above). It ran 31 tasks across Asgard, Midgard, Heimdall, Himinbjörg, Bragi and Yggdrasil. The plan is `../plans/2026-10-27-identity-account-lifecycle-train-3.md`. Every task ruling this section cites (T3-n) is recorded in the plan or inline here. Bifröst's AppHost is unchanged, and no third-party container was added (T3-29).
+
+**What was built:**
+- **Upstream.** Asgard: `OutcomeComponentBase.CanAct => RendererInfo.IsInteractive && !IsDispatching`, superseding Ruling 49 (T3-4). Midgard: an identity principal's page navigation that fails a policy is forbidden through the identity cookie, which redirects to `/Account/AccessDenied`; every other forbid of an identity principal stays a bare 403 (T3-3). This amends `../../Platform/specs/2026-08-21-principal-at-the-door-design.md` again.
+- **Heimdall.** The three contracts (seven, six and three operations), sixteen records and seven validators. Nine pages: the two-factor and passkey Manage pages and `/Account/LoginWithPasskey`. `RecoveryCodesHandoff`, the `SignInMethodLinks` loader, `NotAuthorizedRedirect` and `passkeys.js`. Every click trigger binds `Disabled="!CanAct"`, locked by `ClickStaticRenderLockTests`.
+- **Himinbjörg.**
+  - The services and handlers (37 handlers in all, up from 21), built on `AccountCaller` and `ManageUrls`. `ReturnUrls.Resolve` decides every landing.
+  - Stateless passkey ceremonies with the consumed-challenge ledger. The recovery-codes handoff. The QR code rendered server-side by QRCoder as an SVG data source, never `MarkupString` (T3-14).
+  - Configuration-driven OIDC providers behind the fail-closed GET starts. The external-login callback, rebuilt on the `.Outcome` views at `ExternalLogin/ExternalLoginCallback.razor`.
+  - The stranded-account verification service.
+  - `Components/` is deleted (fifteen files and three helpers). The IL-scan exemption went with it: the eleven raw calls it excused were all in `Components/`.
+- **Bragi.** The click driver settles without a mutation, and `StoryDriver` turns a `JSException` into `failed` with the reason logged and rendered. Ruling 33's two stories are back. Three fakes and nine stories, with locks that render the compiled `.stories.razor`.
+- **Yggdrasil.** Composes `AddNorseExternalProviders` and `MapNorseExternalLoginEndpoints`. Removes `IdentityRedirectManager` and the `PasskeySubmit.razor.js` script. Points the nav's logout at Heimdall's `Logout.razor`. Supplies `Identity:Authenticator:Issuer = "Norse"` in Development. Adds lane facts over the composed wire (6.1): every fact rides a gRPC channel over HTTP/2, and the final wave runs the two-factor lifecycle, the passkey management lane and the anonymous sign-in methods over gRPC-Web too, through Midgard's `GrpcWebCallInvoker` on a plain `HttpClient`, as `Hosting.Web.Client/Program.cs` composes it. That proves the WASM client's wire leg against the real host, not the WASM render. Gates the nav's Manage and Logout block on `AuthNPolicies.Account` (final wave), labeled by the email claim, then the name, then "Account".
+
+**As-built rulings that changed or decided spec-level behavior:**
+- **Passkey sign-in uses `bypassTwoFactor: true`.** A user-verifying passkey counts as MFA (T3-31 with T3-33). `isPersistent` follows the wire's `RememberMe`, as Login does, where the base `PasskeySignInAsync` is never persistent. `PasskeySignInHandler` keeps its two-factor branch, now unreachable, with a comment naming this ruling. Flipping the ruling is one argument and one test name (`A_two_factor_account_signs_in_without_the_challenge`).
+- **External login stays at `bypassTwoFactor: false` (T3-18).** `NorseSignInManager.ExternalLoginSignInAsync` throws if it is ever passed `true`. The RC3 three-argument overload forwards `false`, which a guard fact pins.
+- **External registration accepts only a provider-verified email.**
+  - The email is read from the validated id token's `email`/`email_verified` into `AuthenticationProperties` (`Norse.Identity.VerifiedEmail`), never from claims. The callback page reads only that item, so no token claim in any casing can supply or vouch for the address.
+  - The provider key is bound from the token's single `sub` (`BindProviderKey`). It removes every `NameIdentifier` claim case-insensitively, then adds exactly one from `sub`. A missing or non-single `sub` fails the sign-in, which shows the fixed `RemoteError` text. A numeric `sub` is read as its string; a date-shaped one is refused, which fails closed.
+  - Duplicate `email` keys in one signed token resolve last-wins, deterministically. Only the signing provider could emit one.
+  - Registration creates a new unconfirmed user, sends the confirmation link, and signs in, because the provider vouched for the address. This differs from password Register, which lands on Login. A provider email never links an existing account: a duplicate email fails `CreateAsync`, so there is no takeover path. An unverified email renders the refusal in place, on GET and POST, and creates nothing.
+- **`ReturnUrls` refuses external-login routes as landings.** Validation is path-only (T3-2, Buvy r6). PathBase containment is case-sensitive: a miss lands on the app root, the safe direction.
+- **Concurrent first authenticator setups** answer the same stored key, through a conditional write pinned on both providers.
+- **The ledger runs under the context's execution strategy**, not zero-retry. A retried insert that had landed reads as a replay, so the one-shot fails closed: a legitimate sign-in is asked to retry, and nothing is ever let through twice.
+- **Visibility.** `ExternalProviders.VerifiedEmailItem`, `RedirectRemoteFailure` and `ConfigureRemoteFailure`, and `NorseSignInManager`'s item name, ceremony purposes and attestation message, are internal (§2.3; the plan is amended as built). `IPasskeyChallengeLedger` is public, because the public `NorseSignInManager` constructor takes it; its implementation stays internal. `IStrandedAccountsQuery` stays internal, with a hand-written test double, because public-for-testability is never justified.
+- **The invariant verification job runs in the web host (T3-28).** `Interval` is validated on start: above zero and at most one day. Yggdrasil proves the composition through the public `norse.identity.stranded_accounts` gauge, with the real service enabled on the Postgres lane host. It uses no reflection into Himinbjörg internals.
+- **Himinbjörg's coverage floor is 85 (T3-22).** CI instruments only the six `Norse.Identity.*` assemblies. Measured that way, branch coverage is 87.2%, rounded down to 5.
+- **Passkeys are never an account's sole credential.** They do not count in §5.9's guard (T3-30), and `RemovePasskey` carries no last-credential guard. A later passkey-only account path must add one.
+- **Attestation store faults surface as `Validation`,** because the framework handler folds every unexpected exception into a failed result. The user-facing text is accepted. The failure's exception is logged at Information on both ceremonies, so a store fault is diagnosable.
+- **Hardening landed in the final wave.** User verification is pinned through `PostConfigure`, so no host `Configure` can relax it. The ledger prune keeps rows five minutes past expiry (`SkewMargin`), so a state still valid under clock skew cannot replay. No OIDC scheme reads the user-info endpoint, and every claim action onto `email` or the name identifier is removed (the stock `sub` action stays, mapping only `sub`, and claim actions run only over user-info anyway). A provider name outside `[A-Za-z0-9_-]+`, or one whose derived paths collide with another provider's or a reserved platform path, fails at registration. `ExternalLoginRoutes.All` is immutable. A key provisioning whose write leaves no key stored fails closed (`AuthenticatorKeyNotStored`, a `Fault`). Enable's code step and Reset's key step log a caught `DbException` at Warning, with the exception, before landing as they did. Midgard's `/_auth/complete` lands only on a single-slash-rooted local path, decoded or not, and on the app root otherwise. Heimdall's `NotAuthorizedRedirect` carries the local return URL to AccessDenied, and `PersonalData`'s download moved onto `OutcomeComponentBase`.
+- **Forget this browser renders whenever the machine is remembered,** not only under two-factor-enabled. The cookie exists either way, and clearing it is harmless.
+
+**Dockets 1–9 (Train 2):**
+
+| Docket | Ruling | Disposition |
+|---|---|---|
+| 1 Throttling | T3-1 | parked (Buvy) until the platform rate-limits its whole API footprint |
+| 2 `returnUrl` | T3-2 | closed: honored after password, two-factor, recovery-code, passkey and external sign-in (3.3, 3.10, 4.3, 4.10, 4.11) |
+| 3 AccessDenied | T3-3 | closed on both lanes (2.1, 3.3), carrying the local return URL (final wave); the terminus is accepted until the refactor load drops |
+| 4 Click static render | T3-4 | closed: `CanAct` (1.1), adopted by every click trigger (3.4) |
+| 5 `ManageNavMenu` | T3-5 | stays static; a fact asserts every `Href` routes to a Heimdall page (3.9) |
+| 6 Link failure keys | T3-6 | closed: `external-login-not-added` only for `LoginAlreadyAssociated`, `external-login-failed` for every other definite failure, no key when indeterminate (4.8) |
+| 7 Click driver | T3-7 | closed: settles without a mutation; Ruling 33's two stories return (5.1) |
+| 8 `InteractiveBunitContext` | T3-8 | parked (Buvy) until Asgard has shared test behaviors |
+| 9 Bifröst pair | T3-9 | closed: Trains 1, 2 and 3 entered in Bifröst's README.md and CLAUDE.md in one change (6.3) |
+
+**The 4.6 decompile record.** These findings come from ilspycmd over the installed `Microsoft.AspNetCore.App 11.0.0-rc.3.26522.148`. None of them changed the design.
+- **T3-31's value.** The base `PasskeySignInAsync` runs `RetrievePasskeyAuthenticationInfoAsync`, `PerformPasskeyAssertionAsync`, `PreSignInCheck`, then `AddOrUpdatePasskeyAsync` (the sign-count update). It ends with `SignInOrTwoFactorAsync(user, isPersistent: false, loginProvider: null, bypassTwoFactor: true)`. So the recorded value is **`true`**. The sign-in is never persistent, there is no lockout reset, and a failure does not count toward lockout.
+- **The UV enforcement point.** `VerifyAuthenticatorData` runs on both attestation and assertion. When `UserVerificationRequirement` is `"required"`, a missing UV flag throws `UserNotVerified`. The same check rejects user-not-present, an RP id hash mismatch, and backed-up-but-not-eligible. The option also flows into the browser JSON. RC3 already defaults it to `"required"`, and T3-33 pins it explicitly.
+- **RP id and origin.** The RP id is `ServerDomain ?? Request.Host.Host`. With no `ValidateOrigin` delegate, the client data's `origin` must equal the request's single `Origin` header. The 6.2 walk proved that a Blazor Server circuit carries it, so no `ServerDomain` configuration was needed.
+- **Attestation replay.** `PerformAttestationCoreAsync` refuses an existing credential with `CredentialAlreadyRegistered` (A4's correction of T3-32).
+- **Why the base members are banned.** The base `Make…OptionsAsync` and `Perform…Async` keep ceremony state in a `TwoFactorUserIdScheme` sign-in, a cookie write a circuit cannot make. The assertion state is JSON `{challenge, userId?}`, so the ledger hashes the UTF-8 bytes of the unprotected state, which are identical on every replay.
+
+**End to end through Bifröst (Task 6.2).**
+- **Stand-up.** The walk ran against a disposable Postgres (`postgres:19rc1`, the image `AppHost.cs` uses, no named volume), with Yggdrasil's migrations service and then its web server run directly. The human owns the wipe of the `norse-pg-primary`/`norse-pg-replica` volumes owed after the 4.9 `InitialCreate` squash. The full `dotnet run --project src/Orchestration.AppHost` stand-up is owed after that wipe.
+- **T3-23 re-check.** `DotNetVersion` is still `11.0.0-rc.3.26522.148`, and Playwright's Chromium major is still 156. The environment limit stands. The Server column was walked with `.wasm` requests aborted. The WASM column's wire leg is covered by the gRPC-Web lane facts (final wave); its render is not, until the environment limit lifts.
+- **Result.** 27 of the 28 walkable rows passed. W24 passed except one leg (below). No product fix was needed.
+- **Train 5 rows.** W10 (external register) and W12 (the second factor after the provider) are Train 5 (T3-36).
+- **Halves.** W11 was walked as its provider-free half: Login shows no provider section, the passkey link's `href` is the server's with the return URL carried, and `GET /Account/PerformExternalLogin?provider=nope` returns to Login. W17 was walked as its list, remove and last-method half: a SQL-seeded login is listed and refused as the last method, then removed once a password exists. In both rows the provider leg and linking are Train 5.
+- **W24.** Disable rotates the stored stamp and keeps this session. The other-session sign-out waits on the default 30-minute `SecurityStampValidator` interval, so a real-host walk cannot observe it. 6.1's lane facts pin the stale cookie's refusal at `ValidationInterval = TimeSpan.Zero`. Shortening the interval is a cost and security tradeoff, handed to Train 4 with OpenIddict session revocation.
+- **Passkeys.** Both ceremonies passed the origin check under Blazor Server. W21's recovery codes render after the URL strip (router instance reuse). W29 logged Critical after exactly two cursor advances, which is the ceil(N / SampleSize) + 1 bound. W30 rendered all 114 stories, and every one of the 60 driven stories reached `complete`.
+- **Step 3b.** All 61 `ReturnUrlsTests` rows held under WHATWG URL resolution in the browser. Only the 9 accepted rows corroborate anything; the other 52 expect a constant root.
+
+**Remaining deferrals:**
+
+| Item | Ruled by | Lands with / re-check |
+|---|---|---|
+| T3-1 throttling | Buvy | the platform-wide rate limiter |
+| T3-3 AccessDenied terminus | Buvy | when the refactor load drops |
+| T3-8 shared test framework | Buvy | Asgard's shared test behaviors |
+| T3-23 WASM browser walk | environment limit | `DotNetVersion` ≠ `11.0.0-rc.3.26522.148`, or Chromium major ≠ 156 |
+| T3-37 step-up | Buvy | Train 4 (OpenIddict, spec sub-project B) |
+| T3-36 rows 10–12 local walk | Buvy | Train 5 (full OpenIddict / ASP.NET Identity integration) |
+
+**Carried to the final wave / hand-off** (items the table does not cover):
+- The AppHost stand-up after the human's volume wipe (above).
+- W24: the other-session sign-out waits on the default 30-minute stamp interval. This is a hand-off note pointing at Train 4.
+- Midgard's `/_auth/complete` meta-refreshes to a `returnUrl` that the single-use key does not bind. It is pre-existing and gated by a server-minted key, and the final wave's local-path guard confines it to this app. Binding the landing into the deferred action, an Asgard contract change, is a named Train 4 hand-off item.
+- A failed key write during Reset leaves two-factor off with the old key stored: the stock order disables two-factor before it replaces the key. The handler refreshes the sign-in from a re-read and lands on the two-factor page, which shows two-factor off; re-enabling from setup recovers it. Nothing repairs it on its own.
+- The 4.4 deferral is open: in `EnableAuthenticatorHandler`, a `DbException` from `CountRecoveryCodesAsync` after a committed enable is not caught, so it escapes T3-35's handling: no handoff, no codes issued, and no refreshed sign-in on that answer. The user regenerates codes from the Manage page.
+- Heimdall-local: loaders and click pages render `ProblemMessages.Of(problem, fallback)`, so a page-level `Fault` drops `Problem.CorrelationId`, which forms show through `CategoryDisplay`. `ProblemMessages.Of` should append the correlation-id line for `Fault`. It is not a ship blocker.
+- The provider-name collision check covers other providers and reserved platform paths. A host's own routed endpoint is not yet known at registration, so a provider path colliding with one is not refused.
+- Anonymous passkey options-then-sign-in loops write ledger rows that are bounded only by pruning at expiry. They fall under T3-1.
+- Bragi's `FakeSignInMethodsService` ports `ReturnUrls.Resolve`. It is a known duplication, and no drift guard can reach a sealed server assembly by reference.
+- Vafthrudnir's collections are refreshed against the Train 3 surface after Train 3 lands (Buvy).
+
+**Dependencies** *(A10, Amended 2026-10-28 (Train 3, T3-36, T3-37))*:
+- **Train 4 (OpenIddict, spec sub-project B):** step-up re-authentication through `max_age` / `prompt=login` / `auth_time` (T3-37, Buvy). It must cover, by name: **passkey add** (a stolen session can add a credential that signs in without the second factor), two-factor disable, external-login link, and the authenticator key display (setup and reset).
+- **Train 5 (full OpenIddict / ASP.NET Identity integration):** the local end-to-end walk of external register, sign-in and second factor after the provider, federating against OpenIddict's own authorization code flow (T3-36, Buvy).
+
+**Template findings for Microsoft (not filed).** These are recorded here, not filed. They go to dotnet/aspnetcore only after Norse ships end to end.
+- The Identity scaffold's `ExternalLogin.razor` signs in with `bypassTwoFactor: true`, so an external sign-in skips the app's own second factor.
+- The scaffold's external registration takes a typed, editable email. An attacker can register a victim's address through the attacker's own provider account, and that login survives the victim's later confirmation or password reset (pre-account hijacking).
+- RC3's `GetExternalLoginInfoAsync` reads the provider key from the first `ClaimTypes.NameIdentifier`, matched case-insensitively, before `sub`. Under `MapInboundClaims = false`, a token claim of that name in any casing can override `sub`.
+- The scaffold's EnableAuthenticator page provisions a missing key with `ResetAuthenticatorKeyAsync` on render. That rotates the security stamp on a page load, and two tabs race, with the last writer winning.
+- The scaffold's enable and disable rotate the stamp without refreshing the sign-in, so revalidation signs the user out within thirty minutes (§11, closed here by T3-12).
+- The authenticator issuer defaults to `Microsoft.AspNetCore.Identity.UI`.
+- The passkey handler folds every unexpected exception, store faults included, into a failed attestation whose message carries `ex.Message`. A database fault therefore reads as a validation failure.
+- The base passkey `Make…OptionsAsync`/`Perform…Async` keep ceremony state in a cookie, which an interactive Blazor circuit cannot write.

@@ -491,6 +491,11 @@ Fifth pass (2026-08-11): the plan's browser check asserted login honors
 handler resolves to root) — a pre-existing gap the forced redirect masked by
 carrying the query it dropped. Verification narrowed to query preservation +
 correct render; honoring it end to end recorded above as its own spec-first
-effort. Also: case-inclusive pre-flight sweep, the implementation XML doc
+effort. *(Amended 2026-10-28 (Train 3, T3-2): `returnUrl` is honored.
+`LoginRequest.ReturnUrl` carries it, Login reads the query case-insensitively,
+and Himinbjörg's `ReturnUrls.Resolve` decides every landing after password,
+two-factor, recovery-code, passkey and external sign-in; see
+`../../Himinbjorg/specs/2026-10-26-identity-account-lifecycle-over-grpc-design.md`
+§11 and §15.)* Also: case-inclusive pre-flight sweep, the implementation XML doc
 aligned to the type-level exemption, and the NORSE079 meta-test omission
 adopted as a boy-scout fix while editing `DiagnosticsTests`.
