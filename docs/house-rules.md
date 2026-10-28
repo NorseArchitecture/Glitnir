@@ -576,14 +576,12 @@ CREATE TABLE country_or_area (
   mystery pin.
 - **Tag package versions to the major:** `Version="3.*"`. While .NET 11 is in
   preview, framework-tracking packages are `Version="11.*-*"` — drop the
-  prerelease wildcard at RTM. **Exception since 2026-10-26: the EF Core family
-  is pinned to RC2.** .NET 11 RC3 (`11.0.0-rc.3.26522.148`) shipped as an
-  out-of-band security release, and Npgsql's EF provider pins EF Core exactly
-  to RC2. So `Microsoft.EntityFrameworkCore.*`,
-  `Microsoft.AspNetCore.Identity.EntityFrameworkCore` and
-  `Npgsql.EntityFrameworkCore.PostgreSQL` are pinned to `11.0.0-rc.2.26504.105`
-  (Npgsql: `11.0.0-rc.2`), one greppable pattern. Everything else still floats
-  on `11.*-*`. Lift the pins when Npgsql ships against RC3, or at the RTM sweep.
+  prerelease wildcard at RTM. The EF Core family floats like everything else
+  again: the RC2 pin (2026-10-26, when RC3 shipped as an out-of-band security
+  release that Npgsql's exact EF dependency could not follow) was lifted
+  2026-10-28 when `Npgsql.EntityFrameworkCore.PostgreSQL` `11.0.0-rc.3`
+  shipped. Yggdrasil's central `Directory.Packages.props` pins Npgsql to
+  `11.0.0-rc.3` and takes EF Core from `$(DotNetVersion)`.
 - **One `<PropertyGroup>` and one `<ItemGroup>` per csproj**, members sorted
   alphabetically inside each — so any property is findable by scan, not by
   archaeology. (`Directory.*.props` files live in Ginnungagap and answer to their
