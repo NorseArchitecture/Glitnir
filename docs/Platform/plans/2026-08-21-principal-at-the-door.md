@@ -1734,6 +1734,8 @@ sealed class NorseBrowserHandler(
 }
 ```
 
+> **Amendment (2026-10-27, Ruling 44 of identity account-lifecycle Train 2; design §2.4 amended the same day).** This block's forbid is narrowed, not retracted. When the forbidden principal is the anonymous principal (`NorseRoles.Anonymous`) **and** the request is a page navigation, `HandleForbiddenAsync` answers with the identity cookie's login challenge — the same `Context.ChallengeAsync(IdentityConstants.ApplicationScheme, properties)` as `HandleChallengeAsync` — so the visitor lands on the login path with a `returnUrl`. A page navigation is a `GET`/`HEAD` naming `text/html` in `Accept`, with no `X-Requested-With: XMLHttpRequest` (header or query string, as the cookie handler's own `IsAjaxRequest` reads it), on an endpoint the lane selector routes to the browser lane and that is not an `[ApiController]`. Everything else — an identity principal failing a policy, any gRPC, API, XHR or non-`GET`/`HEAD` forbid — keeps the bare 403, no redirect, no body. Why: the Train 2 end-to-end run showed a signed-out visitor to `/Account/Manage`, and every logout from a Manage page, landing on a blank 403. A user-facing page navigation by an unidentified human needs a door; machines and APIs keep the bare 403. The fact above, `Forbid_is_a_bare_403_with_no_redirect_and_no_body`, is superseded by `Forbid_of_an_anonymous_non_navigation_is_a_bare_403_with_no_redirect_and_no_body` plus separate facts for the navigation challenge, machine-shaped endpoints, XHR, and the identity principal; the "Never a redirect" comment above is history.
+
 The anonymous handler already covers "no anonymous cookie → mint" and "tampered anonymous cookie → mint fresh," so steps 3 and 4 of the design's four-step sequence are one delegation here rather than two branches. That is deliberate: the mint/read decision has exactly one home.
 
 - [ ] **Step 4: Run tests to verify they pass**
@@ -3308,6 +3310,8 @@ public sealed class ChallengeAndForbidTests
 
 The third fact is the one most likely to regress silently. §2.4 rules that an anonymous principal is authenticated, so failing a policy is **forbid**, not **challenge** — and the cookie handler's redirect belongs to challenge only. A login redirect on the forbid path would quietly restore 401-shaped behavior at the one boundary nobody watches.
 
+> **Amendment (2026-10-27, Ruling 44; design §2.4 amended the same day).** Narrowed, not retracted. An anonymous principal's **page navigation** on the browser lane — `GET`/`HEAD`, `text/html` in `Accept`, not XHR, on a browser-lane, non-`[ApiController]` endpoint — now receives the login challenge with a `returnUrl`, because a user-facing page navigation by an unidentified human needs a door; a blank 403 page was a dead end for the signed-out visitor to `/Account/Manage` and for every logout from a Manage page. The forbid path still never redirects a machine: every non-navigation anonymous forbid (gRPC, API, XHR, non-`GET`/`HEAD`, non-HTML) and every identity-principal forbid stays a bare 403. The third fact above sends no `Accept: text/html`, so it pins the non-navigation branch; as built, Yggdrasil's `ChallengeAndForbidTests` names that branch explicitly and pins its siblings (`An_anonymous_browser_page_navigation_failing_a_policy_is_challenged_to_login`, `An_anonymous_browser_non_navigation_failing_a_policy_gets_a_bare_403`, and `An_identity_principal_failing_a_policy_gets_a_bare_403_even_on_a_page_navigation`).
+
 - [ ] **Step 2: Run to verify the composition already satisfies them**
 
 Run: `dotnet test Yggdrasil/tests/Hosting.Web.Server.Tests -- --filter-class "*.ChallengeAndForbidTests"`
@@ -3316,7 +3320,7 @@ Run: `dotnet test Yggdrasil/tests/Hosting.Web.Server.Tests -- --filter-class "*.
 
 | Lane | Challenge | Forbid | Owner |
 |---|---|---|---|
-| Browser | 302 to login (forwarded to the identity cookie) | bare 403 | `NorseBrowserHandler` (Task 6) |
+| Browser | 302 to login (forwarded to the identity cookie) | bare 403; anonymous page navigation → login challenge *(amended 2026-10-27)* | `NorseBrowserHandler` (Task 6) |
 | gRPC | bare 401 | bare 403 | `IdentityCookieOnly`'s forwards (Task 7) |
 | REST facade | bare 401 | bare 403 | `NorseMachineRejectionHandler` (Task 7) |
 

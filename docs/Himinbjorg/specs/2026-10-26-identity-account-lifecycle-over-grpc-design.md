@@ -70,7 +70,7 @@ Every record is `[DataContract] sealed record` with `[DataMember(Order = n)]`. E
 | Operation | Request | Returns |
 |---|---|---|
 | `GetAccountStatus` | — | `AccountStatusResponse { HasPassword, EmailConfirmed, TwoFactorEnabled, HasAuthenticator, RecoveryCodesLeft, IsMachineRemembered, PasskeyCount, ExternalLoginCount }` |
-| `SetPhoneNumber` | `{ Phone? }` (null clears) | `NavigationResult` (`SetPhoneNumberAsync` rotates the security stamp) |
+| `SetPhoneNumber` | `{ Phone? }` (null clears) | `NavigationResult` (`SetPhoneNumberAsync` rotates the security stamp; an unchanged number is a no-op success, §14) |
 | `ChangePassword` | `{ OldPassword, NewPassword }` | `NavigationResult` |
 | `SetPassword` | `{ NewPassword }` | `NavigationResult` (`UserAlreadyHasPassword` → `Conflict`) |
 | `ChangeEmail` | `{ NewEmail }` | `BoolResponse` (unchanged email → `Validation`; sends the change link) |
@@ -278,3 +278,43 @@ Tests first, every task (house rule). Shapes by layer:
 | `DeletePersonalData` as the erasure front door | §5.6 |
 | Hiding HTTP-only endpoints from OpenAPI | already done by the group-level `ExcludeFromDescription()`; trains only delete |
 | Coverage floor ratchet | Train 3, after `Components/` is gone |
+
+## 14. Train 2 as built (2026-10-27)
+
+Train 2 built the account core as §9 lists it. The end-to-end walk found the last four items below, and each was fixed in the same train.
+
+- **`StoryDriver` gained one fixture, not a mode.** Pages that take a current and a new password get `NewPassword = "bbbbbbbb"` for the later input, so "must differ" never fires on a driven story. §7's "no new mode" holds.
+- **The stories host's MCP is metadata-only.** `MapBlazingStoryMcp` lists stories and their parameters but has no render tool, so §10's "every story in every scenario through the stories host MCP" was met by rendering each story in a browser with Playwright.
+- **Two click-only stories were dropped (Ruling 33).** "External Logins → Removed" and "Personal Data → Download" are click-only stories whose click changes nothing in the canvas, so the driver's click rejects and ends the circuit. Their states are held by bUnit facts instead, the same way as `Logout` and `ConfirmEmailChange`.
+- **An anonymous principal's page navigation into the Manage tree is challenged to login (Ruling 44).**
+  - **Found:** the walk first saw a bare 403 (provisional Ruling 37). `[Authorize(Policy = AuthNPolicies.Account)]` is endpoint metadata, so `UseAuthorization` forbids before `AuthorizeRouteView` can render `RedirectToLogin`, and Midgard's browser handler answered every forbid with an empty 403. In a browser that renders as the browser's own error page.
+  - **Fix:** `NorseBrowserHandler.HandleForbiddenAsync` now answers an anonymous principal's page navigation with the identity cookie's login challenge, keeping the return URL. A page navigation is a GET or HEAD whose `Accept` names `text/html`, on the browser lane, not XHR, and not `[ApiController]`. Every other forbid, and any forbid of an identity principal, stays a bare 403. This amends `../../Platform/specs/2026-08-21-principal-at-the-door-design.md` §2.4.
+  - **Pins:** Yggdrasil's `An_anonymous_browser_principal_is_redirected_from_the_manage_tree_to_login` pins the 302, with and without a prior cookie. §6.4's `RedirectToLogin` sentence describes the result, though the browser lane is what produces it.
+- **ExternalLogins offered the platform's own schemes, and its links never left the router (Rulings 41 and 42).**
+  - **The schemes:** Midgard registered its `Norse` and `Norse.Machine` policy schemes with their names as display names. `GetExternalAuthenticationSchemesAsync` keeps every scheme that has one, so the page listed both under "Add another service to log in". Both now carry a `null` display name, and a Yggdrasil composition fact pins that the composed host offers no external scheme when no provider is configured.
+  - **The links:** the add-provider links were caught by interactive routing and rendered "Not Found". The `LinkExternalLogin` GET is a server endpoint, so the links now carry `ForceLoad="true"`.
+- **A statically rendered form no longer reports success it did not earn (Ruling 46).**
+  - **Found:** with the WASM runtime failing (below) and no Server circuit, `InteractiveAuto` left the Manage pages statically rendered. Their submits posted as plain forms.
+  - **Root cause:** the form model is a component field, not `[SupplyParameterFromForm]`, so the post bound nothing. The handler ran on the loaded value, which saved nothing yet showed "Your profile has been updated.".
+  - **Fix:** `OutcomeFormComponentBase` now refuses to dispatch unless `RendererInfo.IsInteractive`, rendering "This page hasn't finished loading — try again." instead. Every form binds its submit to `Disabled="!CanSubmit"`.
+  - **Accepted cost:** the button is disabled for the boot window between prerender and interactivity, and stays disabled if interactivity never arrives.
+- **Saving an unchanged phone is a no-op success (Ruling 47).** The stock `SetPhoneNumberAsync` unconfirms the phone and rotates the security stamp even when the number is unchanged. That writes a `users` version and signs every other session out. `SetPhoneNumberHandler` now compares the stored number to the write and answers success without calling the setter when they match.
+
+**End to end through Bifröst** (`dotnet run --project src/Orchestration.AppHost`, Playwright, throwaway accounts). The Server host was driven with `.wasm` requests aborted, so `InteractiveAuto` resolved to a Server circuit. The walk ran twice, before and after the fixes above:
+
+- **WASM host:** not exercisable on either walk. `dotnet.native.wasm` fails to compile on Chromium 156 (`… module uses a mix of legacy and new exception handling instructions`), which is the known .NET 11 RC3 environment limit.
+- **Profile:** passed.
+  - Setting `+15551234567` force-reloads to `?status=phone-updated` with "Your profile has been updated." and writes one `users` version. `5551234567` shows the format message and makes no call, and clearing the number saves `null`.
+  - After Ruling 47, saving the unchanged number answers the same reload but leaves `user_credentials.security_stamp` and the version count unchanged, and a second signed-in browser context still opens `/Account/Manage`.
+- **Static render (Ruling 46):** passed. With the circuit blocked, the profile, change-password and delete submits render disabled. A forced submit renders "This page hasn't finished loading — try again." and makes no call.
+- **Email:** passed. "Send verification email" logs the link; click-to-confirm marks the address ✓. A change to a new address shows "Confirmation link to change email sent."; opening that link while signed in and confirming lands on `/Account/Manage/Email?status=email-changed`, and the new address logs in. On the first walk the logout before that login was taken from `/Account/Manage/Email` (the bare-403 case below) and repeated from `/`.
+- **ChangePassword:** passed.
+  - A wrong current password shows "Incorrect password." on the field. An equal new password shows the client message and makes no call. A weak password shows the server's three rules on the field.
+  - A good password reloads to `?status=password-changed` with "Your password has been changed.". After a logout from `/`, the old password fails and the new one logs in.
+- **SetPassword:** passed. On a password account it renders the change form, with no redirect.
+- **ExternalLogins:** passed after Rulings 41 and 42. With no provider configured, the page reads "No external logins are linked and none are available.". The real-provider xsrf round trip and the "added" and "removed" messages cannot be exercised locally.
+- **DeletePersonalData:** passed.
+  - A wrong password shows "Incorrect password." in place and shreds nothing. The right password shreds, signs out through `/_auth/complete`, and lands on `/`.
+  - The old login then fails, and `users` and `user_credentials` hold no row for the subject. The dev key store keeps a destroy receipt where the subject's key was, so the `users_history` versions left behind are ciphertext with no key.
+- **Signed-out `/Account/Manage`:** passed after Ruling 44. Both the no-cookie and the anonymous-cookie visitor get a 302 to `/Account/Login?ReturnUrl=%2FAccount%2FManage`; the same request with `Accept: application/json` keeps the bare 403.
+- **Logout from a Manage page:** passed after Ruling 44. `POST /Account/Logout` redirects back to the page it was posted from, which now challenges to `/Account/Login?ReturnUrl=…` instead of rendering the browser's error page. Who owns the logout endpoint is Train 3's question (§9).

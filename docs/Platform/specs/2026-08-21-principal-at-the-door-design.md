@@ -1,6 +1,6 @@
 # Principal at the Door — Design
 
-**Status:** APPROVED at the design gate 2026-08-21; **amended twice during planning** (2026-08-21) where plan review proved an approved section unbuildable. Both amendments are marked inline in the sections they change (§2.2 probe lane, §3 policy hook) and both are retractions, not deferrals. Rev 1 was remanded on seven blocking objections, rev 2 on three authentication-selection blockers; planning surfaced two more. All verified against source, none contested.
+**Status:** APPROVED at the design gate 2026-08-21; **amended twice during planning** (2026-08-21) where plan review proved an approved section unbuildable. Both amendments are marked inline in the sections they change (§2.2 probe lane, §3 policy hook) and both are retractions, not deferrals. **Amended a third time 2026-10-27** (Ruling 44, §2.4, mirrored in §4.4 and §7): a narrowing at the browser edge, not a retraction. Rev 1 was remanded on seven blocking objections, rev 2 on three authentication-selection blockers; planning surfaced two more. All verified against source, none contested.
 **Reading order:** this spec and `../plans/2026-08-21-principal-at-the-door.md` must agree. Where an inline amendment appears, the amendment is current and the text above it is history — an executor following an un-amended section would rebuild something deliberately deleted.
 **Realms touched:** Svartálfheim (NORSE013), Asgard (`NorsePolicies` + `NorsePlatformPolicies`, `NorsePolicyAttribute`, transport contract, `ErrorCategory` amendment), Midgard (anonymous/browser/probe/machine schemes + selector, policy generator, both folds, client decode), Yggdrasil (composition), Heimdall + Mímir (policy declarations), Glitnir (this verdict).
 **Issues:** NorseArchitecture/Asgard#71 (foundation) · consumers: NorseArchitecture/Himinbjorg#49 · #50 · #51 · #52 · NorseArchitecture/Asgard#57 · #58.
@@ -96,6 +96,12 @@ Step 2 into step 4 is §5.5's "new UUID for everyone," applied to expiry as well
 `AuthorizationBehavior:28` selects the failure category as `user.Identity is { IsAuthenticated: true } ? Forbidden : Unauthorized`. An anonymous principal is authenticated, so **an anonymous visitor failing a real policy receives 403, not 401.**
 
 That is affirmed, not tolerated. The visitor carries a GUID: *who am I* is answered, *can I* is the failing question, and §1.7 assigns 403. The consequence is that a browser's login redirect must come from the cookie handler's challenge path — it is a presentation concern at the edge, never the mediator's business.
+
+> **Amendment (2026-10-27, Ruling 44 of identity account-lifecycle Train 2, at the owner's direction).** The status code above stands; **the browser edge's presentation of it is narrowed.** As ruled, `NorseBrowserHandler.HandleForbiddenAsync` answered every forbid with a bare 403, and the Train 2 end-to-end run showed what that costs a user-facing site: a signed-out visitor opening `/Account/Manage` — cookie or no cookie — got a blank 403 page, and logging out from any Manage page returned the browser to that page and the same blank 403. A GUID answers *who am I* for the platform; it does not give a human a way forward, and the only way forward from a page that needs an identity is to log in. A user-facing page navigation by an unidentified human needs a door.
+>
+> The rule is now: **when the forbidden principal is the anonymous principal (`NorseRoles.Anonymous`) and the request is a page navigation, the browser lane answers with the identity cookie's login challenge** — the same mechanism as its own `HandleChallengeAsync`, so the visitor lands on the login path with a `returnUrl` back to where they were going. A page navigation is a `GET` or `HEAD` that names `text/html` in `Accept`, carries no `X-Requested-With: XMLHttpRequest`, sits on an endpoint the §2.2 lane selector routes to the browser lane (so gRPC methods, REST facades, and probes are excluded by the selector's own verdict, not a second heuristic), and is not an `[ApiController]` endpoint. **Everything else keeps the bare 403, no redirect, no body:** an identity principal failing a policy, and any gRPC, API, XHR, `POST`, or other non-navigation forbid. Machines and APIs ask *can I?* and get *no*; they never get an HTML page.
+>
+> What is unchanged: the mediator still emits `Forbidden` (403) for an anonymous principal, and §1.7's two answers still hold on every lane — the door is a presentation choice at the one edge a human browser stands at, not a reclassification of the failure. §4.4's pin and §7's browser-boundary fact are narrowed by this amendment, not retracted: the anonymous-403 path stays a bare 403 for every request that is not a page navigation. Pinned in Midgard's `NorseBrowserHandlerTests`, and at the host in Yggdrasil's `ChallengeAndForbidTests` (`An_anonymous_browser_page_navigation_failing_a_policy_is_challenged_to_login`, `An_anonymous_browser_non_navigation_failing_a_policy_gets_a_bare_403`, and `An_identity_principal_failing_a_policy_gets_a_bare_403_even_on_a_page_navigation`).
 
 ### 2.5 Circuits and cookieless lanes
 
@@ -194,6 +200,8 @@ Fixing the two folds does not control responses the framework generates. 401-wit
 
 **The anonymous-browser forbid path is pinned explicitly.** §2.4 rules that an anonymous principal failing a policy is a deliberate **403** — it is authenticated, so *who am I* is answered. Challenge/forbid customization must not quietly convert that into a login redirect or attach a response body: the cookie handler's redirect belongs to **challenge** (401, no principal at all), never to **forbid**. A login redirect on the anonymous-403 path would silently restore the 401-shaped behavior this design removed, and it would do so at the one boundary where nobody is looking. Browser, REST, and gRPC boundaries are exercised separately — each has its own customization surface and they fail independently.
 
+> **Amendment (2026-10-27).** Narrowed by the §2.4 amendment (Ruling 44): an anonymous principal's **page navigation** on the browser lane now receives the login challenge. Every other anonymous forbid — gRPC, REST, XHR, non-`GET`, non-HTML — keeps the bare 403 this paragraph pins, and an identity principal's forbid is a bare 403 everywhere.
+
 ## 5. The ban
 
 ### 5.1 The machine-lane marker
@@ -265,7 +273,7 @@ TDD throughout; `superpowers:subagent-driven-development` paired with `superpowe
 - Silence is byte-exact: two different silent categories are indistinguishable on the wire.
 - Trailerless decode for `Unauthenticated`, `PermissionDenied`, `NotFound`, `Internal`, an unmapped status, a malformed trailer, and stripped trailers.
 - Challenge/forbid emit no body at each §4.4 boundary — browser, REST, and gRPC asserted **separately**, never as one fact.
-- An anonymous browser principal failing a policy receives **403 with no redirect and no body** — not a login redirect, not a 401. Pinned at the browser boundary specifically, because that is the only lane whose challenge path has a redirect to leak.
+- An anonymous browser principal failing a policy receives **403 with no redirect and no body** — not a login redirect, not a 401. Pinned at the browser boundary specifically, because that is the only lane whose challenge path has a redirect to leak. *(Amended 2026-10-27, §2.4: except on a page navigation, which is challenged to login with a `returnUrl`; the non-navigation 403 and the identity-principal 403 are each pinned separately.)*
 
 **Policy hook (§3)**
 
