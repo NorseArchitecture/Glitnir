@@ -10,6 +10,7 @@
 - **Heimdall** pins `Self`/`MaskedDisclosure` to their lanes and adds `AccountRead`.
 - **Himinbjörg** carries everything OpenIddict: v8 and six entities, the authorize endpoint and the `norse_reauth` marker, grant-carried authentication, `RedeemTokenEntryGuarded`, `EndGrantOnReuse`, `EndGrant`, revocation, `auth_time`, `Norse.Bearer`, the pruner, and freshness on the four operations.
 - **Yggdrasil** composes it and holds the `8.0.0-preview.4` pin. Bifröst's AppHost, Bragi and Mímir are untouched.
+  - *r4 / as built: Mímir joined the train (spec amendment r6.2, Task 5.0).*
 
 **Tech Stack:** .NET 11 RC3, C# 15; OpenIddict `8.0.0-preview.4` (Core, EntityFrameworkCore, Server.AspNetCore, Validation.AspNetCore, Validation.ServerIntegration); ASP.NET Core Identity 11 RC3; EF Core 11 RC2 (Npgsql + SqlClient); protobuf-net.Grpc code-first; Testcontainers (`postgres:19rc1`, `mcr.microsoft.com/mssql/server:2025-latest`); xUnit v3 on MTP, Shouldly, NSubstitute.
 
@@ -17,7 +18,9 @@
 
 **Starting state (verified 2026-10-29, every realm on clean `master`):** Asgard v0.0.37, Midgard v0.0.39, Heimdall v0.0.24, Himinbjörg v0.0.28, Yggdrasil v0.0.11. Bragi and Mímir untouched.
 
-**Revision history:** r2, 2026-10-30.
+**Revision history:** r4, 2026-10-30.
+- **r4:** execution halted at Task 5.1: a real machine token was refused by Mímir's REST façade, because `ReferencePolicies.Public` (on both `CountriesController` and `CountryQuery`) is default-closed to `Identity` while the façade requires `Machine`. Buvy brought Mímir into the train (spec amendment r6.2). Task 5.0 is added; Task 5.1 gains the façade and gRPC boundary facts; release order gains Mímir before Yggdrasil.
+- **r3:** execution halted at H3/H4 (Task 0.2). The cause: OpenIddict's EF token store `FindAsync` returns a detached entity under the NoTracking default, so the stock relationship getters return null. Buvy chose the store link contract (spec §4.5, amendment r6.1). Task 0.3 and gate H7 are added; H2–H4 re-run unchanged inside Task 0.3. Task 4.6 gains the production-endpoint continuity fact. The guarded redemption stays.
 - **r1:** the first draft.
 - **r2:** answers the plan review.
   - P1: Task 0.1 upgrades the whole OpenIddict package set, and the premise fixture asserts the resolved versions.
@@ -73,9 +76,10 @@
   - then, for each name in ordinal order: a name tag, the length-prefixed UTF-8 name, the value count, and each value as a value tag plus a length-prefixed UTF-8 value, in received order.
 
   Integers are fixed-width little-endian `int32`. Unknown and multi-valued parameters take part under the same framing, so no two distinct parameter sets serialize alike. Rejecting repeated parameters is OpenIddict's job, upstream of the hash.
+  *As built (spec §13.5): OpenIddict 8 reads a repeated singular parameter as absent. The authorize endpoint refuses repeated and case-variant parameters itself.*
 - **T4-4 — The landing is declared on the command.** Asgard `[ReauthenticationLanding("/Account/Manage/Passkeys")]` (server-only, `Abstractions.Web.Server.Mediator`). A command naming `RecentAuthentication` without it makes `PolicyCache` throw `InvalidOperationException` on first use, the existing law for a missing `[Authorize]`; Himinbjörg pins every command at build time with a reflection fact (Task 4.9). Landings: `GetPasskeyCreationOptions`/`AddPasskey` → `/Account/Manage/Passkeys`; `DisableTwoFactor` → `/Account/Manage/Disable2fa`; `GetAuthenticatorSetup` → `/Account/Manage/EnableAuthenticator`; `ResetAuthenticator` → `/Account/Manage/ResetAuthenticator`.
 - **T4-5 — The carrier, and navigation only through one validator.** `Problem` gains `string? Code` and `string? NextUrl`. `Forbidden`'s transport disposition already permits a body. The gRPC trailer carries the two members as `ErrorInfo.Metadata` entries `code` and `nextUrl`, beside `receipt`, and Midgard's client decoder rehydrates them.
-  - Asgard's `OutcomeComponentBase` and `OutcomeFormComponentBase` navigate with `forceLoad: true` only when the failure is `Forbidden`, `Code == reauthentication-required`, and `LocalNavigation.IsLocal(NextUrl)` holds. Every other failed `Problem` renders as today, a `NextUrl` included.
+  - Asgard's `OutcomeComponentBase` and `OutcomeFormComponentBase` navigate (a soft `NavigateTo(NextUrl)`, never a forced load: NORSE074 reserves forced loads for Heimdall's `ForceLoadSessionTransition`, and reaching the login page is not a session transition — the sign-in there makes its own; r3 execution ruling) only when the failure is `Forbidden`, `Code == reauthentication-required`, and `LocalNavigation.IsLocal(NextUrl)` holds. Every other failed `Problem` renders as today, a `NextUrl` included.
   - `LocalNavigation.IsLocal` is Asgard's shared validator (`Abstractions.Components`, WASM-safe). A value is local only when it passes every check:
     - it is non-empty and at most 2048 characters;
     - it contains no C0 control, DEL or space anywhere (WHATWG strips tab and newline, so `"/\t/evil.example"` would otherwise resolve off-site);
@@ -88,7 +92,7 @@
 - **T4-6 — Too long to re-enter is refused.** If the re-entry URL (`PathBase` + `/connect/authorize?` + parameters + `norse_reauth`) would exceed `ReturnUrls.MaxLength`, the authorize endpoint answers `invalid_request` to the redirect URI instead of challenging (Review Focus 3).
 - **T4-7 — A POST re-enters as a GET.** The challenge's `returnUrl` is always the GET form; the canonical hash is computed over the parameter set, never the method (Review Focus 2).
 - **T4-8 — The authorize principal's stamp is the cookie's.** The code's `norse_stamp` is the cookie principal's security-stamp claim (`ClaimsIdentityOptions.SecurityStampClaimType`), the stamp of the authentication that produced the grant (ruling 11). A cookie whose stamp is already stale yields a code that fails at redemption.
-- **T4-9 — Development order is not release order.** Phase 0 runs first on the Himinbjörg fork against `master` upstream. Asgard and Midgard forks are developed next with `UseProjectReferences=true` and Himinbjörg consumes them locally; publishing gates only each realm's PR (memory: publish gates PRs). Release order is Asgard → Midgard → Heimdall → Himinbjörg → Yggdrasil.
+- **T4-9 — Development order is not release order.** Phase 0 runs first on the Himinbjörg fork against `master` upstream. Asgard and Midgard forks are developed next with `UseProjectReferences=true` and Himinbjörg consumes them locally; publishing gates only each realm's PR (memory: publish gates PRs). Release order is Asgard → Midgard → Heimdall → Himinbjörg → Mímir → Yggdrasil (Mímir added in r4; it depends on Asgard and Midgard only, so it may ship any time after Midgard and before Yggdrasil).
 
 ## Halting gates
 
@@ -100,6 +104,7 @@ The plan halts and returns to the controller (no improvising) when any of these 
 - **H4** (Task 0.2): the guarded statement moves exactly the specified rows on both providers, and OpenIddict's own validation rejects nothing the statement would accept.
 - **H5** (Task 4.3): every one of the five credential paths, immediate and deferred, reaches the stamp point with its landing.
 - **H6** (Task 4.4): OpenIddict 8 passes the unknown `norse_reauth` authorize parameter through to the passthrough handler without rejecting it.
+- **H7** (Task 0.3, r3): the store link contract's five facts (spec §4.5) pass on both providers, and H2–H4 then pass unchanged. Nothing past Phase 0 starts before H7.
 
 ---
 
@@ -111,7 +116,7 @@ The plan halts and returns to the controller (no improvising) when any of these 
 - Modify: `Himinbjorg/src/Identity.EntityFramework/Identity.EntityFramework.csproj` (`OpenIddict.EntityFrameworkCore` → `8.*-*`) and `Himinbjorg/src/Identity.Web.Server/Identity.Web.Server.csproj:17-19` (`OpenIddict.Server.AspNetCore`, `OpenIddict.Validation.AspNetCore`, `OpenIddict.Validation.ServerIntegration` → `8.*-*`). The whole set moves in this task, before any gate runs. `NorseOpenIddictApplication.cs`, `NorseOpenIddictAuthorization.cs`, `NorseOpenIddictToken.cs`, `NorseOpenIddictScope.cs`, `ServiceCollectionExtensions.cs` (`ReplaceDefaultEntities<…>` names all six), `NorseIdentityDbContext.cs`
 - Create: `Himinbjorg/src/Identity.EntityFramework/NorseOpenIddictSession.cs`, `NorseOpenIddictResource.cs`
 - Regenerate: both providers' `Migrations/` and `schema/norse_identity.sql`
-- Test: `Himinbjorg/tests/Identity.EntityFramework.Tests/NorseIdentityTemporalModelTests.cs`, `tests/Identity.Web.Server.Tests/NorseIdentityTemporalApparatusContainerTests.cs`, `SqlServerIdentitySchemaTests.cs`
+- Test: `Himinbjorg/tests/Identity.EntityFramework.Tests/NorseIdentityTemporalModelTests.cs`, `tests/Identity.Migrations.Tests/NorseIdentityTemporalApparatusContainerTests.cs`, `SqlServerIdentitySchemaTests.cs`
 
 **Interfaces:**
 - Produces: `sealed record NorseOpenIddictSession : OpenIddictEntityFrameworkCoreSession<Guid, NorseOpenIddictApplication, NorseOpenIddictAuthorization, NorseOpenIddictToken>` with explicit `Guid? ApplicationId`, `Guid? AuthorizationId`; `NorseOpenIddictResource : …Resource<Guid>, ITemporalEntity`. Tables `sessions`, `resources`. (Match whatever generic arity preview.4's base types declare; the explicit FK scalars are the law.)
@@ -151,6 +156,39 @@ The plan halts and returns to the controller (no improvising) when any of these 
 - [ ] **Step 3: Implement the two handler skeletons and `GrantStatements`**, registered in `AddNorseIdentity`'s `AddServer` (`RemoveEventHandler(RedeemTokenEntry.Descriptor)`, `AddEventHandler(...)` for both). The test host enables the code and refresh flows locally; production configuration arrives in Task 4.4.
 - [ ] **Step 4: Run.** Expected: PASS on both providers. **Any failure halts (H2–H4)**; report which premise and the observed handler order.
 - [ ] **Step 5: Stage.**
+
+### Task 0.3: The store link contract (H7, r3)
+
+**Files:**
+- Create in `Himinbjorg/src/Identity.EntityFramework/`: `NorseOpenIddictTokenStore.cs`, `NorseOpenIddictAuthorizationStore.cs` and `NorseOpenIddictSessionStore.cs`. Each derives from OpenIddict's EF Core store for its entity, closed over the six Norse entities, `NorseIdentityDbContext` and `Guid`.
+- Modify: `Himinbjorg/src/Identity.EntityFramework/ServiceCollectionExtensions.cs`. `AddNorseOpenIddictCore()` registers the three stores through `ReplaceTokenStore`, `ReplaceAuthorizationStore` and `ReplaceSessionStore`, or preview.4's equivalents.
+- Test: create `Himinbjorg/tests/Identity.Web.Server.Tests/OpenIddict/StoreLinkContractSuite.cs` (+ `PostgresStoreLinkContractTests`, `SqlServerStoreLinkContractTests`) and `OpenIddict/GrantContinuitySuite.cs` (+ per provider). Re-run `PipelinePremiseSuite` (Task 0.2) unchanged.
+
+**Interfaces:**
+- Consumes: Task 0.2's `OpenIddictTestHost`, `GrantStatements` and `IGrantTermination`.
+- Produces: the three stores. The links each one owns are listed in spec §4.5's table.
+  - The getters (`GetApplicationIdAsync`, `GetAuthorizationIdAsync`, `GetSessionIdAsync`, each where its store owns the link) return the explicit scalar's `ToString()`, or null when the scalar is null.
+  - The setters (`SetApplicationIdAsync`, `SetAuthorizationIdAsync`, `SetSessionIdAsync`) set the scalar and the navigation together: set, replace and clear. For the navigation they use a stub or attached reference, never a claim-derived value.
+  - No store ever creates an authorization.
+
+- [ ] **Step 1: Write the facts** (spec §4.5, items 1–5; both providers):
+  - Store contract:
+    - `Detached_entities_return_persisted_links`: each store, each link, on an entity read in a fresh scope with navigations unloaded.
+    - `Null_links_return_null`.
+    - `Getters_issue_no_query`: a `DbCommandInterceptor` counts zero commands across the getter calls.
+  - Write round trip:
+    - `Set_replace_and_clear_round_trip`: a theory over store × link × {set, replace, clear} × {tracked, detached}. It asserts the getter immediately after the setter, then again after `UpdateAsync` and a fresh-scope reload.
+    - `Managers_create_with_links`: create a token, an authorization and a session through `IOpenIddictTokenManager`, `IOpenIddictAuthorizationManager` and `IOpenIddictSessionManager` with descriptors carrying every link, then reload in a fresh scope and assert each link.
+  - Grant continuity:
+    - `Refresh_chain_keeps_one_authorization`: through `OpenIddictTestHost` (PF2), run code → R0 → R1 → R2. Query the `tokens` and `authorizations` rows directly: exactly one authorization exists for the grant, and every token of the chain carries its non-null id.
+  - Security consequence:
+    - `Replaying_r0_after_two_rotations_ends_the_grant`. The test host's `IGrantTermination` runs `GrantStatements.RevokeAuthorizationAsync` (step 1 only; the full `EndGrant` arrives in Task 4.5). The authorization reads `revoked`, R2's refresh is refused, and an independent grant (a second code for the same user and client) still refreshes.
+  - Registration:
+    - `Production_di_resolves_the_norse_stores`: build the production service collection, resolve `IOpenIddictTokenStoreResolver` and its siblings in two separate scopes, and assert each yields the Norse type with OpenIddict's default entity-cache options.
+- [ ] **Step 2: Run** `dotnet test tests/Identity.Web.Server.Tests -- --filter-class "*StoreLinkContractTests" --filter-class "*GrantContinuityTests"`. Expected: FAIL. `Refresh_chain_keeps_one_authorization` should fail on the stock stores, either by splitting the grant (record the observed authorization count) or by the guarded handler refusing. Record which, because it confirms or refutes the spec's prediction.
+- [ ] **Step 3: Implement** the three stores and their registration.
+- [ ] **Step 4: Run** the two suites, then `PipelinePremiseSuite` unchanged. Expected: all PASS on both providers. **Any failure halts (H7).**
+- [ ] **Step 5: Run** `dotnet test Himinbjorg.slnx`. Expected: PASS. Stage.
 
 ---
 
@@ -194,7 +232,7 @@ The plan halts and returns to the controller (no improvising) when any of these 
     - accepts `/Account/Login?returnUrl=%2FAccount%2FManage%2FPasskeys` and `/app/x`;
     - refuses each of `""`, `"x"`, `"//evil.example"`, `"/\\evil.example"`, `"/\t/evil.example"`, `"/\n/evil.example"`, `"/\r/evil.example"`, `" /x"`, `"/%2F/evil.example"`, `"/%5Cevil.example"`, `"/%09/evil.example"`, `"https://evil.example/"`, and a 2049-character path.
   - For each base, through bUnit with a fake `NavigationManager`:
-    - `A_reauthentication_failure_with_a_local_next_url_force_loads_it`: the manager records `/Account/Login?returnUrl=%2FAccount%2FManage%2FPasskeys` with `forceLoad: true`, and no `Problem` is rendered.
+    - `A_reauthentication_failure_with_a_local_next_url_navigates_to_it`: the manager records `/Account/Login?returnUrl=%2FAccount%2FManage%2FPasskeys` with `forceLoad: false`, and no `Problem` is rendered.
     - `A_reauthentication_failure_with_a_non_local_next_url_renders_the_problem`: theory over `"//evil.example"`, `"/\t/evil.example"` and `"/\n/evil.example"`. Nothing is navigated.
     - `A_next_url_on_any_other_failure_never_navigates`: `Forbidden` with no code, `Unauthorized` with the code, and `Fault`, each carrying a local `NextUrl`.
     - `A_failure_without_next_url_renders_the_problem_as_today`.
@@ -426,7 +464,7 @@ The plan halts and returns to the controller (no improvising) when any of these 
 - Modify: `OpenIddict/RedeemTokenEntryGuarded.cs` (full behavior: one row proceeds; zero rows → `EndGrant` + `invalid_grant`; a database exception propagates unhandled, so the request fails as HTTP 500 with nothing minted, never retried, never `EndGrant`), `OpenIddict/EndGrantOnReuse.cs` (full behavior)
 - Test: `tests/Identity.Web.Server.Tests/OpenIddict/GrantBoundarySuite.cs` (+ per provider), using `OpenIddictTestHost` pause points and `CommitFailureInterceptor`
 
-- [ ] **Step 1: Write the tests** — spec §10.6 and §10.7 interleavings, verbatim in their assertions: `Rotation_issues_a_new_refresh_token`; `Sequential_replay_ends_the_grant`; `Redeemed_code_replay_ends_the_grant`; `An_independent_grant_survives`; `Simultaneous_load`; `Late_load` (and its revocation variant); `Successor_after_the_sweep` (asserts rejection and `revoked`, not which check refused); `Successor_after_reuse_at_validation`; `Definite_failure_is_a_500_and_mints_nothing` (connection-open failure; token and authorization `valid`); `Indeterminate_failure_is_a_500_and_does_not_end_the_grant` (token reads `redeemed`; the retry then ends the grant).
+- [ ] **Step 1: Write the tests** — spec §10.6 and §10.7 interleavings, verbatim in their assertions: `Rotation_issues_a_new_refresh_token`; `Production_refresh_chain_keeps_one_authorization` (r3: Task 0.3's continuity fact again, through the production endpoints, asserted on the rows); `Sequential_replay_ends_the_grant`; `Redeemed_code_replay_ends_the_grant`; `An_independent_grant_survives`; `Simultaneous_load`; `Late_load` (and its revocation variant); `Successor_after_the_sweep` (asserts rejection and `revoked`, not which check refused); `Successor_after_reuse_at_validation`; `Definite_failure_is_a_500_and_mints_nothing` (connection-open failure; token and authorization `valid`); `Indeterminate_failure_is_a_500_and_does_not_end_the_grant` (token reads `redeemed`; the retry then ends the grant).
 - [ ] **Step 2: Run.** Expected: FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** the suite 20 times (`for i in $(seq 20); do dotnet test … || break; done`). Expected: PASS every run.
@@ -474,7 +512,19 @@ The plan halts and returns to the controller (no improvising) when any of these 
 
 ---
 
-## Phase 5 — Yggdrasil and the record
+## Phase 5 — Mímir, Yggdrasil and the record
+
+### Task 5.0: Mímir's reference reads name their lanes (r4, fork `feature/openiddict-v8`)
+
+**Files:**
+- Modify: `Mimir/src/Reference.Web.Server/ReferencePolicyDeclarations.cs` (`ReferencePolicies.Public`: keep `RequireAuthenticatedUser()`, add `RequireLane(NorseLanes.Identity, NorseLanes.Machine)`), Mímir `CLAUDE.md`/`README.md`
+- Test: `Mimir/tests/Reference.Web.Server.Tests/` policy facts
+
+- [ ] **Step 1: Write the tests** (through `IAuthorizationService` with Midgard's real handlers, the policy registered as the generated `AddNorsePolicies()` registers it): `Reference_public_admits_the_identity_cookie`; `Reference_public_admits_a_machine_principal`; `Reference_public_refuses_a_user_bearer`; `Reference_public_refuses_an_empty_principal`.
+- [ ] **Step 2: Run.** Expected: FAIL on the machine row.
+- [ ] **Step 3: Implement.** The façade's `Machine` policy and audience pin are untouched; neither the generated default nor Heimdall's `AuthNPolicies.Public` is widened.
+- [ ] **Step 4: Run** `dotnet test Mimir.slnx`. Expected: PASS.
+- [ ] **Step 5: Stage.** Mímir ship gate.
 
 ### Task 5.1: Composition
 
@@ -482,7 +532,7 @@ The plan halts and returns to the controller (no improvising) when any of these 
 - Modify: `Yggdrasil/Directory.Packages.props` (every `OpenIddict.*` → `8.0.0-preview.4`; realm bumps to the tags shipped above), `Yggdrasil/src/Hosting.Web.Server/appsettings.json` (`Identity:OpenIddict:Pruning`, `Norse:Authentication:RecentWindow`), the composition root
 - Test: `Yggdrasil/tests/Hosting.Web.Server.Tests/CompositionLaneTests.cs`, `WirePathAuthorizationTests.cs`, `CompositionTests.cs`
 
-- [ ] **Step 1: Write the tests.** `Reference_public_refuses_a_user_bearer` (Mímir); `A_real_machine_token_reaches_a_facade_controller`; `A_probe_reaches_its_endpoint_with_no_principal`; `Wasm_policy_evaluation_is_unchanged_for_the_cookie_principal`; `The_host_starts_with_norse_bearer_registered`; `Recent_authentication_and_account_read_are_registered`; `Authorize_and_revoke_are_mapped`.
+- [ ] **Step 1: Write the tests.** the r4 façade and gRPC boundary facts (spec §10.12): `A_real_machine_token_reaches_the_rest_country_lookup` (endpoint and mediator authorization both pass), `An_identity_cookie_alone_is_refused_by_the_rest_facade`, `A_cookie_grpc_lookup_still_succeeds`, `A_user_bearer_is_refused_by_the_rest_facade` (theory: alone, and with a valid cookie), `A_machine_token_alone_is_refused_by_the_grpc_lookup`, `A_machine_token_is_refused_by_self_account_read_account_and_public`; `A_probe_reaches_its_endpoint_with_no_principal`; `Wasm_policy_evaluation_is_unchanged_for_the_cookie_principal`; `The_host_starts_with_norse_bearer_registered`; `Recent_authentication_and_account_read_are_registered`; `Authorize_and_revoke_are_mapped`.
 - [ ] **Step 2: Run.** Expected: FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** `dotnet test Yggdrasil.slnx`. Expected: PASS.
